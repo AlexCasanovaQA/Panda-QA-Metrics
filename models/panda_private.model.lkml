@@ -1,7 +1,7 @@
 # Panda Private model
 # Generated: 2026-01-08T12:27:33.921732Z
 
-connection: "REPLACE_WITH_YOUR_BIGQUERY_CONNECTION"
+connection: "qa-panda-metrics-exp"
 
 include: "/views/*.view.lkml"
 
