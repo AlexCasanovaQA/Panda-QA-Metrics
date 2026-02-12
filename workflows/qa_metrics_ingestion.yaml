@@ -1,0 +1,173 @@
+panda_ingestion_orchestrator
+
+main:
+  params: [args]
+  steps:
+    - init:
+        assign:
+          - jira_url: "https://ingest-jira-147201244534.europe-west1.run.app"
+          - jira_changelog_url: "https://ingest-jira-changelog-147201244534.europe-west1.run.app"
+          - testrail_url: "https://ingest-testrail-147201244534.europe-west1.run.app"
+          - testrail_results_url: "https://ingest-testrail-results-147201244534.europe-west1.run.app"
+          - bugsnag_url: "https://ingest-bugsnag-147201244534.europe-west1.run.app"
+          - results:
+              jira: null
+              jira_changelog: null
+              testrail: null
+              testrail_results: null
+              bugsnag: null
+          - errors: []
+
+    # --------------------------
+    # JIRA ISSUES
+    # --------------------------
+    - jira_try:
+        try:
+          steps:
+            - jira_call:
+                call: http.get
+                args:
+                  url: ${jira_url}
+                  timeout: 540
+                  auth:
+                    type: OIDC
+                result: jira_resp
+            - jira_store:
+                assign:
+                  - results.jira: ${jira_resp.body}
+        except:
+          as: e
+          steps:
+            - jira_err_msg:
+                assign:
+                  - err_msg: ${text.decode(json.encode(e))}
+            - jira_err:
+                assign:
+                  - errors: ${list.concat(errors, ["jira - " + err_msg])}
+
+    # --------------------------
+    # JIRA CHANGELOG
+    # --------------------------
+    - jira_changelog_try:
+        try:
+          steps:
+            - jira_changelog_call:
+                call: http.get
+                args:
+                  url: ${jira_changelog_url}
+                  timeout: 540
+                  auth:
+                    type: OIDC
+                result: jcl_resp
+            - jira_changelog_store:
+                assign:
+                  - results.jira_changelog: ${jcl_resp.body}
+        except:
+          as: e
+          steps:
+            - jcl_err_msg:
+                assign:
+                  - err_msg: ${text.decode(json.encode(e))}
+            - jcl_err:
+                assign:
+                  - errors: ${list.concat(errors, ["jira_changelog - " + err_msg])}
+
+    # --------------------------
+    # TESTRAIL RUNS
+    # --------------------------
+    - testrail_try:
+        try:
+          steps:
+            - testrail_call:
+                call: http.get
+                args:
+                  url: ${testrail_url}
+                  timeout: 540
+                  auth:
+                    type: OIDC
+                result: tr_resp
+            - testrail_store:
+                assign:
+                  - results.testrail: ${tr_resp.body}
+        except:
+          as: e
+          steps:
+            - tr_err_msg:
+                assign:
+                  - err_msg: ${text.decode(json.encode(e))}
+            - tr_err:
+                assign:
+                  - errors: ${list.concat(errors, ["testrail - " + err_msg])}
+
+    # --------------------------
+    # TESTRAIL RESULTS
+    # --------------------------
+    - testrail_results_try:
+        try:
+          steps:
+            - testrail_results_call:
+                call: http.get
+                args:
+                  url: ${testrail_results_url}
+                  timeout: 1800
+                  auth:
+                    type: OIDC
+                result: trr_resp
+            - testrail_results_store:
+                assign:
+                  - results.testrail_results: ${trr_resp.body}
+        except:
+          as: e
+          steps:
+            - trr_err_msg:
+                assign:
+                  - err_msg: ${text.decode(json.encode(e))}
+            - trr_err:
+                assign:
+                  - errors: ${list.concat(errors, ["testrail_results - " + err_msg])}
+
+    # --------------------------
+    # BUGSNAG
+    # --------------------------
+    - bugsnag_try:
+        try:
+          steps:
+            - bugsnag_call:
+                call: http.get
+                args:
+                  url: ${bugsnag_url}
+                  timeout: 540
+                  auth:
+                    type: OIDC
+                result: bs_resp
+            - bugsnag_store:
+                assign:
+                  - results.bugsnag: ${bs_resp.body}
+        except:
+          as: e
+          steps:
+            - bs_err_msg:
+                assign:
+                  - err_msg: ${text.decode(json.encode(e))}
+            - bs_err:
+                assign:
+                  - errors: ${list.concat(errors, ["bugsnag - " + err_msg])}
+
+    # --------------------------
+    # FINAL STATUS
+    # --------------------------
+    - set_status_ok:
+        assign:
+          - status: "ok"
+
+    - set_status_partial_if_errors:
+        switch:
+          - condition: ${len(errors) > 0}
+            assign:
+              - status: "partial"
+
+    - finish:
+        return:
+          status: ${status}
+          results: ${results}
+          errors: ${errors}

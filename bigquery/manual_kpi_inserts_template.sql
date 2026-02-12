@@ -1,0 +1,25 @@
+-- Example manual KPI inserts (edit values, then run in BigQuery)
+INSERT INTO `qa_metrics.manual_kpi_values` (kpi_id, kpi_name, privacy_level, metric_date, pod, feature, release, sprint, qa_user, developer_user, severity, numerator, denominator, value, unit, notes, source, _ingested_at)
+VALUES
+  ('P27', 'Production Incidents per Release', 'public', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for P27', 'manual', CURRENT_TIMESTAMP()),
+  ('P28', 'Release Quality Gate Status', 'public', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for P28', 'manual', CURRENT_TIMESTAMP()),
+  ('P29', 'Hands-on Testing Time % (Team)', 'public', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for P29', 'manual', CURRENT_TIMESTAMP()),
+  ('P30', 'Non Hands-on Time % (Team)', 'public', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for P30', 'manual', CURRENT_TIMESTAMP()),
+  ('P35', 'Execution Result Accuracy', 'public', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for P35', 'manual', CURRENT_TIMESTAMP()),
+  ('P36', 'Severity Assignment Accuracy', 'public', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for P36', 'manual', CURRENT_TIMESTAMP()),
+  ('P37', 'Test Execution Throughput (cases per person‑day)', 'public', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for P37', 'manual', CURRENT_TIMESTAMP()),
+  ('P38', 'Bug Reporting Lead Time', 'public', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for P38', 'manual', CURRENT_TIMESTAMP()),
+  ('P40', 'Exploratory Session Reporting Coverage', 'public', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for P40', 'manual', CURRENT_TIMESTAMP()),
+  ('P41', 'Time to Flag', 'public', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for P41', 'manual', CURRENT_TIMESTAMP()),
+  ('P42', 'Response Time SLA (Comms interaction)', 'public', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for P42', 'manual', CURRENT_TIMESTAMP()),
+  ('R1', 'Hands-on Testing Time % per QA', 'private', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for R1', 'manual', CURRENT_TIMESTAMP()),
+  ('R10', 'Test Cases per Hour per QA', 'private', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for R10', 'manual', CURRENT_TIMESTAMP()),
+  ('R17', 'Severity Assignment Accuracy per QA', 'private', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for R17', 'manual', CURRENT_TIMESTAMP()),
+  ('R18', 'Bug Reporting Lead Time per QA', 'private', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for R18', 'manual', CURRENT_TIMESTAMP()),
+  ('R19', 'Time to Flag per QA', 'private', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for R19', 'manual', CURRENT_TIMESTAMP()),
+  ('R2', 'Non Hands-on Time % per QA', 'private', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for R2', 'manual', CURRENT_TIMESTAMP()),
+  ('R20', 'Response Time SLA per QA', 'private', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for R20', 'manual', CURRENT_TIMESTAMP()),
+  ('R24', 'QA Capacity vs Expectation per POD', 'private', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for R24', 'manual', CURRENT_TIMESTAMP()),
+  ('R3', 'Hands-on Hours by Activity per QA', 'private', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for R3', 'manual', CURRENT_TIMESTAMP()),
+  ('R4', 'Non Hands-on Hours by Activity per QA', 'private', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for R4', 'manual', CURRENT_TIMESTAMP()),
+  ('R5', 'Deviation from 75/25 Hands-on Mix per QA', 'private', CURRENT_DATE(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'TODO: provide value for R5', 'manual', CURRENT_TIMESTAMP());
