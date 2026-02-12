@@ -136,18 +136,40 @@ def fetch_runs(project_id: int, since_ts: datetime) -> List[Dict[str, Any]]:
     created_after = int(since_ts.timestamp())
     url = f"{base}/get_runs/{project_id}&created_after={created_after}&include_all=1"
     resp = request_with_retries("GET", url, auth=testrail_auth())
+
     data = resp.json()
-    if isinstance(data, dict) and "runs" in data:
-        return data.get("runs") or []
-    return data or []
+
+    if isinstance(data, dict):
+        if data.get("error"):
+            raise RuntimeError(f"TestRail get_runs error for project {project_id}: {data.get('error')}")
+        runs = data.get("runs") or []
+    elif isinstance(data, list):
+        runs = data
+    else:
+        raise RuntimeError(
+            f"Unexpected TestRail get_runs response type for project {project_id}: {type(data).__name__}: {str(data)[:200]}"
+        )
+
+    return [r for r in runs if isinstance(r, dict)]
+
 
 def fetch_results_for_run(run_id: int) -> List[Dict[str, Any]]:
     base = testrail_base_url()
-    # NOTE: get_results_for_run returns results for tests in a run
     url = f"{base}/get_results_for_run/{run_id}"
     resp = request_with_retries("GET", url, auth=testrail_auth())
+
     data = resp.json()
-    return data or []
+    if isinstance(data, dict) and data.get("error"):
+        raise RuntimeError(f"TestRail get_results_for_run error for run {run_id}: {data.get('error')}")
+    if isinstance(data, list):
+        return [r for r in data if isinstance(r, dict)]
+    if isinstance(data, dict) and "results" in data:
+        results = data.get("results") or []
+        return [r for r in results if isinstance(r, dict)]
+
+    raise RuntimeError(
+        f"Unexpected TestRail get_results_for_run response type for run {run_id}: {type(data).__name__}: {str(data)[:200]}"
+    )
 
 # ----------------- Entry -----------------
 def hello_http(request):
