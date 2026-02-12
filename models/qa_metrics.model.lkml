@@ -1,4 +1,4 @@
-connection: "YOUR_BIGQUERY_CONNECTION"
+connection: "qa-panda-metrics-exp"
 
 include: "/views/*.view.lkml"
 include: "/dashboards/*.dashboard.lookml"
