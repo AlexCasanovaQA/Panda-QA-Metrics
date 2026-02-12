@@ -11,3 +11,7 @@ steps:
 images:
   - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/qa-ingestors:latest"
   - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/qa-ingestors:$SHORT_SHA"
+  
+  options:
+  logging: CLOUD_LOGGING_ONLY
+
