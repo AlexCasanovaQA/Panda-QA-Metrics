@@ -3,28 +3,22 @@ import os
 import time
 import random
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import google.auth
 import requests
 from flask import jsonify
 from google.cloud import bigquery, secretmanager
 
-# ----------------- GCP / BigQuery -----------------
 _, PROJECT_ID = google.auth.default()
 
 DATASET_ID = os.environ.get("BQ_DATASET", "qa_metrics")
 TABLE_NAME = os.environ.get("BQ_TABLE", "bugsnag_errors")
 TABLE_ID = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_NAME}"
 
-STORE_PAYLOAD = os.environ.get("STORE_PAYLOAD", "false").lower() in ("1","true","yes")
-PAYLOAD_MAX_CHARS = int(os.environ.get("PAYLOAD_MAX_CHARS", "50000"))
-
-
 bq = bigquery.Client(project=PROJECT_ID)
 sm = secretmanager.SecretManagerServiceClient()
 
-# HTTP knobs
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "30"))
 MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "6"))
 BASE_BACKOFF = float(os.environ.get("BASE_BACKOFF_SECONDS", "1.0"))
@@ -32,15 +26,18 @@ MAX_BACKOFF = float(os.environ.get("MAX_BACKOFF_SECONDS", "30.0"))
 
 OVERLAP_DAYS = int(os.environ.get("OVERLAP_DAYS", "7"))
 
+# NUEVO: límites para que nunca se eternice
+LOOKBACK_DAYS = int(os.environ.get("BUGSNAG_LOOKBACK_DAYS", "30"))     # <- último mes
+MAX_RUNTIME_SECONDS = int(os.environ.get("MAX_RUNTIME_SECONDS", "240")) # <- 4 min por run
+MAX_ERRORS_PER_RUN = int(os.environ.get("MAX_ERRORS_PER_RUN", "5000")) # <- corta si hay muchísimo
+PER_PAGE = int(os.environ.get("BUGSNAG_PER_PAGE", "100"))              # <= 100 según docs
+BQ_INSERT_CHUNK_SIZE = int(os.environ.get("BQ_INSERT_CHUNK_SIZE", "500"))
 
-# ----------------- Secrets -----------------
 def get_secret(name: str) -> str:
     secret_name = f"projects/{PROJECT_ID}/secrets/{name}/versions/latest"
     response = sm.access_secret_version(request={"name": secret_name})
     return response.payload.data.decode("utf-8").strip()
 
-
-# ----------------- BigQuery -----------------
 def ensure_table():
     schema = [
         bigquery.SchemaField("project_id","STRING"),
@@ -65,7 +62,6 @@ def ensure_table():
     table.clustering_fields = ["project_id", "error_id", "status", "severity"]
     bq.create_table(table, exists_ok=True)
 
-
 def get_last_seen() -> datetime:
     sql = f"""
       SELECT COALESCE(MAX(last_seen), TIMESTAMP('1970-01-01')) AS last_seen_max
@@ -73,28 +69,21 @@ def get_last_seen() -> datetime:
     """
     rows = list(bq.query(sql))
     last = rows[0]["last_seen_max"]
-
-    now = datetime.now(timezone.utc)
-    floor_30d = now - timedelta(days=30)
-
-    # Si no hay datos, empieza en 30 días atrás
     if last is None or getattr(last, "year", 1970) == 1970:
-        return floor_30d
+        last = datetime.now(timezone.utc) - timedelta(days=LOOKBACK_DAYS)
 
-    # Normaliza tz
     if last.tzinfo is None:
         last = last.replace(tzinfo=timezone.utc)
     else:
         last = last.astimezone(timezone.utc)
 
-    # tu lógica normal (overlap)
-    since = last - timedelta(days=OVERLAP_DAYS)
+    # overlap para no perder bordes
+    last = last - timedelta(days=OVERLAP_DAYS)
 
-    # ✅ Clamp: nunca más antiguo que 30 días
-    return max(since, floor_30d)
+    # CLAMP: nunca más antiguo que último mes
+    clamp = datetime.now(timezone.utc) - timedelta(days=LOOKBACK_DAYS)
+    return max(last, clamp)
 
-
-# ----------------- HTTP -----------------
 def request_with_retries(method: str, url: str, *, headers: Dict[str, str], params: Dict[str, Any]) -> requests.Response:
     last_exc: Optional[Exception] = None
     for attempt in range(MAX_RETRIES):
@@ -123,37 +112,61 @@ def request_with_retries(method: str, url: str, *, headers: Dict[str, str], para
 
     raise RuntimeError(f"HTTP failed after retries: {last_exc}")
 
+def insert_rows(rows: List[Dict[str, Any]]) -> None:
+    if not rows:
+        return
+    row_ids = []
+    for r in rows:
+        if r.get("error_id") and r.get("last_seen"):
+            row_ids.append(f'{r.get("project_id")}:{r.get("error_id")}:{r.get("last_seen")}')
+        else:
+            row_ids.append(None)
 
-# ----------------- Bugsnag fetch -----------------
-def fetch_bugsnag_errors(since_ts: datetime) -> List[Dict[str, Any]]:
+    errors = bq.insert_rows_json(TABLE_ID, rows, row_ids=row_ids)
+    if errors:
+        raise RuntimeError(errors)
+
+def fetch_and_insert_bugsnag_errors(since_ts: datetime, started_monotonic: float) -> int:
     base_url = get_secret("BUGSNAG_BASE_URL").rstrip("/")
     api_token = get_secret("BUGSNAG_TOKEN")
     project_ids = [p.strip() for p in get_secret("BUGSNAG_PROJECT_IDS").split(",") if p.strip()]
 
     headers = {"Authorization": f"token {api_token}", "Accept": "application/json"}
 
-    rows: List[Dict[str, Any]] = []
     ingested_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    total_inserted = 0
+    buffer: List[Dict[str, Any]] = []
+
+    # opción A (simple): usar filtro “dashboard style” del último mes
+    # since_filter = f"{LOOKBACK_DAYS}d"
+    # opción B (más exacta): ISO UTC desde since_ts
+    since_filter = since_ts.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     for project_id in project_ids:
-        page = 1
-        while True:
-            params = {
-                "per_page": 100,
-                "page": page,
-                "sort": "last_seen",
-                "direction": "asc",
-                "last_seen_after": since_ts.isoformat(),
-            }
-            url = f"{base_url}/projects/{project_id}/errors"
-            resp = request_with_retries("GET", url, headers=headers, params=params)
+        # IMPORTANTE: paginar con Link header (next), no con page++
+        url = f"{base_url}/projects/{project_id}/errors"
+        params = {
+            "per_page": PER_PAGE,
+            "sort": "last_seen",
+            "direction": "asc",
+            "filters[event.since]": since_filter,
+        }
 
-            data = resp.json()
+        while True:
+            if (time.monotonic() - started_monotonic) > (MAX_RUNTIME_SECONDS - 5):
+                # flush lo que tengamos y cortar
+                if buffer:
+                    insert_rows(buffer)
+                    total_inserted += len(buffer)
+                return total_inserted
+
+            resp = request_with_retries("GET", url, headers=headers, params=params)
+            data = resp.json() or []
             if not data:
                 break
 
             for e in data:
-                rows.append({
+                buffer.append({
                     "project_id": str(project_id),
                     "error_id": e.get("id"),
                     "error_class": e.get("error_class"),
@@ -166,45 +179,49 @@ def fetch_bugsnag_errors(since_ts: datetime) -> List[Dict[str, Any]]:
                     "users": int(e.get("users", 0) or 0),
                     "url": e.get("events_url") or e.get("url"),
                     "_ingested_at": ingested_at,
-                    "payload": (json.dumps(e)[:PAYLOAD_MAX_CHARS] if STORE_PAYLOAD else None),
+                    "payload": json.dumps(e),
                 })
 
-            if len(data) < 100:
+                if len(buffer) >= BQ_INSERT_CHUNK_SIZE:
+                    insert_rows(buffer)
+                    total_inserted += len(buffer)
+                    buffer = []
+
+                if total_inserted >= MAX_ERRORS_PER_RUN:
+                    if buffer:
+                        insert_rows(buffer)
+                        total_inserted += len(buffer)
+                    return total_inserted
+
+            # siguiente página (si existe)
+            next_url = resp.links.get("next", {}).get("url")
+            if not next_url:
                 break
-            page += 1
 
-    return rows
+            url = next_url
+            params = {}  # next_url ya trae sus query params
 
+    if buffer:
+        insert_rows(buffer)
+        total_inserted += len(buffer)
 
-def insert_rows(rows: List[Dict[str, Any]]) -> None:
-    if not rows:
-        return
+    return total_inserted
 
-    CHUNK_SIZE = int(os.environ.get("BQ_INSERT_CHUNK_SIZE", "500"))
-
-    row_ids_all = []
-    for r in rows:
-        if r.get("error_id") and r.get("last_seen"):
-            row_ids_all.append(f'{r.get("project_id")}:{r.get("error_id")}:{r.get("last_seen")}')
-        else:
-            row_ids_all.append(None)
-
-    for i in range(0, len(rows), CHUNK_SIZE):
-        batch = rows[i:i+CHUNK_SIZE]
-        batch_ids = row_ids_all[i:i+CHUNK_SIZE]
-        errors = bq.insert_rows_json(TABLE_ID, batch, row_ids=batch_ids)
-        if errors:
-            raise RuntimeError(errors)
-
-
-
-# ----------------- Cloud Function entrypoint -----------------
 def hello_http(request):
+    started = time.monotonic()
     try:
         ensure_table()
         since_ts = get_last_seen()
-        rows = fetch_bugsnag_errors(since_ts)
-        insert_rows(rows)
-        return (jsonify({"status":"OK","rows":len(rows), "since": since_ts.isoformat()}), 200)
+        inserted = fetch_and_insert_bugsnag_errors(since_ts, started_monotonic=started)
+        return (jsonify({
+            "status": "OK",
+            "rows_inserted": inserted,
+            "since": since_ts.isoformat(),
+            "runtime_seconds": round(time.monotonic() - started, 2),
+        }), 200)
     except Exception as e:
-        return (jsonify({"status":"ERROR","message":str(e)}), 500)
+        return (jsonify({
+            "status": "ERROR",
+            "message": str(e),
+            "runtime_seconds": round(time.monotonic() - started, 2),
+        }), 500)
