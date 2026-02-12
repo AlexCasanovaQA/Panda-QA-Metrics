@@ -1,5 +1,3 @@
-panda_ingestion_orchestrator
-
 main:
   params: [args]
   steps:
