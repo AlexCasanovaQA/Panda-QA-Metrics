@@ -1,7 +1,8 @@
 connection: "qa-panda-metrics-exp"
 
-include: "/views/*.view.lkml"
-include: "/dashboards/*.dashboard.lookml"
+include: "/views/**/*.view.lkml"
+include: "/dashboards/**/*.dashboard.lookml"
+
 
 timezone: "UTC"
 
