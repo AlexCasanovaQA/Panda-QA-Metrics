@@ -17,6 +17,10 @@ DATASET_ID = os.environ.get("BQ_DATASET", "qa_metrics")
 TABLE_NAME = os.environ.get("BQ_TABLE", "bugsnag_errors")
 TABLE_ID = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_NAME}"
 
+STORE_PAYLOAD = os.environ.get("STORE_PAYLOAD", "false").lower() in ("1","true","yes")
+PAYLOAD_MAX_CHARS = int(os.environ.get("PAYLOAD_MAX_CHARS", "50000"))
+
+
 bq = bigquery.Client(project=PROJECT_ID)
 sm = secretmanager.SecretManagerServiceClient()
 
@@ -69,15 +73,25 @@ def get_last_seen() -> datetime:
     """
     rows = list(bq.query(sql))
     last = rows[0]["last_seen_max"]
-    if last is None or getattr(last, "year", 1970) == 1970:
-        return datetime.now(timezone.utc) - timedelta(days=30)
 
+    now = datetime.now(timezone.utc)
+    floor_30d = now - timedelta(days=30)
+
+    # Si no hay datos, empieza en 30 días atrás
+    if last is None or getattr(last, "year", 1970) == 1970:
+        return floor_30d
+
+    # Normaliza tz
     if last.tzinfo is None:
         last = last.replace(tzinfo=timezone.utc)
     else:
         last = last.astimezone(timezone.utc)
 
-    return last - timedelta(days=OVERLAP_DAYS)
+    # tu lógica normal (overlap)
+    since = last - timedelta(days=OVERLAP_DAYS)
+
+    # ✅ Clamp: nunca más antiguo que 30 días
+    return max(since, floor_30d)
 
 
 # ----------------- HTTP -----------------
@@ -152,7 +166,7 @@ def fetch_bugsnag_errors(since_ts: datetime) -> List[Dict[str, Any]]:
                     "users": int(e.get("users", 0) or 0),
                     "url": e.get("events_url") or e.get("url"),
                     "_ingested_at": ingested_at,
-                    "payload": json.dumps(e),
+                    "payload": (json.dumps(e)[:PAYLOAD_MAX_CHARS] if STORE_PAYLOAD else None),
                 })
 
             if len(data) < 100:
@@ -165,16 +179,23 @@ def fetch_bugsnag_errors(since_ts: datetime) -> List[Dict[str, Any]]:
 def insert_rows(rows: List[Dict[str, Any]]) -> None:
     if not rows:
         return
-    row_ids = []
+
+    CHUNK_SIZE = int(os.environ.get("BQ_INSERT_CHUNK_SIZE", "500"))
+
+    row_ids_all = []
     for r in rows:
         if r.get("error_id") and r.get("last_seen"):
-            row_ids.append(f'{r.get("project_id")}:{r.get("error_id")}:{r.get("last_seen")}')
+            row_ids_all.append(f'{r.get("project_id")}:{r.get("error_id")}:{r.get("last_seen")}')
         else:
-            row_ids.append(None)
+            row_ids_all.append(None)
 
-    errors = bq.insert_rows_json(TABLE_ID, rows, row_ids=row_ids)
-    if errors:
-        raise RuntimeError(errors)
+    for i in range(0, len(rows), CHUNK_SIZE):
+        batch = rows[i:i+CHUNK_SIZE]
+        batch_ids = row_ids_all[i:i+CHUNK_SIZE]
+        errors = bq.insert_rows_json(TABLE_ID, batch, row_ids=batch_ids)
+        if errors:
+            raise RuntimeError(errors)
+
 
 
 # ----------------- Cloud Function entrypoint -----------------
