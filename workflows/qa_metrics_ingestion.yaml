@@ -10,6 +10,7 @@ main:
           - testrail_url: "https://ingest-testrail-147201244534.europe-west1.run.app"
           - testrail_results_url: "https://ingest-testrail-results-147201244534.europe-west1.run.app"
           - bugsnag_url: "https://ingest-bugsnag-147201244534.europe-west1.run.app"
+          - payload: {}   # POST body
           - results:
               jira: null
               jira_changelog: null
@@ -17,6 +18,7 @@ main:
               testrail_results: null
               bugsnag: null
           - errors: []
+          - status: "ok"
 
     # --------------------------
     # JIRA ISSUES
@@ -25,12 +27,14 @@ main:
         try:
           steps:
             - jira_call:
-                call: http.get
+                call: http.post
                 args:
                   url: ${jira_url}
-                  timeout: 540
+                  timeout: 900
                   auth:
                     type: OIDC
+                    audience: ${jira_url}
+                  body: ${payload}
                 result: jira_resp
             - jira_store:
                 assign:
@@ -38,12 +42,9 @@ main:
         except:
           as: e
           steps:
-            - jira_err_msg:
-                assign:
-                  - err_msg: ${text.decode(json.encode(e))}
             - jira_err:
                 assign:
-                  - errors: ${list.concat(errors, ["jira - " + err_msg])}
+                  - errors: ${list.concat(errors, ["jira - " + text.decode(json.encode(e))])}
 
     # --------------------------
     # JIRA CHANGELOG
@@ -52,12 +53,14 @@ main:
         try:
           steps:
             - jira_changelog_call:
-                call: http.get
+                call: http.post
                 args:
                   url: ${jira_changelog_url}
-                  timeout: 540
+                  timeout: 1800
                   auth:
                     type: OIDC
+                    audience: ${jira_changelog_url}
+                  body: ${payload}
                 result: jcl_resp
             - jira_changelog_store:
                 assign:
@@ -65,12 +68,9 @@ main:
         except:
           as: e
           steps:
-            - jcl_err_msg:
-                assign:
-                  - err_msg: ${text.decode(json.encode(e))}
             - jcl_err:
                 assign:
-                  - errors: ${list.concat(errors, ["jira_changelog - " + err_msg])}
+                  - errors: ${list.concat(errors, ["jira_changelog - " + text.decode(json.encode(e))])}
 
     # --------------------------
     # TESTRAIL RUNS
@@ -79,12 +79,14 @@ main:
         try:
           steps:
             - testrail_call:
-                call: http.get
+                call: http.post
                 args:
                   url: ${testrail_url}
-                  timeout: 540
+                  timeout: 900
                   auth:
                     type: OIDC
+                    audience: ${testrail_url}
+                  body: ${payload}
                 result: tr_resp
             - testrail_store:
                 assign:
@@ -92,12 +94,9 @@ main:
         except:
           as: e
           steps:
-            - tr_err_msg:
-                assign:
-                  - err_msg: ${text.decode(json.encode(e))}
             - tr_err:
                 assign:
-                  - errors: ${list.concat(errors, ["testrail - " + err_msg])}
+                  - errors: ${list.concat(errors, ["testrail - " + text.decode(json.encode(e))])}
 
     # --------------------------
     # TESTRAIL RESULTS
@@ -106,12 +105,14 @@ main:
         try:
           steps:
             - testrail_results_call:
-                call: http.get
+                call: http.post
                 args:
                   url: ${testrail_results_url}
                   timeout: 1800
                   auth:
                     type: OIDC
+                    audience: ${testrail_results_url}
+                  body: ${payload}
                 result: trr_resp
             - testrail_results_store:
                 assign:
@@ -119,12 +120,9 @@ main:
         except:
           as: e
           steps:
-            - trr_err_msg:
-                assign:
-                  - err_msg: ${text.decode(json.encode(e))}
             - trr_err:
                 assign:
-                  - errors: ${list.concat(errors, ["testrail_results - " + err_msg])}
+                  - errors: ${list.concat(errors, ["testrail_results - " + text.decode(json.encode(e))])}
 
     # --------------------------
     # BUGSNAG
@@ -133,12 +131,14 @@ main:
         try:
           steps:
             - bugsnag_call:
-                call: http.get
+                call: http.post
                 args:
                   url: ${bugsnag_url}
-                  timeout: 540
+                  timeout: 1800
                   auth:
                     type: OIDC
+                    audience: ${bugsnag_url}
+                  body: ${payload}
                 result: bs_resp
             - bugsnag_store:
                 assign:
@@ -146,20 +146,13 @@ main:
         except:
           as: e
           steps:
-            - bs_err_msg:
-                assign:
-                  - err_msg: ${text.decode(json.encode(e))}
             - bs_err:
                 assign:
-                  - errors: ${list.concat(errors, ["bugsnag - " + err_msg])}
+                  - errors: ${list.concat(errors, ["bugsnag - " + text.decode(json.encode(e))])}
 
     # --------------------------
     # FINAL STATUS
     # --------------------------
-    - set_status_ok:
-        assign:
-          - status: "ok"
-
     - set_status_partial_if_errors:
         switch:
           - condition: ${len(errors) > 0}
