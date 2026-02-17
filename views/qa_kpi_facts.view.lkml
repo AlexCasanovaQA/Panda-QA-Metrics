@@ -28,6 +28,15 @@ view: qa_kpi_facts {
     sql: ${TABLE}.metric_date ;;
   }
 
+  # NOTE: Dashboard date_filter passes TIMESTAMP boundaries.
+  # BigQuery qa_kpi_facts.metric_date is DATE, so we expose a TIMESTAMP-typed time dimension for filtering.
+  dimension_group: metric_ts {
+    type: time
+    timeframes: [raw, date, week, month, quarter, year]
+    sql: TIMESTAMP(${TABLE}.metric_date) ;;
+  }
+
+
   dimension: pod {
     label: "POD"
     type: string
