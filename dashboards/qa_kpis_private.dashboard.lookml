@@ -1,5 +1,5 @@
 - dashboard: qa_kpis_private
-  title: QA KPIs - Private (Leads)
+  title: QA KPIs - Private (Leadership / Leads)
   layout: newspaper
   preferred_viewer: dashboards-next
   refresh: 1 hour
@@ -51,6 +51,126 @@
     explore: qa_kpi_facts
     field: qa_kpi_facts.developer_user
   elements:
+  - name: leadership_overview
+    type: text
+    title_text: Leadership overview
+    subtitle_text: Team-level signals (latest week) — use filters to drill into POD/Feature
+    body_text: ''
+    row: 0
+    col: 0
+    width: 24
+    height: 2
+  - name: kpi_r1_team
+    type: single_value
+    title: R1 - Hands-on Testing Time % (Team avg)
+    model: panda_qa_metrics
+    explore: qa_kpi_facts
+    dimensions:
+    - qa_kpi_facts.metric_date_week
+    measures:
+    - qa_kpi_facts.kpi_value_percent
+    filters:
+      qa_kpi_facts.kpi_id: R1
+      qa_kpi_facts.privacy_level: private
+    sorts:
+    - qa_kpi_facts.metric_date_week desc
+    limit: 1
+    listen:
+      date_range: qa_kpi_facts.metric_ts_date
+      pod: qa_kpi_facts.pod
+      feature: qa_kpi_facts.feature
+      release: qa_kpi_facts.release
+      sprint: qa_kpi_facts.sprint
+      severity: qa_kpi_facts.severity
+      qa_user: qa_kpi_facts.qa_user
+      developer_user: qa_kpi_facts.developer_user
+    row: 2
+    col: 0
+    width: 8
+    height: 4
+    vis_config:
+      show_single_value_title: true
+      show_comparison: true
+      comparison_type: value
+      custom_color_enabled: true
+      custom_color: "#1f77b4"
+    note:
+      text: "Percentage of each QA engineer's time spent on hands-on testing activities. Calc: Hands-On hours per QA / total logged hours per QA. Window: Weekly, per sprint, per quarter. Target: Target 75% Hands-On per QA; deviations require context."
+      display: hover
+  - name: kpi_r10_team
+    type: single_value
+    title: R10 - Test Cases per Hour (Team avg)
+    model: panda_qa_metrics
+    explore: qa_kpi_facts
+    dimensions:
+    - qa_kpi_facts.metric_date_week
+    measures:
+    - qa_kpi_facts.kpi_value
+    filters:
+      qa_kpi_facts.kpi_id: R10
+      qa_kpi_facts.privacy_level: private
+    sorts:
+    - qa_kpi_facts.metric_date_week desc
+    limit: 1
+    listen:
+      date_range: qa_kpi_facts.metric_ts_date
+      pod: qa_kpi_facts.pod
+      feature: qa_kpi_facts.feature
+      release: qa_kpi_facts.release
+      sprint: qa_kpi_facts.sprint
+      severity: qa_kpi_facts.severity
+      qa_user: qa_kpi_facts.qa_user
+      developer_user: qa_kpi_facts.developer_user
+    row: 2
+    col: 8
+    width: 8
+    height: 4
+    vis_config:
+      show_single_value_title: true
+      show_comparison: true
+      comparison_type: value
+      custom_color_enabled: true
+      custom_color: "#1f77b4"
+    note:
+      text: "Approximate throughput of executed test cases per hour of run time. Calc: Executed test cases / total run duration hours for each QA. Window: Per sprint, per release. Target: Directional only; strongly depends on complexity."
+      display: hover
+  - name: kpi_r15_team
+    type: single_value
+    title: R15 - Bug Report Completeness (Team avg)
+    model: panda_qa_metrics
+    explore: qa_kpi_facts
+    dimensions:
+    - qa_kpi_facts.metric_date_week
+    measures:
+    - qa_kpi_facts.kpi_value_percent
+    filters:
+      qa_kpi_facts.kpi_id: R15
+      qa_kpi_facts.privacy_level: private
+    sorts:
+    - qa_kpi_facts.metric_date_week desc
+    limit: 1
+    listen:
+      date_range: qa_kpi_facts.metric_ts_date
+      pod: qa_kpi_facts.pod
+      feature: qa_kpi_facts.feature
+      release: qa_kpi_facts.release
+      sprint: qa_kpi_facts.sprint
+      severity: qa_kpi_facts.severity
+      qa_user: qa_kpi_facts.qa_user
+      developer_user: qa_kpi_facts.developer_user
+    row: 2
+    col: 16
+    width: 8
+    height: 4
+    vis_config:
+      show_single_value_title: true
+      show_comparison: true
+      comparison_type: value
+      custom_color_enabled: true
+      custom_color: "#1f77b4"
+    note:
+      text: "Percentage of a QA's bug reports that meet the reproducibility standard (screens, logs, steps, build info). Calc: Complete bugs reported by QA / total bugs reported by QA. Window: Weekly, per release. Target: High expectation: >99% per QA."
+      display: hover
   - name: intro_text
     type: text
     title_text: How to use
@@ -71,7 +191,7 @@
     title_text: Time allocation
     subtitle_text: Hands‑on vs non hands‑on mix
     body_text: ''
-    row: 4
+    row: 6
     col: 0
     width: 24
     height: 2
@@ -99,10 +219,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 6
+    row: 8
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#1f77b4"
     note:
       text: "Percentage of each QA engineer's time spent on hands-on testing activities. Calc: Hands-On hours per QA / total logged hours per QA. Window: Weekly, per sprint, per quarter. Target: Target 75% Hands-On per QA; deviations require context."
       display: hover
@@ -130,10 +258,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 6
+    row: 8
     col: 12
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of each QA engineer's time spent on non hands-on activities (test design, meetings, training, pre-mastering). Calc: Non Hands-On hours per QA / total logged hours per QA. Window: Weekly, per sprint, per quarter. Target: Target around 25% Non Hands-On per QA."
       display: hover
@@ -161,10 +297,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 13
+    row: 15
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#1f77b4"
     note:
       text: "Hands-on hours per QA across activity types (test execution, regression, playtest, live testing, destructive, performance, etc.). Calc: Sum of hands-on hours per QA per activity category. Window: Per sprint, per quarter. Target: No strict target; used to align focus with priorities."
       display: hover
@@ -192,10 +336,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 13
+    row: 15
     col: 12
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Non hands-on hours per QA across activities (test case creation, meetings, training, pre-mastering). Calc: Sum of non hands-on hours per QA per activity category. Window: Per sprint, per quarter. Target: Identify people overloaded with meetings / coordination."
       display: hover
@@ -223,10 +375,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 20
+    row: 22
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Degree to which each QA engineer diverges from the target 75% hands-on / 25% non hands-on split. Calc: Hands-On % - 75% and Non Hands-On % - 25% per QA. Window: Per sprint, per quarter. Target: +/-10 percentage points used as soft threshold."
       display: hover
@@ -235,7 +395,7 @@
     title_text: Test execution
     subtitle_text: Volume, throughput, and outcomes (per QA)
     body_text: ''
-    row: 27
+    row: 29
     col: 0
     width: 24
     height: 2
@@ -263,10 +423,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 29
+    row: 31
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#1f77b4"
     note:
       text: "Number of test cases executed by each QA engineer. Calc: For runs assigned to the QA: SUM(passed + failed + blocked + retest). Window: Per sprint, per release. Target: Used for capacity planning; not a ranking metric by itself."
       display: hover
@@ -294,10 +462,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 29
+    row: 31
     col: 12
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#1f77b4"
     note:
       text: "Approximate throughput of executed test cases per hour of run time. Calc: Executed test cases / total run duration hours for each QA. Window: Per sprint, per release. Target: Directional only; strongly depends on complexity."
       display: hover
@@ -325,10 +501,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 36
+    row: 38
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#1f77b4"
     note:
       text: "Pass rate of test cases executed by each QA engineer. Calc: SUM(passed) / SUM(passed + failed + blocked + retest) for each QA. Window: Per sprint, per release. Target: Interpreted with caution; depends on type of work executed."
       display: hover
@@ -356,10 +540,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 36
+    row: 38
     col: 12
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of executed test cases that failed for each QA engineer. Calc: SUM(failed) / SUM(passed + failed + blocked + retest) for each QA. Window: Per sprint, per release. Target: Higher fail rate can indicate testing of riskier features."
       display: hover
@@ -387,10 +579,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 43
+    row: 45
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#ff7f0e"
     note:
       text: "Average duration of runs executed by each QA engineer. Calc: Average HOURS between created_on and completed_on for completed runs owned by each QA. Window: Rolling 4 weeks; per sprint. Target: Identify extreme values for coaching and planning."
       display: hover
@@ -399,7 +599,7 @@
     title_text: Bug reporting quality
     subtitle_text: Reporting volume, yield, and quality (per QA)
     body_text: ''
-    row: 50
+    row: 52
     col: 0
     width: 24
     height: 2
@@ -427,10 +627,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 52
+    row: 54
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#1f77b4"
     note:
       text: "Number of Jira defects created where the reporter is a specific QA engineer. Calc: COUNT of Bug issues with reporter = QA and created in period. Window: Per sprint, per release. Target: Used to understand distribution of defect discovery."
       display: hover
@@ -458,10 +666,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 52
+    row: 54
     col: 12
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Number of high severity defects raised by each QA engineer. Calc: COUNT of Bug issues where reporter = QA AND priority in ('Blocker','Critical','High'). Window: Per sprint, per release. Target: Highlights focus on high‑impact issues."
       display: hover
@@ -489,10 +705,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 59
+    row: 61
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Ratio of defects logged by each QA relative to executed test cases. Calc: (Defects reported by QA / Test cases executed by QA) * 100. Window: Per sprint, per release. Target: Interpret relative to feature risk and assignment."
       display: hover
@@ -520,10 +744,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 59
+    row: 61
     col: 12
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of defects originally reported by a QA that were reopened after closure. Calc: For issues with reporter = QA, reopened defects / closed defects. Window: Rolling 3–6 months. Target: Lower is better; high values may indicate unclear repro or acceptance criteria."
       display: hover
@@ -551,10 +783,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 66
+    row: 68
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#1f77b4"
     note:
       text: "Percentage of a QA's bug reports that meet the reproducibility standard (screens, logs, steps, build info). Calc: Complete bugs reported by QA / total bugs reported by QA. Window: Weekly, per release. Target: High expectation: >99% per QA."
       display: hover
@@ -582,10 +822,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 66
+    row: 68
     col: 12
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of a QA's reported bugs that are rejected as Not a Bug / Won't Fix / Duplicate. Calc: Rejected bugs for QA / total bugs closed for QA. Window: Weekly and per release. Target: Expectation <5% for most QAs."
       display: hover
@@ -613,10 +861,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 73
+    row: 75
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#1f77b4"
     note:
       text: "Accuracy of initial severity assigned by QA compared to final agreed severity. Calc: Correct initial severity assignments / total bugs reported by QA. Window: Weekly and per release. Target: High expectation: near 100% for experienced QAs."
       display: hover
@@ -625,7 +881,7 @@
     title_text: Cycle time & comms
     subtitle_text: Lead times and response/flagging behavior (per QA)
     body_text: ''
-    row: 80
+    row: 82
     col: 0
     width: 24
     height: 2
@@ -653,10 +909,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 82
+    row: 84
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#ff7f0e"
     note:
       text: "Average time each QA takes from observing an issue to logging the Jira defect. Calc: Average minutes from detection marker to bug creation. Window: Daily and per sprint. Target: Expectation: very low, especially during focused testing sessions."
       display: hover
@@ -684,10 +948,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 82
+    row: 84
     col: 12
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#ff7f0e"
     note:
       text: "Time from detecting a critical risk/blocker to first visible escalation/flag in communication channels. Calc: Average minutes per QA from detection to flag. Window: Daily. Target: Expectation: escalate within same testing session."
       display: hover
@@ -715,10 +987,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 89
+    row: 91
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#1f77b4"
     note:
       text: "Average time for each QA to acknowledge urgent vs general requests in comms channels. Calc: Separate averages for urgent and general messages per QA. Window: Weekly. Target: Expect <10 minutes for urgent, <30 minutes for general."
       display: hover
@@ -727,7 +1007,7 @@
     title_text: Developer responsiveness
     subtitle_text: Developer-facing operational KPIs
     body_text: ''
-    row: 96
+    row: 98
     col: 0
     width: 24
     height: 2
@@ -755,10 +1035,18 @@
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
       date_range: qa_kpi_facts.metric_ts_date
-    row: 98
+    row: 100
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#1f77b4"
     note:
       text: "Number of defect tickets assigned to each developer. Calc: COUNT of Bug issues where assignee = developer and created in period or currently assigned. Window: Per sprint, per month. Target: No target; used to ensure fair distribution and to spot overload."
       display: hover
@@ -786,10 +1074,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 98
+    row: 100
     col: 12
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#ff7f0e"
     note:
       text: "Average time developers take to resolve bugs assigned to them. Calc: Average DAYS between created and resolutiondate for bugs resolved by each developer. Window: Rolling 3–6 months. Target: Context dependent; used for coaching and support."
       display: hover
@@ -817,10 +1113,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 105
+    row: 107
     col: 0
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of bugs fixed by a developer that were later reopened. Calc: Reopened bugs / total bugs resolved by that developer. Window: Rolling 3–6 months. Target: Lower is better; high values indicate need for deeper testing or design review."
       display: hover
@@ -848,10 +1152,18 @@
       severity: qa_kpi_facts.severity
       qa_user: qa_kpi_facts.qa_user
       developer_user: qa_kpi_facts.developer_user
-    row: 105
+    row: 107
     col: 12
     width: 12
     height: 6
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#9467bd"
     note:
       text: "Comparison of actual QA hours (Dev vs External) vs expected hours from OS expectations for each POD. Calc: Actual hours / expected hours, reported as % and variance. Window: Per sprint, per month, per quarter. Target: Identify overloaded or underutilised PODs; target around 100%."
       display: hover

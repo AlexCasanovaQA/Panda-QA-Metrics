@@ -1,5 +1,5 @@
 - dashboard: qa_kpis_public
-  title: QA KPIs - Public
+  title: QA KPIs - Public (Leadership)
   layout: newspaper
   preferred_viewer: dashboards-next
   refresh: 1 hour
@@ -41,23 +41,17 @@
   elements:
   - name: intro_text
     type: text
-    title_text: How to use
-    body_text: '**Purpose:** Executive view of QA quality, testing throughput, and production stability.
-
-      - Use the top filters to slice by POD / Feature / Release / Sprint / Severity.
-
-      - Hover the **tile note (ⓘ)** for a quick definition of each KPI.
-
-      - Ratio KPIs use **numerator / denominator** when available; otherwise they sum `kpi_value`.'
+    title_text: Executive QA health overview
+    body_text: 'Focus: backlog, incident risk, execution signal, and SLA compliance. Hover ⓘ for definitions.'
     row: 0
     col: 0
     width: 24
-    height: 4
-    subtitle_text: Filters apply to all tiles (Date Range uses metric_ts to avoid DATE/TIMESTAMP errors).
+    height: 3
+    subtitle_text: Latest snapshot + key trends (use filters to slice)
   - name: section_at_a_glance
     type: text
-    title_text: At a glance
-    subtitle_text: Snapshot + top-level indicators
+    title_text: Executive snapshot
+    subtitle_text: Latest week (or latest available period)
     body_text: ''
     row: 4
     col: 0
@@ -68,12 +62,16 @@
     title: P5 - Open Defect Backlog
     model: panda_qa_metrics
     explore: qa_kpi_facts
+    dimensions:
+    - qa_kpi_facts.metric_date_week
     measures:
     - qa_kpi_facts.kpi_value
     filters:
       qa_kpi_facts.kpi_id: P5
       qa_kpi_facts.privacy_level: public
-    limit: 500
+    sorts:
+    - qa_kpi_facts.metric_date_week desc
+    limit: 1
     listen:
       pod: qa_kpi_facts.pod
       feature: qa_kpi_facts.feature
@@ -83,8 +81,14 @@
       date_range: qa_kpi_facts.metric_ts_date
     row: 6
     col: 0
-    width: 8
-    height: 3
+    width: 6
+    height: 4
+    vis_config:
+      show_single_value_title: true
+      show_comparison: true
+      comparison_type: value
+      custom_color_enabled: true
+      custom_color: "#d62728"
     note:
       text: "Total number of unresolved defects at the end of the period. Calc: COUNT of Bug issues where resolutiondate IS NULL or status not in Done/Resolved/Closed at snapshot. Window: Snapshot at end of week / sprint / release. Target: Backlog stable or trending down; critical backlog subject to strict limits."
       display: hover
@@ -93,12 +97,16 @@
     title: P6 - Open Critical & High Defects
     model: panda_qa_metrics
     explore: qa_kpi_facts
+    dimensions:
+    - qa_kpi_facts.metric_date_week
     measures:
     - qa_kpi_facts.kpi_value
     filters:
       qa_kpi_facts.kpi_id: P6
       qa_kpi_facts.privacy_level: public
-    limit: 500
+    sorts:
+    - qa_kpi_facts.metric_date_week desc
+    limit: 1
     listen:
       pod: qa_kpi_facts.pod
       feature: qa_kpi_facts.feature
@@ -107,9 +115,15 @@
       severity: qa_kpi_facts.severity
       date_range: qa_kpi_facts.metric_ts_date
     row: 6
-    col: 8
-    width: 8
-    height: 3
+    col: 6
+    width: 6
+    height: 4
+    vis_config:
+      show_single_value_title: true
+      show_comparison: true
+      comparison_type: value
+      custom_color_enabled: true
+      custom_color: "#d62728"
     note:
       text: "Number of unresolved Critical and High priority defects. Calc: COUNT of Bug issues where priority in ('Blocker','Critical','High') and resolutiondate IS NULL. Window: Snapshot at end of week / sprint / release. Target: Target 0 open Critical at release; High below agreed limit per feature."
       display: hover
@@ -118,12 +132,16 @@
     title: P7 - Average Age of Open Defects
     model: panda_qa_metrics
     explore: qa_kpi_facts
+    dimensions:
+    - qa_kpi_facts.metric_date_week
     measures:
     - qa_kpi_facts.kpi_value
     filters:
       qa_kpi_facts.kpi_id: P7
       qa_kpi_facts.privacy_level: public
-    limit: 500
+    sorts:
+    - qa_kpi_facts.metric_date_week desc
+    limit: 1
     listen:
       pod: qa_kpi_facts.pod
       feature: qa_kpi_facts.feature
@@ -132,23 +150,68 @@
       severity: qa_kpi_facts.severity
       date_range: qa_kpi_facts.metric_ts_date
     row: 6
-    col: 16
-    width: 8
-    height: 3
+    col: 12
+    width: 6
+    height: 4
+    vis_config:
+      show_single_value_title: true
+      show_comparison: true
+      comparison_type: value
+      custom_color_enabled: true
+      custom_color: "#d62728"
     note:
       text: "Average number of days that currently open bugs have been unresolved. Calc: Average DAYS between snapshot date and created for bugs where resolutiondate IS NULL. Window: Snapshot (trend weekly). Target: P0/P1 should have very low average age (for example <7 days)."
+      display: hover
+  - name: kpi_p11_snapshot
+    type: single_value
+    title: P11 - SLA Compliance (Critical/High)
+    model: panda_qa_metrics
+    explore: qa_kpi_facts
+    dimensions:
+    - qa_kpi_facts.metric_date_week
+    measures:
+    - qa_kpi_facts.kpi_value_percent
+    filters:
+      qa_kpi_facts.kpi_id: P11
+      qa_kpi_facts.privacy_level: public
+    sorts:
+    - qa_kpi_facts.metric_date_week desc
+    limit: 1
+    listen:
+      date_range: qa_kpi_facts.metric_ts_date
+      pod: qa_kpi_facts.pod
+      feature: qa_kpi_facts.feature
+      release: qa_kpi_facts.release
+      sprint: qa_kpi_facts.sprint
+      severity: qa_kpi_facts.severity
+    row: 6
+    col: 18
+    width: 6
+    height: 4
+    vis_config:
+      show_single_value_title: true
+      show_comparison: true
+      comparison_type: value
+      custom_color_enabled: true
+      custom_color: "#2ca02c"
+    note:
+      text: "Percentage of Critical/High defects resolved within the agreed resolution SLA. Calc: Resolved Critical/High bugs within SLA window / total Critical/High resolved in period. Window: Per sprint; rolling 4 weeks. Target: Target >=95% for Critical, >=90% for High."
       display: hover
   - name: kpi_p20
     type: single_value
     title: P20 - Active Production Errors
     model: panda_qa_metrics
     explore: qa_kpi_facts
+    dimensions:
+    - qa_kpi_facts.metric_date_week
     measures:
     - qa_kpi_facts.kpi_value
     filters:
       qa_kpi_facts.kpi_id: P20
       qa_kpi_facts.privacy_level: public
-    limit: 500
+    sorts:
+    - qa_kpi_facts.metric_date_week desc
+    limit: 1
     listen:
       pod: qa_kpi_facts.pod
       feature: qa_kpi_facts.feature
@@ -158,8 +221,14 @@
       date_range: qa_kpi_facts.metric_ts_date
     row: 10
     col: 0
-    width: 8
-    height: 3
+    width: 6
+    height: 4
+    vis_config:
+      show_single_value_title: true
+      show_comparison: true
+      comparison_type: value
+      custom_color_enabled: true
+      custom_color: "#d62728"
     note:
       text: "Number of distinct Bugsnag errors that are still active (not fixed). Calc: COUNT DISTINCT error_id where status != 'fixed' and last_seen within monitoring window. Window: Daily snapshot; weekly trend. Target: Should trend down; specific thresholds per game."
       display: hover
@@ -168,12 +237,16 @@
     title: P21 - High/Critical Active Errors
     model: panda_qa_metrics
     explore: qa_kpi_facts
+    dimensions:
+    - qa_kpi_facts.metric_date_week
     measures:
     - qa_kpi_facts.kpi_value
     filters:
       qa_kpi_facts.kpi_id: P21
       qa_kpi_facts.privacy_level: public
-    limit: 500
+    sorts:
+    - qa_kpi_facts.metric_date_week desc
+    limit: 1
     listen:
       pod: qa_kpi_facts.pod
       feature: qa_kpi_facts.feature
@@ -182,22 +255,97 @@
       severity: qa_kpi_facts.severity
       date_range: qa_kpi_facts.metric_ts_date
     row: 10
-    col: 8
-    width: 8
-    height: 3
+    col: 6
+    width: 6
+    height: 4
+    vis_config:
+      show_single_value_title: true
+      show_comparison: true
+      comparison_type: value
+      custom_color_enabled: true
+      custom_color: "#d62728"
     note:
       text: "Number of active production errors with high severity. Calc: COUNT DISTINCT error_id where severity in ('error','critical') AND status != 'fixed'. Window: Daily snapshot; weekly trend. Target: Aim for zero open critical errors."
       display: hover
+  - name: kpi_p14_snapshot
+    type: single_value
+    title: P14 - Pass Rate
+    model: panda_qa_metrics
+    explore: qa_kpi_facts
+    dimensions:
+    - qa_kpi_facts.metric_date_week
+    measures:
+    - qa_kpi_facts.kpi_value_percent
+    filters:
+      qa_kpi_facts.kpi_id: P14
+      qa_kpi_facts.privacy_level: public
+    sorts:
+    - qa_kpi_facts.metric_date_week desc
+    limit: 1
+    listen:
+      date_range: qa_kpi_facts.metric_ts_date
+      pod: qa_kpi_facts.pod
+      feature: qa_kpi_facts.feature
+      release: qa_kpi_facts.release
+      sprint: qa_kpi_facts.sprint
+      severity: qa_kpi_facts.severity
+    row: 10
+    col: 12
+    width: 6
+    height: 4
+    vis_config:
+      show_single_value_title: true
+      show_comparison: true
+      comparison_type: value
+      custom_color_enabled: true
+      custom_color: "#2ca02c"
+    note:
+      text: "Percentage of executed test cases that passed. Calc: SUM(passed_count) / SUM(passed_count + failed_count + blocked_count + retest_count). Window: Daily, per sprint, per release. Target: Target for release builds typically >=95% depending on risk."
+      display: hover
+  - name: kpi_p31_snapshot
+    type: single_value
+    title: P31 - Bug Escape Rate
+    model: panda_qa_metrics
+    explore: qa_kpi_facts
+    dimensions:
+    - qa_kpi_facts.metric_date_week
+    measures:
+    - qa_kpi_facts.kpi_value_percent
+    filters:
+      qa_kpi_facts.kpi_id: P31
+      qa_kpi_facts.privacy_level: public
+    sorts:
+    - qa_kpi_facts.metric_date_week desc
+    limit: 1
+    listen:
+      date_range: qa_kpi_facts.metric_ts_date
+      pod: qa_kpi_facts.pod
+      feature: qa_kpi_facts.feature
+      release: qa_kpi_facts.release
+      sprint: qa_kpi_facts.sprint
+      severity: qa_kpi_facts.severity
+    row: 10
+    col: 18
+    width: 6
+    height: 4
+    vis_config:
+      show_single_value_title: true
+      show_comparison: true
+      comparison_type: value
+      custom_color_enabled: true
+      custom_color: "#d62728"
+    note:
+      text: "Share of defects that escape to production, broken down by severity (Blocker/Critical/Major). Calc: (Defects found in production / (Pre-release defects + production defects)) by severity. Window: Per release and weekly. Target: High expectation: 0–2% Blocker/Critical; <4% Majors."
+      display: hover
   - name: at_a_glance_note
     type: text
-    title_text: Reading snapshot KPIs
+    title_text: Notes for leaders
     subtitle_text: ''
-    body_text: Snapshot tiles (backlog / active errors) reflect the latest data point within the selected filters.
-    row: 10
-    col: 16
-    width: 8
-    height: 3
-  - name: section_defects
+    body_text: 'Snapshot tiles show the latest week. Use trends to validate direction and stability; investigate spikes by filtering POD/Feature/Severity.'
+    row: 140
+    col: 0
+    width: 24
+    height: 3  - name: section_defects
     type: text
     title_text: Defects lifecycle
     subtitle_text: Creation → closure → reopen trends
@@ -232,6 +380,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Number of new defect tickets created in the selected period. Calc: COUNT of issues where issue_type = 'Bug' and created date is in the period. Window: Weekly, per sprint, per release. Target: No fixed target; monitor trend and unexpected spikes per POD."
       display: hover
@@ -261,6 +419,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#2ca02c"
     note:
       text: "Number of defect tickets resolved or closed in the selected period. Calc: COUNT of Bug issues with resolutiondate in the period and status in Done/Resolved/Closed. Window: Weekly, per sprint, per release. Target: Over time, Closed >= Created to avoid backlog growth."
       display: hover
@@ -290,6 +458,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Number of defect tickets that were reopened after being resolved. Calc: COUNT of Bug issues that transition from resolved/closed back to an open/reopened status during the period. Window: Weekly, per sprint. Target: As low as possible; aim for <3% of closed defects."
       display: hover
@@ -319,6 +497,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of closed defects that were subsequently reopened. Calc: P3 (Defects Reopened) / P2 (Defects Closed) in the same period. Window: Weekly, per sprint, rolling 4 weeks. Target: Target <3–5%; stricter limit for Critical/High."
       display: hover
@@ -357,6 +545,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#ff7f0e"
     note:
       text: "Average time from defect creation until it reaches the agreed triage state. Calc: Average HOURS between created and first timestamp where status is triage state. Window: Per sprint; rolling 4 weeks. Target: Target <24h for Critical/High defects."
       display: hover
@@ -386,6 +584,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#ff7f0e"
     note:
       text: "Average time from defect creation until resolution. Calc: Average DAYS between created and resolutiondate for bugs resolved in period. Window: Per sprint; rolling 4 and 12 weeks. Target: Critical issues resolved within agreed SLA (for example <3 days)."
       display: hover
@@ -415,6 +623,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#2ca02c"
     note:
       text: "Percentage of Critical/High defects resolved within the agreed resolution SLA. Calc: Resolved Critical/High bugs within SLA window / total Critical/High resolved in period. Window: Per sprint; rolling 4 weeks. Target: Target >=95% for Critical, >=90% for High."
       display: hover
@@ -444,6 +662,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Defects created relative to the amount of delivered work. Calc: Bugs created in sprint / completed story points in same sprint * 100. Window: Per sprint / release. Target: Benchmark per POD; track trend, not absolute value."
       display: hover
@@ -482,6 +710,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#2ca02c"
     note:
       text: "Number of TestRail runs executed in the selected period. Calc: COUNT of runs where created_on or completed_on is in the period. Window: Daily, per sprint, per release. Target: Match planned runs for the cycle; no systematic misses."
       display: hover
@@ -511,6 +749,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#2ca02c"
     note:
       text: "Total test cases executed (passed, failed, blocked, retest). Calc: SUM(passed_count + failed_count + blocked_count + retest_count). Window: Daily, per sprint, per release. Target: Should align with planned coverage for release / test plan."
       display: hover
@@ -540,6 +788,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#2ca02c"
     note:
       text: "Percentage of executed test cases that passed. Calc: SUM(passed_count) / SUM(passed_count + failed_count + blocked_count + retest_count). Window: Daily, per sprint, per release. Target: Target for release builds typically >=95% depending on risk."
       display: hover
@@ -569,6 +827,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of executed test cases that failed. Calc: SUM(failed_count) / SUM(passed_count + failed_count + blocked_count + retest_count). Window: Daily, per sprint, per release. Target: Should trend down as release stabilises."
       display: hover
@@ -598,6 +866,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of executed test cases that are blocked by environment, data or dependencies. Calc: SUM(blocked_count) / SUM(passed_count + failed_count + blocked_count + retest_count). Window: Daily, per sprint, per release. Target: Keep <5% where possible; spikes indicate infra issues."
       display: hover
@@ -627,6 +905,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of executed test cases that required retest. Calc: SUM(retest_count) / SUM(passed_count + failed_count + blocked_count + retest_count). Window: Per sprint, per release. Target: High retest rate may indicate unstable builds or late fixes."
       display: hover
@@ -656,6 +944,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#2ca02c"
     note:
       text: "Coverage of planned test cases that were actually executed. Calc: Executed tests / (executed tests + untested_count). Window: Per sprint, per release. Target: Typical gate >=90–95% depending on risk profile."
       display: hover
@@ -685,6 +983,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Average duration of TestRail runs from creation to completion. Calc: Average HOURS between created_on and completed_on for completed runs. Window: Per sprint; rolling 4 weeks. Target: No strict target; watch for anomalies and long tails."
       display: hover
@@ -723,6 +1031,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Distinct Bugsnag errors first seen in the current period. Calc: COUNT DISTINCT error_id where first_seen date is in the period. Window: Daily, per sprint, per release. Target: Should drop as release matures; spikes after release show regressions."
       display: hover
@@ -752,6 +1070,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Total number of error events captured by Bugsnag in the period. Calc: SUM(events) for errors where last_seen is inside the period. Window: Daily, weekly; rolling 30 days. Target: Trend down over time; alerts on deviations from baseline."
       display: hover
@@ -781,6 +1109,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Total number of users affected by Bugsnag errors in the period (approximate). Calc: SUM(users) for errors where last_seen is in the period. Window: Daily, weekly; rolling 30 days. Target: Minimise, especially for high severity issues."
       display: hover
@@ -810,6 +1148,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#ff7f0e"
     note:
       text: "Average time between first_seen and last_seen for resolved errors. Calc: Average DAYS between first_seen and last_seen for errors marked as fixed or inactive. Window: Rolling 30 days or per release. Target: Shorter lifetimes indicate faster detection & fix rollout."
       display: hover
@@ -839,6 +1187,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Ratio of defects found to test cases executed, indicating defect yield. Calc: (Bugs created in period / Executed test cases in period) * 100. Window: Per sprint, per release. Target: Used comparatively across releases and QA Groups."
       display: hover
@@ -868,6 +1226,14 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#d62728"
     note:
       text: "Number of high-severity production incidents associated with a release. Calc: COUNT DISTINCT high/critical Bugsnag errors mapped to a release. Window: Per release. Target: Goal: zero or minimal critical incidents per release."
       display: hover
@@ -897,6 +1263,14 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_value_labels: true
+      orientation: horizontal
+      x_axis_gridlines: false
+      y_axis_gridlines: false
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#2ca02c"
     note:
       text: "Pass/Fail indicator summarising whether a release meets severity thresholds and coverage targets. Calc: Gate PASS if: coverage >= threshold; 0 open Critical; High backlog under limit; SLA compliance above target; incident rate below threshold. Window: Evaluated at each RC and before launch. Target: All launches should meet gate or be explicitly waived."
       display: hover
@@ -935,6 +1309,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#2ca02c"
     note:
       text: "Percentage of QA time spent on hands-on testing activities for each team. Calc: Hands-On hours / total QA hours in the period. Window: Weekly, per sprint, per quarter. Target: Target 75% Hands-On at team level."
       display: hover
@@ -964,6 +1348,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#2ca02c"
     note:
       text: "Percentage of QA time spent on non hands-on activities (test design, meetings, training, pre-mastering). Calc: Non Hands-On hours / total QA hours in the period. Window: Weekly, per sprint, per quarter. Target: Target around 25% Non Hands-On."
       display: hover
@@ -993,6 +1387,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Share of defects that escape to production, broken down by severity (Blocker/Critical/Major). Calc: (Defects found in production / (Pre-release defects + production defects)) by severity. Window: Per release and weekly. Target: High expectation: 0–2% Blocker/Critical; <4% Majors."
       display: hover
@@ -1022,6 +1426,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#2ca02c"
     note:
       text: "Percentage of total defects for a release that were detected before going to production. Calc: Pre-release defects / (Pre-release + post-release defects) * 100. Window: Per release and monthly. Target: High expectation: >90% coverage; minimum acceptable ≥85%."
       display: hover
@@ -1051,6 +1465,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of reported bugs that are rejected as not valid (Not a Bug, Won't Fix, Duplicate). Calc: Rejected bugs / total bugs closed in the period. Window: Weekly and per release. Target: High expectation: <5% overall."
       display: hover
@@ -1080,6 +1504,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#2ca02c"
     note:
       text: "Percentage of bug reports that meet minimum reproducibility standard (screenshots, logs, steps, build info). Calc: Number of bugs marked as complete / total bugs reported in the period. Window: Weekly. Target: High expectation: >99% of bugs meet completeness standard."
       display: hover
@@ -1109,6 +1543,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#2ca02c"
     note:
       text: "Accuracy of test results recorded vs actual outcome (how often initial result is later changed). Calc: 1 - (Incorrect or changed results / total executed tests). Window: Per test cycle. Target: High expectation: very high accuracy (≈99%)."
       display: hover
@@ -1138,6 +1582,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#2ca02c"
     note:
       text: "Percentage of bugs whose initial severity matches the final agreed severity. Calc: Correct severity assignments / total bugs, where correct = no change or change within agreed tolerance. Window: Weekly and per release. Target: High expectation: close to 100%; specific tolerance per team."
       display: hover
@@ -1167,6 +1621,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#2ca02c"
     note:
       text: "Average number of test cases executed per QA person‑day. Calc: Executed test cases / QA testing hours converted to person‑days. Window: Daily and per test cycle. Target: Target depends on game and complexity; watch trend rather than absolute."
       display: hover
@@ -1196,6 +1660,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#ff7f0e"
     note:
       text: "Average time between discovering an issue and logging it as a bug. Calc: Average minutes from detection to bug creation. Window: Daily. Target: High expectation: very low (for example <15 minutes for most issues)."
       display: hover
@@ -1225,6 +1699,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#ff7f0e"
     note:
       text: "Average time from a fix being ready for QA to verification completed. Calc: Average hours between dev-ready and QA verification completion. Window: Daily and per release. Target: Targets per severity (e.g., same‑day for Critical)."
       display: hover
@@ -1254,6 +1738,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#2ca02c"
     note:
       text: "Coverage and time spent in documented exploratory testing sessions. Calc: Documented exploratory sessions / total exploratory sessions; plus total hours. Window: Weekly. Target: High expectation: near 100% of exploratory sessions documented."
       display: hover
@@ -1283,6 +1777,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#ff7f0e"
     note:
       text: "Time to escalate and communicate critical risks/blockers from detection to correct channel. Calc: Average minutes from risk detection to first flag. Window: Daily. Target: Expectation: very quick (for example within same test session)."
       display: hover
@@ -1312,6 +1816,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value": "#2ca02c"
     note:
       text: "Time QA takes to acknowledge and respond to urgent vs general requests in communication channels. Calc: Average response time in minutes, tracked separately for urgent vs general. Window: Weekly. Target: High expectation: <10 min for urgent, <30 min for general requests."
       display: hover
@@ -1341,6 +1855,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#2ca02c"
     note:
       text: "Percentage of reported defects that are accepted as valid (not rejected as NAB, Duplicate, Won’t Fix). Calc: Accepted bugs / total bugs closed in the period * 100. Window: Weekly, per sprint, per release. Target: Target >=92%."
       display: hover
@@ -1370,6 +1894,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of total reported defects that are P0 or P1 severity. Calc: (P0 + P1 bugs reported) / total bugs reported * 100. Window: Weekly, per sprint, per release. Target: Target >=25% Depending on The milestone phase."
       display: hover
@@ -1399,6 +1933,16 @@
     col: 0
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of reported defects classified as NMI (issues that do not require a code fix or merge). Calc: NMI bugs / total bugs closed * 100. Window: Weekly, per sprint. Target: Target <=5%."
       display: hover
@@ -1428,6 +1972,16 @@
     col: 12
     width: 12
     height: 5
+    vis_config:
+      show_legend: false
+      show_x_axis_label: false
+      show_y_axis_label: false
+      x_axis_gridlines: false
+      y_axis_gridlines: true
+      show_null_points: true
+      interpolation: linear
+      series_colors:
+        "qa_kpi_facts.kpi_value_percent": "#d62728"
     note:
       text: "Percentage of total defects that were first identified in live/production. Calc: Live defects / (pre-release defects + live defects) * 100. Window: Per release; rolling 30 days. Target: Target <=2%."
       display: hover
