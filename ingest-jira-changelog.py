@@ -180,27 +180,27 @@ def fetch_issue_keys(project_key: str, since_ts: datetime.datetime, until_ts: da
         f'ORDER BY updated ASC'
     )
 
-    url = f"{JIRA_BASE_URL.rstrip('/')}/rest/api/3/search"
+    # NEW endpoint
+    url = f"{JIRA_BASE_URL.rstrip('/')}/rest/api/3/search/jql"
 
-    start_at = 0
-    total = None
+    next_page_token: Optional[str] = None
+    seen_tokens: set[str] = set()
 
     while True:
         body = {
             "jql": jql,
-            "startAt": start_at,
             "maxResults": PAGE_SIZE,
             "fields": ["updated"],
         }
+        if next_page_token:
+            body["nextPageToken"] = next_page_token
 
         resp = requests.post(url, headers=_jira_headers(), json=body, timeout=REQUEST_TIMEOUT)
         if resp.status_code >= 400:
             raise RuntimeError(f"Jira API error {resp.status_code}: {resp.text[:800]}")
 
         data = resp.json()
-        issues = data.get("issues", [])
-        total = data.get("total") if total is None else total
-
+        issues = data.get("issues", []) or []
         if not issues:
             break
 
@@ -216,19 +216,51 @@ def fetch_issue_keys(project_key: str, since_ts: datetime.datetime, until_ts: da
 
         yield stubs
 
-        start_at += len(issues)
-        if total is not None and start_at >= int(total):
+        # Pagination for /search/jql
+        if data.get("isLast") is True:
             break
+
+        next_page_token = data.get("nextPageToken")
+        if not next_page_token:
+            break
+
+        # Safety guard against pagination loops
+        if next_page_token in seen_tokens:
+            raise RuntimeError("Pagination loop detected in Jira /search/jql (repeated nextPageToken).")
+        seen_tokens.add(next_page_token)
 
         time.sleep(0.1)
 
 
 def fetch_issue_changelog(issue_id: str) -> Dict[str, Any]:
-    url = f"{JIRA_BASE_URL.rstrip('/')}/rest/api/3/issue/{issue_id}/changelog"
-    resp = requests.get(url, headers=_jira_headers(), timeout=REQUEST_TIMEOUT)
-    if resp.status_code >= 400:
-        raise RuntimeError(f"Changelog fetch error {resp.status_code} for issue_id={issue_id}: {resp.text[:300]}")
-    return resp.json()
+    base_url = f"{JIRA_BASE_URL.rstrip('/')}/rest/api/3/issue/{issue_id}/changelog"
+
+    start_at = 0
+    max_results = 100  # Jira commonly supports up to 100 here
+    all_values: List[Dict[str, Any]] = []
+
+    while True:
+        resp = requests.get(
+            base_url,
+            headers=_jira_headers(),
+            params={"startAt": start_at, "maxResults": max_results},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Changelog fetch error {resp.status_code} for issue_id={issue_id}: {resp.text[:300]}")
+
+        data = resp.json()
+        values = data.get("values", []) or []
+        all_values.extend(values)
+
+        if data.get("isLast") is True or not values:
+            break
+
+        start_at += len(values)
+        time.sleep(0.05)
+
+    return {"values": all_values}
+
 
 
 def extract_status_histories(changelog_json: Dict[str, Any]) -> List[Dict[str, Any]]:
