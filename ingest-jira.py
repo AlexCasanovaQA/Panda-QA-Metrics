@@ -253,8 +253,10 @@ def fetch_jira_issues(
         fields_to_fetch.append("description")
 
     # Jira JQL supports ISO 8601 timestamps in quotes.
-    since_s = since_ts.astimezone(datetime.timezone.utc).isoformat()
-    until_s = until_ts.astimezone(datetime.timezone.utc).isoformat()
+    # Jira JQL datetime parsing is picky; this format is the most widely accepted in Jira Cloud.
+    # Interpreted in the Jira user's timezone.
+    since_s = since_ts.strftime("%Y-%m-%d %H:%M")
+    until_s = until_ts.strftime("%Y-%m-%d %H:%M")
 
     jql = (
         f'project = "{project_key}" '
@@ -376,6 +378,42 @@ def hello_http(request):
         project_key = body.get("project_key") or body.get("project") or TARGET_PROJECT_KEY
         if not isinstance(project_key, str) or not project_key.strip():
             raise RuntimeError("Pass a string for project_key/project")
+
+        debug = body.get("debug")
+
+        if debug:
+            # Quick connectivity / permission probe (no BigQuery writes).
+            # Example:
+            #   curl ... -d '{"project_key":"PC","debug":true}'
+            base = JIRA_SITE.rstrip("/")
+            probe = {"project_key": project_key}
+
+            # 1) Project metadata (validates project key + permissions)
+            try:
+                r_proj = requests.get(f"{base}/rest/api/3/project/{project_key}", headers=_jira_headers(), timeout=REQUEST_TIMEOUT)
+                probe["project_status_code"] = r_proj.status_code
+                probe["project_response_snippet"] = (r_proj.text or "")[:500]
+            except Exception as ex:
+                probe["project_error"] = str(ex)
+
+            # 2) Search probe (validates JQL + returns total + latest issue key)
+            try:
+                body_probe = {
+                    "jql": f'project = "{project_key}" ORDER BY updated DESC',
+                    "maxResults": 1,
+                    "fields": ["updated"],
+                }
+                r_search = requests.post(f"{base}/rest/api/3/search/jql", headers=_jira_headers(), json=body_probe, timeout=REQUEST_TIMEOUT)
+                probe["search_status_code"] = r_search.status_code
+                js = r_search.json() if r_search.headers.get("content-type","").startswith("application/json") else {}
+                probe["search_total"] = js.get("total")
+                issues = js.get("issues") or []
+                probe["latest_issue_key"] = (issues[0].get("key") if issues else None)
+                probe["search_response_snippet"] = (r_search.text or "")[:800]
+            except Exception as ex:
+                probe["search_error"] = str(ex)
+
+            return jsonify({"status": "DEBUG", **probe}), 200
 
         dry_run = bool(body.get("dry_run", False))
 
