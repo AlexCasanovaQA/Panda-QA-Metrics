@@ -39,9 +39,19 @@ GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 BQ_DATASET_ID = os.getenv("BQ_DATASET_ID", "qa_metrics")
 BQ_TABLE_ID = os.getenv("BQ_TABLE_ID", "jira_issues")
 
-JIRA_BASE_URL = os.getenv("JIRA_BASE_URL")  # e.g. https://your-domain.atlassian.net
-JIRA_EMAIL = os.getenv("JIRA_EMAIL")
-JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
+import os
+from google.cloud import secretmanager
+
+def get_secret(secret_id):
+    client = secretmanager.SecretManagerServiceClient()
+    name = f"projects/{GCP_PROJECT_ID}/secrets/{secret_id}/versions/latest"
+    response = client.access_secret_version(request={"name": name})
+    return response.payload.data.decode("UTF-8")
+
+JIRA_BASE_URL = get_secret("JIRA_BASE_URL")
+JIRA_EMAIL = get_secret("JIRA_EMAIL")
+JIRA_API_TOKEN = get_secret("JIRA_API_TOKEN")
+
 
 TARGET_PROJECT_KEY = os.getenv("TARGET_PROJECT_KEY", "PC")
 TARGET_TEAM_FIELD = os.getenv("TARGET_TEAM_FIELD", "customfield_10001")
