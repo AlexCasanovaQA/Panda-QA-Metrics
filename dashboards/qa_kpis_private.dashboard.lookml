@@ -104,7 +104,7 @@
     width: 12
     height: 6
     note:
-      text: Hands-on testing time share per QA (percentage).
+      text: "Percentage of each QA engineer's time spent on hands-on testing activities. Calc: Hands-On hours per QA / total logged hours per QA. Window: Weekly, per sprint, per quarter. Target: Target 75% Hands-On per QA; deviations require context."
       display: hover
   - name: kpi_r2
     type: looker_bar
@@ -135,7 +135,7 @@
     width: 12
     height: 6
     note:
-      text: Non hands-on time share per QA (percentage).
+      text: "Percentage of each QA engineer's time spent on non hands-on activities (test design, meetings, training, pre-mastering). Calc: Non Hands-On hours per QA / total logged hours per QA. Window: Weekly, per sprint, per quarter. Target: Target around 25% Non Hands-On per QA."
       display: hover
   - name: kpi_r3
     type: looker_bar
@@ -166,7 +166,7 @@
     width: 12
     height: 6
     note:
-      text: Total hands-on testing hours per QA.
+      text: "Hands-on hours per QA across activity types (test execution, regression, playtest, live testing, destructive, performance, etc.). Calc: Sum of hands-on hours per QA per activity category. Window: Per sprint, per quarter. Target: No strict target; used to align focus with priorities."
       display: hover
   - name: kpi_r4
     type: looker_bar
@@ -197,7 +197,7 @@
     width: 12
     height: 6
     note:
-      text: Total non hands-on hours per QA.
+      text: "Non hands-on hours per QA across activities (test case creation, meetings, training, pre-mastering). Calc: Sum of non hands-on hours per QA per activity category. Window: Per sprint, per quarter. Target: Identify people overloaded with meetings / coordination."
       display: hover
   - name: kpi_r5
     type: looker_bar
@@ -228,7 +228,7 @@
     width: 12
     height: 6
     note:
-      text: Deviation from the 75/25 hands‑on vs non hands‑on target mix (percentage points).
+      text: "Degree to which each QA engineer diverges from the target 75% hands-on / 25% non hands-on split. Calc: Hands-On % - 75% and Non Hands-On % - 25% per QA. Window: Per sprint, per quarter. Target: +/-10 percentage points used as soft threshold."
       display: hover
   - name: section_exec
     type: text
@@ -268,7 +268,7 @@
     width: 12
     height: 6
     note:
-      text: Test cases executed per QA (volume).
+      text: "Number of test cases executed by each QA engineer. Calc: For runs assigned to the QA: SUM(passed + failed + blocked + retest). Window: Per sprint, per release. Target: Used for capacity planning; not a ranking metric by itself."
       display: hover
   - name: kpi_r10
     type: looker_bar
@@ -299,7 +299,7 @@
     width: 12
     height: 6
     note:
-      text: Test cases executed per hour per QA (throughput).
+      text: "Approximate throughput of executed test cases per hour of run time. Calc: Executed test cases / total run duration hours for each QA. Window: Per sprint, per release. Target: Directional only; strongly depends on complexity."
       display: hover
   - name: kpi_r7
     type: looker_bar
@@ -330,7 +330,7 @@
     width: 12
     height: 6
     note:
-      text: Pass rate per QA (percentage).
+      text: "Pass rate of test cases executed by each QA engineer. Calc: SUM(passed) / SUM(passed + failed + blocked + retest) for each QA. Window: Per sprint, per release. Target: Interpreted with caution; depends on type of work executed."
       display: hover
   - name: kpi_r8
     type: looker_bar
@@ -361,7 +361,7 @@
     width: 12
     height: 6
     note:
-      text: Fail rate per QA (percentage).
+      text: "Percentage of executed test cases that failed for each QA engineer. Calc: SUM(failed) / SUM(passed + failed + blocked + retest) for each QA. Window: Per sprint, per release. Target: Higher fail rate can indicate testing of riskier features."
       display: hover
   - name: kpi_r9
     type: looker_bar
@@ -392,7 +392,7 @@
     width: 12
     height: 6
     note:
-      text: Average test run duration per QA.
+      text: "Average duration of runs executed by each QA engineer. Calc: Average HOURS between created_on and completed_on for completed runs owned by each QA. Window: Rolling 4 weeks; per sprint. Target: Identify extreme values for coaching and planning."
       display: hover
   - name: section_bug_quality
     type: text
@@ -432,7 +432,7 @@
     width: 12
     height: 6
     note:
-      text: Defects reported per QA.
+      text: "Number of Jira defects created where the reporter is a specific QA engineer. Calc: COUNT of Bug issues with reporter = QA and created in period. Window: Per sprint, per release. Target: Used to understand distribution of defect discovery."
       display: hover
   - name: kpi_r12
     type: looker_bar
@@ -463,7 +463,7 @@
     width: 12
     height: 6
     note:
-      text: High/Critical defects reported per QA.
+      text: "Number of high severity defects raised by each QA engineer. Calc: COUNT of Bug issues where reporter = QA AND priority in ('Blocker','Critical','High'). Window: Per sprint, per release. Target: Highlights focus on high‑impact issues."
       display: hover
   - name: kpi_r13
     type: looker_bar
@@ -494,7 +494,7 @@
     width: 12
     height: 6
     note:
-      text: Defects per 100 executed tests per QA (normalized yield).
+      text: "Ratio of defects logged by each QA relative to executed test cases. Calc: (Defects reported by QA / Test cases executed by QA) * 100. Window: Per sprint, per release. Target: Interpret relative to feature risk and assignment."
       display: hover
   - name: kpi_r14
     type: looker_bar
@@ -525,7 +525,7 @@
     width: 12
     height: 6
     note:
-      text: Reopen rate for defects reported by QA (percentage).
+      text: "Percentage of defects originally reported by a QA that were reopened after closure. Calc: For issues with reporter = QA, reopened defects / closed defects. Window: Rolling 3–6 months. Target: Lower is better; high values may indicate unclear repro or acceptance criteria."
       display: hover
   - name: kpi_r15
     type: looker_bar
@@ -556,7 +556,7 @@
     width: 12
     height: 6
     note:
-      text: Bug report completeness per QA (percentage).
+      text: "Percentage of a QA's bug reports that meet the reproducibility standard (screens, logs, steps, build info). Calc: Complete bugs reported by QA / total bugs reported by QA. Window: Weekly, per release. Target: High expectation: >99% per QA."
       display: hover
   - name: kpi_r16
     type: looker_bar
@@ -587,7 +587,7 @@
     width: 12
     height: 6
     note:
-      text: Bug rejection rate per QA (percentage).
+      text: "Percentage of a QA's reported bugs that are rejected as Not a Bug / Won't Fix / Duplicate. Calc: Rejected bugs for QA / total bugs closed for QA. Window: Weekly and per release. Target: Expectation <5% for most QAs."
       display: hover
   - name: kpi_r17
     type: looker_bar
@@ -618,7 +618,7 @@
     width: 12
     height: 6
     note:
-      text: Severity assignment accuracy per QA.
+      text: "Accuracy of initial severity assigned by QA compared to final agreed severity. Calc: Correct initial severity assignments / total bugs reported by QA. Window: Weekly and per release. Target: High expectation: near 100% for experienced QAs."
       display: hover
   - name: section_cycle
     type: text
@@ -658,7 +658,7 @@
     width: 12
     height: 6
     note:
-      text: Bug reporting lead time per QA.
+      text: "Average time each QA takes from observing an issue to logging the Jira defect. Calc: Average minutes from detection marker to bug creation. Window: Daily and per sprint. Target: Expectation: very low, especially during focused testing sessions."
       display: hover
   - name: kpi_r19
     type: looker_bar
@@ -689,7 +689,7 @@
     width: 12
     height: 6
     note:
-      text: Time to flag per QA.
+      text: "Time from detecting a critical risk/blocker to first visible escalation/flag in communication channels. Calc: Average minutes per QA from detection to flag. Window: Daily. Target: Expectation: escalate within same testing session."
       display: hover
   - name: kpi_r20
     type: looker_bar
@@ -720,7 +720,7 @@
     width: 12
     height: 6
     note:
-      text: Response time SLA metric per QA.
+      text: "Average time for each QA to acknowledge urgent vs general requests in comms channels. Calc: Separate averages for urgent and general messages per QA. Window: Weekly. Target: Expect <10 minutes for urgent, <30 minutes for general."
       display: hover
   - name: section_dev
     type: text
@@ -760,7 +760,7 @@
     width: 12
     height: 6
     note:
-      text: Bugs assigned per developer (volume).
+      text: "Number of defect tickets assigned to each developer. Calc: COUNT of Bug issues where assignee = developer and created in period or currently assigned. Window: Per sprint, per month. Target: No target; used to ensure fair distribution and to spot overload."
       display: hover
   - name: kpi_r22
     type: looker_bar
@@ -791,7 +791,7 @@
     width: 12
     height: 6
     note:
-      text: Average time to resolution per developer.
+      text: "Average time developers take to resolve bugs assigned to them. Calc: Average DAYS between created and resolutiondate for bugs resolved by each developer. Window: Rolling 3–6 months. Target: Context dependent; used for coaching and support."
       display: hover
   - name: kpi_r23
     type: looker_bar
@@ -822,7 +822,7 @@
     width: 12
     height: 6
     note:
-      text: Reopen rate per developer (percentage).
+      text: "Percentage of bugs fixed by a developer that were later reopened. Calc: Reopened bugs / total bugs resolved by that developer. Window: Rolling 3–6 months. Target: Lower is better; high values indicate need for deeper testing or design review."
       display: hover
   - name: kpi_r24
     type: looker_bar
@@ -853,6 +853,6 @@
     width: 12
     height: 6
     note:
-      text: QA capacity vs expectation per POD (ratio/percentage).
+      text: "Comparison of actual QA hours (Dev vs External) vs expected hours from OS expectations for each POD. Calc: Actual hours / expected hours, reported as % and variance. Window: Per sprint, per month, per quarter. Target: Identify overloaded or underutilised PODs; target around 100%."
       display: hover
   description: Leadership-friendly view of QA KPIs (Private / Leads). Contains per-person breakdowns.

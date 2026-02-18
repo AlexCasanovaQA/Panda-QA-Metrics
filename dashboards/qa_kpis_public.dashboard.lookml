@@ -86,7 +86,7 @@
     width: 8
     height: 3
     note:
-      text: Current open defect backlog (snapshot).
+      text: "Total number of unresolved defects at the end of the period. Calc: COUNT of Bug issues where resolutiondate IS NULL or status not in Done/Resolved/Closed at snapshot. Window: Snapshot at end of week / sprint / release. Target: Backlog stable or trending down; critical backlog subject to strict limits."
       display: hover
   - name: kpi_p6
     type: single_value
@@ -111,7 +111,7 @@
     width: 8
     height: 3
     note:
-      text: Current open defects with High/Critical severity (snapshot).
+      text: "Number of unresolved Critical and High priority defects. Calc: COUNT of Bug issues where priority in ('Blocker','Critical','High') and resolutiondate IS NULL. Window: Snapshot at end of week / sprint / release. Target: Target 0 open Critical at release; High below agreed limit per feature."
       display: hover
   - name: kpi_p7
     type: single_value
@@ -136,7 +136,7 @@
     width: 8
     height: 3
     note:
-      text: Average age of currently open defects (typically in days).
+      text: "Average number of days that currently open bugs have been unresolved. Calc: Average DAYS between snapshot date and created for bugs where resolutiondate IS NULL. Window: Snapshot (trend weekly). Target: P0/P1 should have very low average age (for example <7 days)."
       display: hover
   - name: kpi_p20
     type: single_value
@@ -161,7 +161,7 @@
     width: 8
     height: 3
     note:
-      text: Active production errors (current snapshot).
+      text: "Number of distinct Bugsnag errors that are still active (not fixed). Calc: COUNT DISTINCT error_id where status != 'fixed' and last_seen within monitoring window. Window: Daily snapshot; weekly trend. Target: Should trend down; specific thresholds per game."
       display: hover
   - name: kpi_p21
     type: single_value
@@ -186,7 +186,7 @@
     width: 8
     height: 3
     note:
-      text: Active production errors with High/Critical severity (snapshot).
+      text: "Number of active production errors with high severity. Calc: COUNT DISTINCT error_id where severity in ('error','critical') AND status != 'fixed'. Window: Daily snapshot; weekly trend. Target: Aim for zero open critical errors."
       display: hover
   - name: at_a_glance_note
     type: text
@@ -233,7 +233,7 @@
     width: 12
     height: 5
     note:
-      text: Weekly count of defects created in the selected filters.
+      text: "Number of new defect tickets created in the selected period. Calc: COUNT of issues where issue_type = 'Bug' and created date is in the period. Window: Weekly, per sprint, per release. Target: No fixed target; monitor trend and unexpected spikes per POD."
       display: hover
   - name: kpi_p2
     type: looker_line
@@ -262,7 +262,7 @@
     width: 12
     height: 5
     note:
-      text: Weekly count of defects closed/resolved.
+      text: "Number of defect tickets resolved or closed in the selected period. Calc: COUNT of Bug issues with resolutiondate in the period and status in Done/Resolved/Closed. Window: Weekly, per sprint, per release. Target: Over time, Closed >= Created to avoid backlog growth."
       display: hover
   - name: kpi_p3
     type: looker_line
@@ -291,7 +291,7 @@
     width: 12
     height: 5
     note:
-      text: Weekly count of defects reopened.
+      text: "Number of defect tickets that were reopened after being resolved. Calc: COUNT of Bug issues that transition from resolved/closed back to an open/reopened status during the period. Window: Weekly, per sprint. Target: As low as possible; aim for <3% of closed defects."
       display: hover
   - name: kpi_p4
     type: looker_line
@@ -320,7 +320,7 @@
     width: 12
     height: 5
     note:
-      text: Reopen rate over time (percentage).
+      text: "Percentage of closed defects that were subsequently reopened. Calc: P3 (Defects Reopened) / P2 (Defects Closed) in the same period. Window: Weekly, per sprint, rolling 4 weeks. Target: Target <3–5%; stricter limit for Critical/High."
       display: hover
   - name: section_timeliness
     type: text
@@ -358,7 +358,7 @@
     width: 12
     height: 5
     note:
-      text: Average time from defect creation to triage.
+      text: "Average time from defect creation until it reaches the agreed triage state. Calc: Average HOURS between created and first timestamp where status is triage state. Window: Per sprint; rolling 4 weeks. Target: Target <24h for Critical/High defects."
       display: hover
   - name: kpi_p10
     type: looker_line
@@ -387,7 +387,7 @@
     width: 12
     height: 5
     note:
-      text: Mean time to resolution (MTTR) for defects.
+      text: "Average time from defect creation until resolution. Calc: Average DAYS between created and resolutiondate for bugs resolved in period. Window: Per sprint; rolling 4 and 12 weeks. Target: Critical issues resolved within agreed SLA (for example <3 days)."
       display: hover
   - name: kpi_p11
     type: looker_line
@@ -416,7 +416,7 @@
     width: 12
     height: 5
     note:
-      text: Percent of High/Critical defects meeting the SLA target.
+      text: "Percentage of Critical/High defects resolved within the agreed resolution SLA. Calc: Resolved Critical/High bugs within SLA window / total Critical/High resolved in period. Window: Per sprint; rolling 4 weeks. Target: Target >=95% for Critical, >=90% for High."
       display: hover
   - name: kpi_p8
     type: looker_line
@@ -445,7 +445,7 @@
     width: 12
     height: 5
     note:
-      text: Defects per 100 story points (normalized density).
+      text: "Defects created relative to the amount of delivered work. Calc: Bugs created in sprint / completed story points in same sprint * 100. Window: Per sprint / release. Target: Benchmark per POD; track trend, not absolute value."
       display: hover
   - name: section_test_execution
     type: text
@@ -483,7 +483,7 @@
     width: 12
     height: 5
     note:
-      text: Test runs executed over time.
+      text: "Number of TestRail runs executed in the selected period. Calc: COUNT of runs where created_on or completed_on is in the period. Window: Daily, per sprint, per release. Target: Match planned runs for the cycle; no systematic misses."
       display: hover
   - name: kpi_p13
     type: looker_line
@@ -512,7 +512,7 @@
     width: 12
     height: 5
     note:
-      text: Test cases executed over time.
+      text: "Total test cases executed (passed, failed, blocked, retest). Calc: SUM(passed_count + failed_count + blocked_count + retest_count). Window: Daily, per sprint, per release. Target: Should align with planned coverage for release / test plan."
       display: hover
   - name: kpi_p14
     type: looker_line
@@ -541,7 +541,7 @@
     width: 12
     height: 5
     note:
-      text: Pass rate over time (percentage).
+      text: "Percentage of executed test cases that passed. Calc: SUM(passed_count) / SUM(passed_count + failed_count + blocked_count + retest_count). Window: Daily, per sprint, per release. Target: Target for release builds typically >=95% depending on risk."
       display: hover
   - name: kpi_p15
     type: looker_line
@@ -570,7 +570,7 @@
     width: 12
     height: 5
     note:
-      text: Fail rate over time (percentage).
+      text: "Percentage of executed test cases that failed. Calc: SUM(failed_count) / SUM(passed_count + failed_count + blocked_count + retest_count). Window: Daily, per sprint, per release. Target: Should trend down as release stabilises."
       display: hover
   - name: kpi_p16
     type: looker_line
@@ -599,7 +599,7 @@
     width: 12
     height: 5
     note:
-      text: Blocked rate over time (percentage).
+      text: "Percentage of executed test cases that are blocked by environment, data or dependencies. Calc: SUM(blocked_count) / SUM(passed_count + failed_count + blocked_count + retest_count). Window: Daily, per sprint, per release. Target: Keep <5% where possible; spikes indicate infra issues."
       display: hover
   - name: kpi_p17
     type: looker_line
@@ -628,7 +628,7 @@
     width: 12
     height: 5
     note:
-      text: Retest rate over time (percentage).
+      text: "Percentage of executed test cases that required retest. Calc: SUM(retest_count) / SUM(passed_count + failed_count + blocked_count + retest_count). Window: Per sprint, per release. Target: High retest rate may indicate unstable builds or late fixes."
       display: hover
   - name: kpi_p18
     type: looker_line
@@ -657,7 +657,7 @@
     width: 12
     height: 5
     note:
-      text: Executed vs planned test coverage (percentage).
+      text: "Coverage of planned test cases that were actually executed. Calc: Executed tests / (executed tests + untested_count). Window: Per sprint, per release. Target: Typical gate >=90–95% depending on risk profile."
       display: hover
   - name: kpi_p19
     type: looker_line
@@ -686,7 +686,7 @@
     width: 12
     height: 5
     note:
-      text: Average test run duration over time.
+      text: "Average duration of TestRail runs from creation to completion. Calc: Average HOURS between created_on and completed_on for completed runs. Window: Per sprint; rolling 4 weeks. Target: No strict target; watch for anomalies and long tails."
       display: hover
   - name: section_prod
     type: text
@@ -724,7 +724,7 @@
     width: 12
     height: 5
     note:
-      text: New production errors created over time.
+      text: "Distinct Bugsnag errors first seen in the current period. Calc: COUNT DISTINCT error_id where first_seen date is in the period. Window: Daily, per sprint, per release. Target: Should drop as release matures; spikes after release show regressions."
       display: hover
   - name: kpi_p23
     type: looker_line
@@ -753,7 +753,7 @@
     width: 12
     height: 5
     note:
-      text: Total error events / incident rate over time.
+      text: "Total number of error events captured by Bugsnag in the period. Calc: SUM(events) for errors where last_seen is inside the period. Window: Daily, weekly; rolling 30 days. Target: Trend down over time; alerts on deviations from baseline."
       display: hover
   - name: kpi_p24
     type: looker_line
@@ -782,7 +782,7 @@
     width: 12
     height: 5
     note:
-      text: Users impacted by production errors over time.
+      text: "Total number of users affected by Bugsnag errors in the period (approximate). Calc: SUM(users) for errors where last_seen is in the period. Window: Daily, weekly; rolling 30 days. Target: Minimise, especially for high severity issues."
       display: hover
   - name: kpi_p25
     type: looker_line
@@ -811,7 +811,7 @@
     width: 12
     height: 5
     note:
-      text: Average error lifetime over time.
+      text: "Average time between first_seen and last_seen for resolved errors. Calc: Average DAYS between first_seen and last_seen for errors marked as fixed or inactive. Window: Rolling 30 days or per release. Target: Shorter lifetimes indicate faster detection & fix rollout."
       display: hover
   - name: kpi_p26
     type: looker_line
@@ -840,7 +840,7 @@
     width: 12
     height: 5
     note:
-      text: Defects per 100 executed test cases (normalized).
+      text: "Ratio of defects found to test cases executed, indicating defect yield. Calc: (Bugs created in period / Executed test cases in period) * 100. Window: Per sprint, per release. Target: Used comparatively across releases and QA Groups."
       display: hover
   - name: kpi_p27
     type: looker_bar
@@ -869,7 +869,7 @@
     width: 12
     height: 5
     note:
-      text: Production incidents grouped by Release (top releases by count).
+      text: "Number of high-severity production incidents associated with a release. Calc: COUNT DISTINCT high/critical Bugsnag errors mapped to a release. Window: Per release. Target: Goal: zero or minimal critical incidents per release."
       display: hover
   - name: kpi_p28
     type: looker_bar
@@ -898,7 +898,7 @@
     width: 12
     height: 5
     note:
-      text: Quality gate metric grouped by Release (interpretation depends on KPI definition).
+      text: "Pass/Fail indicator summarising whether a release meets severity thresholds and coverage targets. Calc: Gate PASS if: coverage >= threshold; 0 open Critical; High backlog under limit; SLA compliance above target; incident rate below threshold. Window: Evaluated at each RC and before launch. Target: All launches should meet gate or be explicitly waived."
       display: hover
   - name: section_quality_eff
     type: text
@@ -936,7 +936,7 @@
     width: 12
     height: 5
     note:
-      text: Team hands-on testing time share over time (percentage).
+      text: "Percentage of QA time spent on hands-on testing activities for each team. Calc: Hands-On hours / total QA hours in the period. Window: Weekly, per sprint, per quarter. Target: Target 75% Hands-On at team level."
       display: hover
   - name: kpi_p30
     type: looker_line
@@ -965,7 +965,7 @@
     width: 12
     height: 5
     note:
-      text: Team non hands-on time share over time (percentage).
+      text: "Percentage of QA time spent on non hands-on activities (test design, meetings, training, pre-mastering). Calc: Non Hands-On hours / total QA hours in the period. Window: Weekly, per sprint, per quarter. Target: Target around 25% Non Hands-On."
       display: hover
   - name: kpi_p31
     type: looker_line
@@ -994,7 +994,7 @@
     width: 12
     height: 5
     note:
-      text: Bug escape rate over time (by severity) (percentage).
+      text: "Share of defects that escape to production, broken down by severity (Blocker/Critical/Major). Calc: (Defects found in production / (Pre-release defects + production defects)) by severity. Window: Per release and weekly. Target: High expectation: 0–2% Blocker/Critical; <4% Majors."
       display: hover
   - name: kpi_p32
     type: looker_line
@@ -1023,7 +1023,7 @@
     width: 12
     height: 5
     note:
-      text: Defect Detection Efficiency (DDE) over time (percentage).
+      text: "Percentage of total defects for a release that were detected before going to production. Calc: Pre-release defects / (Pre-release + post-release defects) * 100. Window: Per release and monthly. Target: High expectation: >90% coverage; minimum acceptable ≥85%."
       display: hover
   - name: kpi_p33
     type: looker_line
@@ -1052,7 +1052,7 @@
     width: 12
     height: 5
     note:
-      text: Bug rejection rate over time (percentage).
+      text: "Percentage of reported bugs that are rejected as not valid (Not a Bug, Won't Fix, Duplicate). Calc: Rejected bugs / total bugs closed in the period. Window: Weekly and per release. Target: High expectation: <5% overall."
       display: hover
   - name: kpi_p34
     type: looker_line
@@ -1081,7 +1081,7 @@
     width: 12
     height: 5
     note:
-      text: Bug report completeness over time (percentage).
+      text: "Percentage of bug reports that meet minimum reproducibility standard (screenshots, logs, steps, build info). Calc: Number of bugs marked as complete / total bugs reported in the period. Window: Weekly. Target: High expectation: >99% of bugs meet completeness standard."
       display: hover
   - name: kpi_p35
     type: looker_line
@@ -1110,7 +1110,7 @@
     width: 12
     height: 5
     note:
-      text: Execution result accuracy over time.
+      text: "Accuracy of test results recorded vs actual outcome (how often initial result is later changed). Calc: 1 - (Incorrect or changed results / total executed tests). Window: Per test cycle. Target: High expectation: very high accuracy (≈99%)."
       display: hover
   - name: kpi_p36
     type: looker_line
@@ -1139,7 +1139,7 @@
     width: 12
     height: 5
     note:
-      text: Severity assignment accuracy over time.
+      text: "Percentage of bugs whose initial severity matches the final agreed severity. Calc: Correct severity assignments / total bugs, where correct = no change or change within agreed tolerance. Window: Weekly and per release. Target: High expectation: close to 100%; specific tolerance per team."
       display: hover
   - name: kpi_p37
     type: looker_line
@@ -1168,7 +1168,7 @@
     width: 12
     height: 5
     note:
-      text: Test execution throughput over time (cases per person‑day).
+      text: "Average number of test cases executed per QA person‑day. Calc: Executed test cases / QA testing hours converted to person‑days. Window: Daily and per test cycle. Target: Target depends on game and complexity; watch trend rather than absolute."
       display: hover
   - name: kpi_p38
     type: looker_line
@@ -1197,7 +1197,7 @@
     width: 12
     height: 5
     note:
-      text: Bug reporting lead time over time.
+      text: "Average time between discovering an issue and logging it as a bug. Calc: Average minutes from detection to bug creation. Window: Daily. Target: High expectation: very low (for example <15 minutes for most issues)."
       display: hover
   - name: kpi_p39
     type: looker_line
@@ -1226,7 +1226,7 @@
     width: 12
     height: 5
     note:
-      text: Fix verification cycle time over time.
+      text: "Average time from a fix being ready for QA to verification completed. Calc: Average hours between dev-ready and QA verification completion. Window: Daily and per release. Target: Targets per severity (e.g., same‑day for Critical)."
       display: hover
   - name: kpi_p40
     type: looker_line
@@ -1255,7 +1255,7 @@
     width: 12
     height: 5
     note:
-      text: Exploratory session reporting coverage over time.
+      text: "Coverage and time spent in documented exploratory testing sessions. Calc: Documented exploratory sessions / total exploratory sessions; plus total hours. Window: Weekly. Target: High expectation: near 100% of exploratory sessions documented."
       display: hover
   - name: kpi_p41
     type: looker_line
@@ -1284,7 +1284,7 @@
     width: 12
     height: 5
     note:
-      text: Time to flag over time.
+      text: "Time to escalate and communicate critical risks/blockers from detection to correct channel. Calc: Average minutes from risk detection to first flag. Window: Daily. Target: Expectation: very quick (for example within same test session)."
       display: hover
   - name: kpi_p42
     type: looker_line
@@ -1313,7 +1313,7 @@
     width: 12
     height: 5
     note:
-      text: Response time SLA metric over time (interpretation depends on KPI definition).
+      text: "Time QA takes to acknowledge and respond to urgent vs general requests in communication channels. Calc: Average response time in minutes, tracked separately for urgent vs general. Window: Weekly. Target: High expectation: <10 min for urgent, <30 min for general requests."
       display: hover
   - name: kpi_p43
     type: looker_line
@@ -1342,7 +1342,7 @@
     width: 12
     height: 5
     note:
-      text: Defect Acceptance Ratio (DAR) over time (percentage).
+      text: "Percentage of reported defects that are accepted as valid (not rejected as NAB, Duplicate, Won’t Fix). Calc: Accepted bugs / total bugs closed in the period * 100. Window: Weekly, per sprint, per release. Target: Target >=92%."
       display: hover
   - name: kpi_p44
     type: looker_line
@@ -1371,7 +1371,7 @@
     width: 12
     height: 5
     note:
-      text: High severity defect reporting rate over time (percentage).
+      text: "Percentage of total reported defects that are P0 or P1 severity. Calc: (P0 + P1 bugs reported) / total bugs reported * 100. Window: Weekly, per sprint, per release. Target: Target >=25% Depending on The milestone phase."
       display: hover
   - name: kpi_p45
     type: looker_line
@@ -1400,7 +1400,7 @@
     width: 12
     height: 5
     note:
-      text: NMI rate (No‑Merge / Not‑Meaningful Issues) over time (percentage).
+      text: "Percentage of reported defects classified as NMI (issues that do not require a code fix or merge). Calc: NMI bugs / total bugs closed * 100. Window: Weekly, per sprint. Target: Target <=5%."
       display: hover
   - name: kpi_p46
     type: looker_line
@@ -1429,6 +1429,6 @@
     width: 12
     height: 5
     note:
-      text: Defect leak rate over time (percentage).
+      text: "Percentage of total defects that were first identified in live/production. Calc: Live defects / (pre-release defects + live defects) * 100. Window: Per release; rolling 30 days. Target: Target <=2%."
       display: hover
   description: Leadership-friendly view of QA KPIs (Public). Use filters to slice KPIs; hover tile notes for definitions.
