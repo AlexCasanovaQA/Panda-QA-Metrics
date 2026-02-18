@@ -87,6 +87,40 @@ def _safe_json_size(obj: Any) -> int:
     return len(json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
+def _stringify_jira_value(v: Any) -> Optional[str]:
+    """
+    Jira custom fields (like "team") may come as dict/list. BigQuery column is STRING.
+    Convert safely to a short string.
+    """
+    if v is None:
+        return None
+
+    if isinstance(v, (str, int, float, bool)):
+        s = str(v).strip()
+        return s or None
+
+    if isinstance(v, dict):
+        for k in ("name", "value", "displayName", "key", "id"):
+            if k in v and v[k] is not None:
+                s = str(v[k]).strip()
+                if s:
+                    return s
+        try:
+            return json.dumps(v, ensure_ascii=False, separators=(",", ":"))[:2000]
+        except Exception:
+            return str(v)[:2000]
+
+    if isinstance(v, list):
+        parts = []
+        for item in v:
+            s = _stringify_jira_value(item)
+            if s:
+                parts.append(s)
+        return ",".join(parts) if parts else None
+
+    return str(v)[:2000]
+
+
 def _chunk_rows(rows: List[Dict[str, Any]], max_rows: int, max_bytes: int) -> Iterable[List[Dict[str, Any]]]:
     batch: List[Dict[str, Any]] = []
     batch_bytes = 0
@@ -248,7 +282,7 @@ def insert_rows(rows: List[Dict[str, Any]]) -> Tuple[int, List[Any]]:
             updated = r.get("updated") or ""
             row_ids.append(f"{issue_key}:{updated}")
 
-        errors = bq.insert_rows_json(table_fq, chunk, row_ids=row_ids)
+        errors = bq.insert_rows_json(table_fq, chunk, row_ids=row_ids, skip_invalid_rows=True, ignore_unknown_values=True)
         if errors:
             all_errors.extend(errors)
         else:
@@ -358,7 +392,7 @@ def transform_issues_to_rows(issues: List[Dict[str, Any]], project_key: str) -> 
             "reporter_account_id": (fields.get("reporter") or {}).get("accountId"),
             "assignee": (fields.get("assignee") or {}).get("displayName") if fields.get("assignee") else None,
             "assignee_account_id": (fields.get("assignee") or {}).get("accountId") if fields.get("assignee") else None,
-            "team": fields.get(TARGET_TEAM_FIELD),
+            "team": _stringify_jira_value(fields.get(TARGET_TEAM_FIELD)),
             "components": components or None,
             "fix_versions": fix_versions or None,
             "sprint": sprint,
