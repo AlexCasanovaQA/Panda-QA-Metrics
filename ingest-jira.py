@@ -63,7 +63,9 @@ TARGET_SPRINT_FIELD = os.getenv("TARGET_SPRINT_FIELD", "customfield_10020")
 TARGET_STORYPOINTS_FIELD = os.getenv("TARGET_STORYPOINTS_FIELD", "customfield_10016")
 
 PAGE_SIZE = int(os.getenv("PAGE_SIZE", "50"))
-DEFAULT_LOOKBACK_DAYS = int(os.getenv("DEFAULT_LOOKBACK_DAYS", "120"))
+DEFAULT_LOOKBACK_DAYS = int(os.getenv("DEFAULT_LOOKBACK_DAYS", "730"))  # 2 años
+MAX_LOOKBACK_DAYS = int(os.getenv("MAX_LOOKBACK_DAYS", "730"))
+
 
 BQ_INSERT_MAX_ROWS = int(os.getenv("BQ_INSERT_MAX_ROWS", "200"))
 BQ_INSERT_MAX_BYTES = int(os.getenv("BQ_INSERT_MAX_BYTES", "8000000"))
@@ -222,42 +224,20 @@ def insert_rows(rows: List[Dict[str, Any]]) -> Tuple[int, List[Any]]:
 # Jira fetch (NEW endpoint)
 # ------------------------
 
-def fetch_jira_issues(
-    project_key: str,
-    since_ts: datetime.datetime,
-    until_ts: datetime.datetime,
-) -> Iterable[List[Dict[str, Any]]]:
-
+def fetch_jira_issues(project_key: str, since_ts, until_ts):
     if not (JIRA_SITE and JIRA_USER and JIRA_API_TOKEN):
-        raise RuntimeError("Missing Jira env vars: JIRA_SITE/JIRA_USER/JIRA_API_TOKEN (or legacy JIRA_BASE_URL/JIRA_EMAIL)")
+        raise RuntimeError("Missing Jira env vars: JIRA_SITE / JIRA_USER / JIRA_API_TOKEN")
 
-    # /search/jql is GET + token pagination. Keep fields small.
     fields_to_fetch = [
-        "project",
-        "issuetype",
-        "created",
-        "updated",
-        "resolutiondate",
-        "status",
-        "priority",
-        "resolution",
-        "reporter",
-        "assignee",
-        "components",
-        "fixVersions",
-        TARGET_TEAM_FIELD,
-        TARGET_SPRINT_FIELD,
-        TARGET_STORYPOINTS_FIELD,
+        "project","issuetype","created","updated","resolutiondate","status","priority","resolution",
+        "reporter","assignee","components","fixVersions",
+        TARGET_TEAM_FIELD, TARGET_SPRINT_FIELD,
+        # story points fuera si quieres:
+        # TARGET_STORYPOINTS_FIELD,
     ]
-    if STORE_DESCRIPTION:
-        fields_to_fetch.append("description")
 
-    # Jira JQL supports ISO 8601 timestamps in quotes.
-    # Jira JQL datetime parsing is picky; this format is the most widely accepted in Jira Cloud.
-    # Interpreted in the Jira user's timezone.
-    since_s = since_ts.strftime("%Y-%m-%d %H:%M")
-    until_s = until_ts.strftime("%Y-%m-%d %H:%M")
-
+    since_s = since_ts.strftime("%Y/%m/%d %H:%M")
+    until_s = until_ts.strftime("%Y/%m/%d %H:%M")
     jql = (
         f'project = "{project_key}" '
         f'AND updated >= "{since_s}" '
@@ -267,17 +247,20 @@ def fetch_jira_issues(
 
     url = f"{JIRA_SITE.rstrip('/')}/rest/api/3/search/jql"
 
-    next_token: Optional[str] = None
+    next_page_token = None
+    seen_tokens = set()
+    page_num = 0
 
     while True:
+        page_num += 1
+
         params = {
             "jql": jql,
             "maxResults": PAGE_SIZE,
-            # safest in practice: comma-separated field list
             "fields": ",".join(fields_to_fetch),
         }
-        if next_token:
-            params["nextPageToken"] = next_token
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
 
         resp = requests.get(url, headers=_jira_headers(), params=params, timeout=REQUEST_TIMEOUT)
         if resp.status_code >= 400:
@@ -285,83 +268,30 @@ def fetch_jira_issues(
 
         data = resp.json()
         issues = data.get("issues", []) or []
-        next_token = data.get("nextPageToken")
-        is_last = bool(data.get("isLast")) if "isLast" in data else (not next_token)
+        is_last = bool(data.get("isLast", False))
+        new_token = data.get("nextPageToken")
+
+        print(f"[jira] page={page_num} issues={len(issues)} is_last={is_last}")
 
         if not issues:
             break
 
-        rows: List[Dict[str, Any]] = []
-        ingested_at = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat()
-
-        for issue in issues:
-            fields = issue.get("fields", {}) or {}
-
-            # safety filter
-            if (fields.get("project") or {}).get("key") != project_key:
-                continue
-
-            components = ",".join([c.get("name", "") for c in (fields.get("components") or []) if c.get("name")])
-            fix_versions = ",".join([v.get("name", "") for v in (fields.get("fixVersions") or []) if v.get("name")])
-
-            sprint_val = fields.get(TARGET_SPRINT_FIELD)
-            sprint_names: List[str] = []
-            if isinstance(sprint_val, list):
-                for s in sprint_val:
-                    if isinstance(s, dict) and s.get("name"):
-                        sprint_names.append(str(s["name"]))
-            elif isinstance(sprint_val, dict) and sprint_val.get("name"):
-                sprint_names.append(str(sprint_val["name"]))
-            sprint = ",".join(sprint_names) if sprint_names else None
-
-            sp_raw = fields.get(TARGET_STORYPOINTS_FIELD)
-            try:
-                story_points = float(sp_raw) if sp_raw is not None else None
-            except Exception:
-                story_points = None
-
-            description_plain = None
-            if STORE_DESCRIPTION:
-                desc = fields.get("description")
-                if desc is not None:
-                    description_plain = json.dumps(desc, ensure_ascii=False)[:5000]
-
-            payload = None
-            if STORE_PAYLOAD:
-                payload = json.dumps(issue, ensure_ascii=False)[:50000]
-
-            row = {
-                "issue_key": issue.get("key"),
-                "issue_id": issue.get("id"),
-                "project_key": (fields.get("project") or {}).get("key"),
-                "issue_type": (fields.get("issuetype") or {}).get("name"),
-                "created": _dt(fields["created"]).isoformat() if fields.get("created") else None,
-                "updated": _dt(fields["updated"]).isoformat() if fields.get("updated") else None,
-                "resolutiondate": _dt(fields["resolutiondate"]).isoformat() if fields.get("resolutiondate") else None,
-                "status": (fields.get("status") or {}).get("name"),
-                "priority": (fields.get("priority") or {}).get("name"),
-                "resolution": (fields.get("resolution") or {}).get("name") if fields.get("resolution") else None,
-                "reporter": (fields.get("reporter") or {}).get("displayName"),
-                "reporter_account_id": (fields.get("reporter") or {}).get("accountId"),
-                "assignee": (fields.get("assignee") or {}).get("displayName") if fields.get("assignee") else None,
-                "assignee_account_id": (fields.get("assignee") or {}).get("accountId") if fields.get("assignee") else None,
-                "team": fields.get(TARGET_TEAM_FIELD),
-                "components": components or None,
-                "fix_versions": fix_versions or None,
-                "sprint": sprint,
-                "story_points": story_points,
-                "description_plain": description_plain,
-                "payload": payload,
-                "_ingested_at": ingested_at,
-            }
-            rows.append(row)
-
-        yield rows
+        # ... transforma issues -> rows y yield rows ...
+        yield transform_issues_to_rows(issues, project_key)  # usa tu lógica actual
 
         if is_last:
             break
 
+        if not new_token:
+            raise RuntimeError("Jira search/jql: missing nextPageToken but isLast=false (pagination would loop)")
+
+        if new_token in seen_tokens:
+            raise RuntimeError("Jira pagination loop detected (nextPageToken repeated)")
+        seen_tokens.add(new_token)
+
+        next_page_token = new_token
         time.sleep(0.1)
+
 
 
 # ------------------------
@@ -370,6 +300,8 @@ def fetch_jira_issues(
 
 def hello_http(request):
     try:
+    max_pages = int(body.get("max_pages", 0))  # 0 = sin límite
+
         ensure_table()
 
         body = request.get_json(silent=True) or {}
@@ -431,6 +363,8 @@ def hello_http(request):
                 until_ts = until_ts.replace(tzinfo=datetime.timezone.utc)
 
         lookback_days = int(body.get("lookback_days", DEFAULT_LOOKBACK_DAYS))
+        lookback_days = min(lookback_days, MAX_LOOKBACK_DAYS)
+
 
         if since_ts is None:
             last_updated = get_last_updated_ts(project_key)
@@ -454,7 +388,9 @@ def hello_http(request):
         for page_rows in fetch_jira_issues(project_key, since_ts, until_ts):
             page_count += 1
             total_rows += len(page_rows)
-
+            if max_pages and page_count > max_pages:
+            print(f"[jira] max_pages reached ({max_pages}), stopping early")
+            break
             if not dry_run:
                 ins, errs = insert_rows(page_rows)
                 inserted_rows += ins
