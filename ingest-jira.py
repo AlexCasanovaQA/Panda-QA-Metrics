@@ -39,11 +39,9 @@ GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 BQ_DATASET_ID = os.getenv("BQ_DATASET_ID", "qa_metrics")
 BQ_TABLE_ID = os.getenv("BQ_TABLE_ID", "jira_issues")
 
-JIRA_SITE = os.getenv("JIRA_SITE")
+JIRA_SITE = os.getenv("JIRA_SITE")  # e.g. https://your-domain.atlassian.net
 JIRA_USER = os.getenv("JIRA_USER")
 JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
-
-
 
 TARGET_PROJECT_KEY = os.getenv("TARGET_PROJECT_KEY", "PC")
 TARGET_TEAM_FIELD = os.getenv("TARGET_TEAM_FIELD", "customfield_10001")
@@ -363,17 +361,7 @@ def hello_http(request):
 
         body = request.get_json(silent=True) or {}
 
-        project_key = (
-    body.get("project_key")
-    or body.get("project")
-    or body.get("projectKey")
-    or TARGET_PROJECT_KEY
-)
-
-if not isinstance(project_key, str) or not project_key.strip():
-    raise ValueError("Pass a string for project")
-project_key = project_key.strip()
-
+        project_key = body.get("project_key") or TARGET_PROJECT_KEY
         dry_run = bool(body.get("dry_run", False))
 
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -442,19 +430,3 @@ project_key = project_key.strip()
     except Exception as e:
         # Return structured error for Workflows + curl debugging
         return jsonify({"status": "ERROR", "error": str(e)}), 500
-
-from flask import Flask, request as flask_request
-
-app = Flask(__name__)
-
-@app.get("/")
-def health():
-    return "ok", 200
-
-@app.post("/")
-def run():
-    return hello_http(flask_request)
-
-if __name__ == "__main__":
-    import os
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))
