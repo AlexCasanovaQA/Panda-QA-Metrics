@@ -7,7 +7,7 @@ Fixes vs previous version:
 
 Expected env vars (same as before):
 - GCP_PROJECT_ID, BQ_DATASET_ID, BQ_TABLE_ID
-- JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
+- JIRA_SITE, JIRA_USER, JIRA_API_TOKEN
 - TARGET_PROJECT_KEY (default: PC)
 - TARGET_TEAM_FIELD, TARGET_SPRINT_FIELD, TARGET_STORYPOINTS_FIELD
 
@@ -39,8 +39,8 @@ GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 BQ_DATASET_ID = os.getenv("BQ_DATASET_ID", "qa_metrics")
 BQ_TABLE_ID = os.getenv("BQ_TABLE_ID", "jira_issues")
 
-JIRA_BASE_URL = os.getenv("JIRA_BASE_URL")
-JIRA_EMAIL = os.getenv("JIRA_EMAIL")
+JIRA_SITE = os.getenv("JIRA_SITE")
+JIRA_USER = os.getenv("JIRA_USER")
 JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
 
 
@@ -108,7 +108,7 @@ def _chunk_rows(rows: List[Dict[str, Any]], max_rows: int, max_bytes: int) -> It
 def _jira_headers() -> Dict[str, str]:
     import base64
 
-    token = base64.b64encode(f"{JIRA_EMAIL}:{JIRA_API_TOKEN}".encode("utf-8")).decode("utf-8")
+    token = base64.b64encode(f"{JIRA_USER}:{JIRA_API_TOKEN}".encode("utf-8")).decode("utf-8")
     return {
         "Authorization": f"Basic {token}",
         "Accept": "application/json",
@@ -217,8 +217,8 @@ def fetch_jira_issues(
 ) -> Iterable[List[Dict[str, Any]]]:
     """Yield pages of Jira issues (as transformed BigQuery rows)."""
 
-    if not (JIRA_BASE_URL and JIRA_EMAIL and JIRA_API_TOKEN):
-        raise RuntimeError("Missing Jira env vars: JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN")
+    if not (JIRA_SITE and JIRA_USER and JIRA_API_TOKEN):
+        raise RuntimeError("Missing Jira env vars: JIRA_SITE / JIRA_USER / JIRA_API_TOKEN")
 
     # Keep payload small: only fields required by KPIs.
     fields_to_fetch = [
@@ -251,7 +251,7 @@ def fetch_jira_issues(
         f'ORDER BY updated ASC'
     )
 
-    url = f"{JIRA_BASE_URL.rstrip('/')}/rest/api/3/search"
+    url = f"{JIRA_SITE.rstrip('/')}/rest/api/3/search"
 
     start_at = 0
     total = None
@@ -363,7 +363,17 @@ def hello_http(request):
 
         body = request.get_json(silent=True) or {}
 
-        project_key = body.get("project_key") or TARGET_PROJECT_KEY
+        project_key = (
+    body.get("project_key")
+    or body.get("project")
+    or body.get("projectKey")
+    or TARGET_PROJECT_KEY
+)
+
+if not isinstance(project_key, str) or not project_key.strip():
+    raise ValueError("Pass a string for project")
+project_key = project_key.strip()
+
         dry_run = bool(body.get("dry_run", False))
 
         now = datetime.datetime.now(datetime.timezone.utc)
