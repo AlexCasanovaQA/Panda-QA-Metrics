@@ -1,17 +1,31 @@
-"""Jira issues ingestion -> BigQuery
+"""
+Jira issues ingestion -> BigQuery (Cloud Run / Functions Framework)
 
-Fixes vs previous version:
-- Avoids BigQuery 413 (Request Entity Too Large) by batching inserts by BOTH row-count and payload bytes.
-- Avoids huge rows by NOT storing full payload/description by default (configurable).
-- Streams inserts per-page instead of building one giant list.
+Fixes:
+- Jira Cloud removed POST /rest/api/3/search on some tenants (HTTP 410). Use /rest/api/3/search/jql instead.
+- Uses token-based pagination (nextPageToken) for /search/jql.
+- Works with Cloud Run secrets-as-env (via --set-secrets) OR plain env vars.
 
-Expected env vars (same as before):
-- GCP_PROJECT_ID, BQ_DATASET_ID, BQ_TABLE_ID
-- JIRA_SITE, JIRA_USER, JIRA_API_TOKEN
+Required env vars:
+- GCP_PROJECT_ID
+- BQ_DATASET_ID (default: qa_metrics)
+- BQ_TABLE_ID   (default: jira_issues)
+
+Jira auth (either naming is accepted):
+- Preferred (matches your Secret names):
+    JIRA_SITE, JIRA_USER, JIRA_API_TOKEN
+- Also accepted (legacy):
+    JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
+
+Project/field mapping:
 - TARGET_PROJECT_KEY (default: PC)
-- TARGET_TEAM_FIELD, TARGET_SPRINT_FIELD, TARGET_STORYPOINTS_FIELD
+- TARGET_TEAM_FIELD, TARGET_SPRINT_FIELD
+- TARGET_STORYPOINTS_FIELD (default: customfield_10016)
+  NOTE: If you use time estimates instead of story points, set:
+    TARGET_STORYPOINTS_FIELD=timeoriginalestimate
+  (Jira returns timeoriginalestimate in seconds.)
 
-Optional env vars:
+Optional:
 - PAGE_SIZE (default: 50)
 - DEFAULT_LOOKBACK_DAYS (default: 120)
 - BQ_INSERT_MAX_ROWS (default: 200)
@@ -28,7 +42,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import requests
 from flask import jsonify
-
 from google.cloud import bigquery
 
 
@@ -39,8 +52,9 @@ GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 BQ_DATASET_ID = os.getenv("BQ_DATASET_ID", "qa_metrics")
 BQ_TABLE_ID = os.getenv("BQ_TABLE_ID", "jira_issues")
 
-JIRA_SITE = os.getenv("JIRA_SITE")  # e.g. https://your-domain.atlassian.net
-JIRA_USER = os.getenv("JIRA_USER")
+# Jira auth (secrets-as-env friendly)
+JIRA_SITE = os.getenv("JIRA_SITE") or os.getenv("JIRA_BASE_URL")
+JIRA_USER = os.getenv("JIRA_USER") or os.getenv("JIRA_EMAIL")
 JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
 
 TARGET_PROJECT_KEY = os.getenv("TARGET_PROJECT_KEY", "PC")
@@ -65,8 +79,7 @@ REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "60"))
 # ------------------------
 
 def _dt(ts: str) -> datetime.datetime:
-    """Parse Jira datetime with timezone."""
-    # Jira returns e.g. 2026-02-17T11:22:33.123+0000
+    """Parse Jira datetime with timezone. Example: 2026-02-17T11:22:33.123+0000"""
     try:
         return datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f%z")
     except ValueError:
@@ -74,7 +87,6 @@ def _dt(ts: str) -> datetime.datetime:
 
 
 def _safe_json_size(obj: Any) -> int:
-    # Rough size estimate in bytes for streaming insert body
     return len(json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
@@ -85,7 +97,6 @@ def _chunk_rows(rows: List[Dict[str, Any]], max_rows: int, max_bytes: int) -> It
     for r in rows:
         r_bytes = _safe_json_size(r)
 
-        # If a single row is already too big, still try to insert it alone (BigQuery row-size might still reject).
         if batch and (len(batch) >= max_rows or batch_bytes + r_bytes > max_bytes):
             yield batch
             batch = []
@@ -119,14 +130,15 @@ def _jira_headers() -> Dict[str, str]:
 # ------------------------
 
 def _bq_client() -> bigquery.Client:
+    if not GCP_PROJECT_ID:
+        raise RuntimeError("Missing env var: GCP_PROJECT_ID")
     return bigquery.Client(project=GCP_PROJECT_ID)
 
 
 def ensure_table() -> None:
-    """Create jira_issues table if missing."""
     bq = _bq_client()
-    dataset_ref = bigquery.DatasetReference(GCP_PROJECT_ID, BQ_DATASET_ID)
-    table_ref = dataset_ref.table(BQ_TABLE_ID)
+    table_fq = f"{GCP_PROJECT_ID}.{BQ_DATASET_ID}.{BQ_TABLE_ID}"
+    table_ref = bigquery.Table(table_fq)
 
     schema = [
         bigquery.SchemaField("issue_key", "STRING", mode="REQUIRED"),
@@ -153,11 +165,12 @@ def ensure_table() -> None:
         bigquery.SchemaField("_ingested_at", "TIMESTAMP"),
     ]
 
-    table = bigquery.Table(table_ref, schema=schema)
-    table.time_partitioning = bigquery.TimePartitioning(type_=bigquery.TimePartitioningType.DAY, field="updated")
-    table.clustering_fields = ["project_key", "issue_type", "status", "team"]
+    table_ref.schema = schema
+    table_ref.time_partitioning = bigquery.TimePartitioning(type_=bigquery.TimePartitioningType.DAY, field="updated")
+    table_ref.clustering_fields = ["project_key", "issue_type", "status", "team"]
 
-    bq.create_table(table, exists_ok=True)
+    # create_table(exists_ok=True) will update nothing if it exists
+    bq.create_table(table_ref, exists_ok=True)
 
 
 def get_last_updated_ts(project_key: str) -> Optional[datetime.datetime]:
@@ -167,9 +180,12 @@ def get_last_updated_ts(project_key: str) -> Optional[datetime.datetime]:
       FROM `{GCP_PROJECT_ID}.{BQ_DATASET_ID}.{BQ_TABLE_ID}`
       WHERE project_key = @project_key
     """
-    job = bq.query(query, job_config=bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("project_key", "STRING", project_key)]
-    ))
+    job = bq.query(
+        query,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("project_key", "STRING", project_key)]
+        ),
+    )
     rows = list(job.result())
     if not rows or rows[0]["max_updated"] is None:
         return None
@@ -177,7 +193,6 @@ def get_last_updated_ts(project_key: str) -> Optional[datetime.datetime]:
 
 
 def insert_rows(rows: List[Dict[str, Any]]) -> Tuple[int, List[Any]]:
-    """Insert rows with safe batching to avoid 413."""
     if not rows:
         return 0, []
 
@@ -188,7 +203,6 @@ def insert_rows(rows: List[Dict[str, Any]]) -> Tuple[int, List[Any]]:
     all_errors: List[Any] = []
 
     for chunk in _chunk_rows(rows, max_rows=BQ_INSERT_MAX_ROWS, max_bytes=BQ_INSERT_MAX_BYTES):
-        # Provide deterministic insertIds to reduce duplicates on retries
         row_ids = []
         for r in chunk:
             issue_key = r.get("issue_key") or ""
@@ -205,7 +219,7 @@ def insert_rows(rows: List[Dict[str, Any]]) -> Tuple[int, List[Any]]:
 
 
 # ------------------------
-# Jira fetch
+# Jira fetch (NEW endpoint)
 # ------------------------
 
 def fetch_jira_issues(
@@ -213,12 +227,11 @@ def fetch_jira_issues(
     since_ts: datetime.datetime,
     until_ts: datetime.datetime,
 ) -> Iterable[List[Dict[str, Any]]]:
-    """Yield pages of Jira issues (as transformed BigQuery rows)."""
 
     if not (JIRA_SITE and JIRA_USER and JIRA_API_TOKEN):
-        raise RuntimeError("Missing Jira env vars: JIRA_SITE / JIRA_USER / JIRA_API_TOKEN")
+        raise RuntimeError("Missing Jira env vars: JIRA_SITE/JIRA_USER/JIRA_API_TOKEN (or legacy JIRA_BASE_URL/JIRA_EMAIL)")
 
-    # Keep payload small: only fields required by KPIs.
+    # /search/jql is GET + token pagination. Keep fields small.
     fields_to_fetch = [
         "project",
         "issuetype",
@@ -239,8 +252,9 @@ def fetch_jira_issues(
     if STORE_DESCRIPTION:
         fields_to_fetch.append("description")
 
-    since_s = since_ts.strftime("%Y/%m/%d %H:%M")
-    until_s = until_ts.strftime("%Y/%m/%d %H:%M")
+    # Jira JQL supports ISO 8601 timestamps in quotes.
+    since_s = since_ts.astimezone(datetime.timezone.utc).isoformat()
+    until_s = until_ts.astimezone(datetime.timezone.utc).isoformat()
 
     jql = (
         f'project = "{project_key}" '
@@ -249,26 +263,28 @@ def fetch_jira_issues(
         f'ORDER BY updated ASC'
     )
 
-    url = f"{JIRA_SITE.rstrip('/')}/rest/api/3/search"
+    url = f"{JIRA_SITE.rstrip('/')}/rest/api/3/search/jql"
 
-    start_at = 0
-    total = None
+    next_token: Optional[str] = None
 
     while True:
-        body = {
+        params = {
             "jql": jql,
-            "startAt": start_at,
             "maxResults": PAGE_SIZE,
-            "fields": fields_to_fetch,
+            # safest in practice: comma-separated field list
+            "fields": ",".join(fields_to_fetch),
         }
+        if next_token:
+            params["nextPageToken"] = next_token
 
-        resp = requests.post(url, headers=_jira_headers(), json=body, timeout=REQUEST_TIMEOUT)
+        resp = requests.get(url, headers=_jira_headers(), params=params, timeout=REQUEST_TIMEOUT)
         if resp.status_code >= 400:
             raise RuntimeError(f"Jira API error {resp.status_code}: {resp.text[:800]}")
 
         data = resp.json()
-        issues = data.get("issues", [])
-        total = data.get("total") if total is None else total
+        issues = data.get("issues", []) or []
+        next_token = data.get("nextPageToken")
+        is_last = bool(data.get("isLast")) if "isLast" in data else (not next_token)
 
         if not issues:
             break
@@ -279,7 +295,7 @@ def fetch_jira_issues(
         for issue in issues:
             fields = issue.get("fields", {}) or {}
 
-            # Safety filter
+            # safety filter
             if (fields.get("project") or {}).get("key") != project_key:
                 continue
 
@@ -296,20 +312,17 @@ def fetch_jira_issues(
                 sprint_names.append(str(sprint_val["name"]))
             sprint = ",".join(sprint_names) if sprint_names else None
 
-            # Story points
             sp_raw = fields.get(TARGET_STORYPOINTS_FIELD)
             try:
                 story_points = float(sp_raw) if sp_raw is not None else None
             except Exception:
                 story_points = None
 
-            # Optional description
             description_plain = None
             if STORE_DESCRIPTION:
                 desc = fields.get("description")
                 if desc is not None:
-                    s = json.dumps(desc, ensure_ascii=False)
-                    description_plain = s[:5000]
+                    description_plain = json.dumps(desc, ensure_ascii=False)[:5000]
 
             payload = None
             if STORE_PAYLOAD:
@@ -343,16 +356,14 @@ def fetch_jira_issues(
 
         yield rows
 
-        start_at += len(issues)
-        if total is not None and start_at >= int(total):
+        if is_last:
             break
 
-        # Be polite to Jira
         time.sleep(0.1)
 
 
 # ------------------------
-# Cloud Run entrypoint
+# HTTP handler
 # ------------------------
 
 def hello_http(request):
@@ -361,12 +372,15 @@ def hello_http(request):
 
         body = request.get_json(silent=True) or {}
 
-        project_key = body.get("project_key") or TARGET_PROJECT_KEY
+        # accept both keys (people keep sending {"project":"PC"})
+        project_key = body.get("project_key") or body.get("project") or TARGET_PROJECT_KEY
+        if not isinstance(project_key, str) or not project_key.strip():
+            raise RuntimeError("Pass a string for project_key/project")
+
         dry_run = bool(body.get("dry_run", False))
 
         now = datetime.datetime.now(datetime.timezone.utc)
 
-        # If caller provides explicit timestamps, use them
         since_ts: Optional[datetime.datetime] = None
         until_ts: Optional[datetime.datetime] = None
         if body.get("since_ts"):
@@ -383,12 +397,10 @@ def hello_http(request):
         if since_ts is None:
             last_updated = get_last_updated_ts(project_key)
             if last_updated is not None:
-                # overlap 2 days for safety
                 since_ts = last_updated - datetime.timedelta(days=2)
             else:
                 since_ts = now - datetime.timedelta(days=lookback_days)
 
-            # Clamp to lookback window to avoid multi-year backfills by accident
             min_since = now - datetime.timedelta(days=lookback_days)
             if since_ts < min_since:
                 since_ts = min_since
@@ -421,12 +433,8 @@ def hello_http(request):
             "rows_fetched": total_rows,
             "rows_inserted": inserted_rows,
             "errors": all_errors[:50],
-            "store_payload": STORE_PAYLOAD,
-            "store_description": STORE_DESCRIPTION,
         }
-        code = 200 if status == "OK" else 207
-        return jsonify(resp), code
+        return jsonify(resp), (200 if status == "OK" else 207)
 
     except Exception as e:
-        # Return structured error for Workflows + curl debugging
         return jsonify({"status": "ERROR", "error": str(e)}), 500
