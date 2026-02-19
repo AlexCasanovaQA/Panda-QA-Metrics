@@ -1,5 +1,5 @@
 view: qa_kpi_facts {
-  sql_table_name: `qa_metrics.qa_kpi_facts` ;;
+  sql_table_name: `qa_metrics.qa_kpi_facts_enriched` ;;
 
   dimension: kpi_id {
     type: string
@@ -21,6 +21,12 @@ view: qa_kpi_facts {
     type: string
     sql: ${TABLE}.privacy_level ;;
   }
+  
+  dimension: priority_label {
+  type: string
+  sql: ${TABLE}.priority_label ;;
+}
+
 
   dimension_group: metric_date {
     type: time

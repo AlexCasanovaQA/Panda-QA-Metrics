@@ -1,12 +1,41 @@
-"""Jira changelog ingestion -> BigQuery (status transitions only)
+"""
+Jira issue changelog ingestion -> BigQuery (Cloud Run / Functions Framework)
 
-Fixes vs previous version:
-- Inserts are batched by BOTH row-count and payload bytes to avoid BigQuery 413.
-- Only stores status transition items (dramatically smaller than full changelog).
-- Adds (and uses) issue_updated watermark (safe even if table existed before).
-- Streams inserts; no giant in-memory list.
+Purpose
+- Ingest Jira issue changelog histories so we can compute KPIs like:
+  - P3 Defects Reopened
+  - P9 Time to Triage
+  - P11 SLA Compliance (needs first triage / resolution)
+  - P39 Fix Verification Cycle Time (if you later map states)
 
-This powers KPIs like triage time, reopen rate, verification cycle time, etc.
+Key fixes / gotchas addressed
+- Uses Jira Cloud's newer /rest/api/3/search/jql endpoint (pagination via nextPageToken).
+- Batches BigQuery streaming inserts by row-count + payload bytes (prevents 413 Request Entity Too Large).
+- Compatible with Cloud Run secrets-as-env (gcloud run --set-secrets ...), because it reads auth from ENV.
+
+Required env vars
+- GCP_PROJECT_ID
+- BQ_DATASET_ID (default: qa_metrics)
+- BQ_TABLE_ID   (default: jira_changelog_v2)
+
+Jira auth (either naming is accepted)
+- Preferred (matches Secret names):
+    JIRA_SITE, JIRA_USER, JIRA_API_TOKEN
+- Also accepted (legacy):
+    JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
+
+Project/field mapping
+- TARGET_PROJECT_KEY (default: PC)
+
+Optional env vars
+- PAGE_SIZE (default: 50)                    # for /search/jql
+- CHANGELOG_PAGE_SIZE (default: 100)         # for /issue/{key}/changelog
+- DEFAULT_LOOKBACK_DAYS (default: 730)       # 2 years
+- MAX_LOOKBACK_DAYS (default: 730)
+- MAX_ISSUES_PER_RUN (default: 0)            # 0 = no limit (useful for debugging)
+- BQ_INSERT_MAX_ROWS (default: 300)
+- BQ_INSERT_MAX_BYTES (default: 8_000_000)
+- REQUEST_TIMEOUT (default: 60)
 """
 
 import os
@@ -17,30 +46,41 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import requests
 from flask import jsonify
-
 from google.cloud import bigquery
 
 
+# ------------------------
+# Config
+# ------------------------
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 BQ_DATASET_ID = os.getenv("BQ_DATASET_ID", "qa_metrics")
-BQ_TABLE_ID = os.getenv("BQ_TABLE_ID", "jira_changelog")
+BQ_TABLE_ID = os.getenv("BQ_TABLE_ID", "jira_changelog_v2")
 
-JIRA_BASE_URL = os.getenv("JIRA_BASE_URL")
-JIRA_EMAIL = os.getenv("JIRA_EMAIL")
+JIRA_SITE = os.getenv("JIRA_SITE") or os.getenv("JIRA_BASE_URL")
+JIRA_USER = os.getenv("JIRA_USER") or os.getenv("JIRA_EMAIL")
 JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
 
 TARGET_PROJECT_KEY = os.getenv("TARGET_PROJECT_KEY", "PC")
 
 PAGE_SIZE = int(os.getenv("PAGE_SIZE", "50"))
-DEFAULT_LOOKBACK_DAYS = int(os.getenv("DEFAULT_LOOKBACK_DAYS", "120"))
+CHANGELOG_PAGE_SIZE = int(os.getenv("CHANGELOG_PAGE_SIZE", "100"))
 
-BQ_INSERT_MAX_ROWS = int(os.getenv("BQ_INSERT_MAX_ROWS", "200"))
+DEFAULT_LOOKBACK_DAYS = int(os.getenv("DEFAULT_LOOKBACK_DAYS", "730"))
+MAX_LOOKBACK_DAYS = int(os.getenv("MAX_LOOKBACK_DAYS", "730"))
+
+MAX_ISSUES_PER_RUN = int(os.getenv("MAX_ISSUES_PER_RUN", "0"))
+
+BQ_INSERT_MAX_ROWS = int(os.getenv("BQ_INSERT_MAX_ROWS", "300"))
 BQ_INSERT_MAX_BYTES = int(os.getenv("BQ_INSERT_MAX_BYTES", "8000000"))
 
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "60"))
 
 
+# ------------------------
+# Helpers
+# ------------------------
 def _dt(ts: str) -> datetime.datetime:
+    """Parse Jira datetime with timezone. Example: 2026-02-17T11:22:33.123+0000"""
     try:
         return datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f%z")
     except ValueError:
@@ -77,8 +117,7 @@ def _chunk_rows(rows: List[Dict[str, Any]], max_rows: int, max_bytes: int) -> It
 
 def _jira_headers() -> Dict[str, str]:
     import base64
-
-    token = base64.b64encode(f"{JIRA_EMAIL}:{JIRA_API_TOKEN}".encode("utf-8")).decode("utf-8")
+    token = base64.b64encode(f"{JIRA_USER}:{JIRA_API_TOKEN}".encode("utf-8")).decode("utf-8")
     return {
         "Authorization": f"Basic {token}",
         "Accept": "application/json",
@@ -87,56 +126,33 @@ def _jira_headers() -> Dict[str, str]:
 
 
 def _bq_client() -> bigquery.Client:
+    if not GCP_PROJECT_ID:
+        raise RuntimeError("Missing env var: GCP_PROJECT_ID")
     return bigquery.Client(project=GCP_PROJECT_ID)
 
 
+# ------------------------
+# BigQuery
+# ------------------------
 def ensure_table() -> None:
-    """Create jira_changelog table if missing, and ensure issue_updated exists."""
     bq = _bq_client()
-    dataset_ref = bigquery.DatasetReference(GCP_PROJECT_ID, BQ_DATASET_ID)
-    table_ref = dataset_ref.table(BQ_TABLE_ID)
+    table_fq = f"{GCP_PROJECT_ID}.{BQ_DATASET_ID}.{BQ_TABLE_ID}"
 
     schema = [
-        bigquery.SchemaField("issue_id", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("issue_key", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("project_key", "STRING"),
         bigquery.SchemaField("history_id", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("history_created", "TIMESTAMP"),
-        bigquery.SchemaField("author_display_name", "STRING"),
-        bigquery.SchemaField("author_account_id", "STRING"),
-        bigquery.SchemaField("items_json", "STRING"),
-        bigquery.SchemaField("payload", "STRING"),
-        bigquery.SchemaField("issue_updated", "TIMESTAMP"),
+        bigquery.SchemaField("author", "STRING"),
+        bigquery.SchemaField("items_json", "STRING"),  # JSON array of changelog items
         bigquery.SchemaField("_ingested_at", "TIMESTAMP"),
     ]
 
-    table = bigquery.Table(table_ref, schema=schema)
+    table = bigquery.Table(table_fq, schema=schema)
     table.time_partitioning = bigquery.TimePartitioning(type_=bigquery.TimePartitioningType.DAY, field="history_created")
-    table.clustering_fields = ["issue_key", "history_id"]
+    table.clustering_fields = ["project_key", "issue_key", "history_id", "author"]  # max 4
 
     bq.create_table(table, exists_ok=True)
-
-    # If table existed previously without the new column, add it (safe)
-    bq.query(
-        f"ALTER TABLE `{GCP_PROJECT_ID}.{BQ_DATASET_ID}.{BQ_TABLE_ID}` ADD COLUMN IF NOT EXISTS issue_updated TIMESTAMP"
-    ).result()
-
-
-def get_last_issue_updated_ts() -> Optional[datetime.datetime]:
-    bq = _bq_client()
-    query = f"""
-      SELECT
-        MAX(issue_updated) AS max_issue_updated,
-        MAX(history_created) AS max_history_created
-      FROM `{GCP_PROJECT_ID}.{BQ_DATASET_ID}.{BQ_TABLE_ID}`
-    """
-    rows = list(bq.query(query).result())
-    if not rows:
-        return None
-
-    max_issue_updated = rows[0]["max_issue_updated"]
-    max_history_created = rows[0]["max_history_created"]
-
-    return max_issue_updated or max_history_created
 
 
 def insert_rows(rows: List[Dict[str, Any]]) -> Tuple[int, List[Any]]:
@@ -150,10 +166,7 @@ def insert_rows(rows: List[Dict[str, Any]]) -> Tuple[int, List[Any]]:
     all_errors: List[Any] = []
 
     for chunk in _chunk_rows(rows, max_rows=BQ_INSERT_MAX_ROWS, max_bytes=BQ_INSERT_MAX_BYTES):
-        row_ids = []
-        for r in chunk:
-            row_ids.append(f"{r.get('issue_key','')}:{r.get('history_id','')}")
-
+        row_ids = [f'{r.get("issue_key","")}:{r.get("history_id","")}' for r in chunk]
         errors = bq.insert_rows_json(table_fq, chunk, row_ids=row_ids)
         if errors:
             all_errors.extend(errors)
@@ -164,15 +177,14 @@ def insert_rows(rows: List[Dict[str, Any]]) -> Tuple[int, List[Any]]:
 
 
 # ------------------------
-# Jira fetch
+# Jira fetch: list issue keys via /search/jql
 # ------------------------
-
-def fetch_issue_keys(project_key: str, since_ts: datetime.datetime, until_ts: datetime.datetime) -> Iterable[List[Dict[str, Any]]]:
-    """Yield pages of issue stubs {id,key,updated} ordered by updated ASC."""
+def fetch_issue_keys(project_key: str, since_ts: datetime.datetime, until_ts: datetime.datetime) -> Iterable[str]:
+    if not (JIRA_SITE and JIRA_USER and JIRA_API_TOKEN):
+        raise RuntimeError("Missing Jira env vars: JIRA_SITE / JIRA_USER / JIRA_API_TOKEN")
 
     since_s = since_ts.strftime("%Y/%m/%d %H:%M")
     until_s = until_ts.strftime("%Y/%m/%d %H:%M")
-
     jql = (
         f'project = "{project_key}" '
         f'AND updated >= "{since_s}" '
@@ -180,127 +192,135 @@ def fetch_issue_keys(project_key: str, since_ts: datetime.datetime, until_ts: da
         f'ORDER BY updated ASC'
     )
 
-    # NEW endpoint
-    url = f"{JIRA_BASE_URL.rstrip('/')}/rest/api/3/search/jql"
-
-    next_page_token: Optional[str] = None
-    seen_tokens: set[str] = set()
+    url = f"{JIRA_SITE.rstrip('/')}/rest/api/3/search/jql"
+    next_page_token = None
+    seen_tokens = set()
+    page_num = 0
+    yielded = 0
 
     while True:
-        body = {
+        page_num += 1
+        params = {
             "jql": jql,
             "maxResults": PAGE_SIZE,
-            "fields": ["updated"],
+            "fields": "updated",  # minimal
         }
         if next_page_token:
-            body["nextPageToken"] = next_page_token
+            params["nextPageToken"] = next_page_token
 
-        resp = requests.post(url, headers=_jira_headers(), json=body, timeout=REQUEST_TIMEOUT)
+        resp = requests.get(url, headers=_jira_headers(), params=params, timeout=REQUEST_TIMEOUT)
         if resp.status_code >= 400:
             raise RuntimeError(f"Jira API error {resp.status_code}: {resp.text[:800]}")
 
         data = resp.json()
         issues = data.get("issues", []) or []
-        if not issues:
-            break
+        is_last = bool(data.get("isLast", False))
+        new_token = data.get("nextPageToken")
 
-        stubs: List[Dict[str, Any]] = []
+        print(f"[search/jql] page={page_num} issues={len(issues)} is_last={is_last}")
+
         for issue in issues:
-            stubs.append(
-                {
-                    "id": issue.get("id"),
-                    "key": issue.get("key"),
-                    "updated": (issue.get("fields") or {}).get("updated"),
-                }
-            )
+            key = issue.get("key")
+            if key:
+                yield key
+                yielded += 1
+                if MAX_ISSUES_PER_RUN and yielded >= MAX_ISSUES_PER_RUN:
+                    print(f"[search/jql] max issues reached ({MAX_ISSUES_PER_RUN}), stopping early")
+                    return
 
-        yield stubs
-
-        # Pagination for /search/jql
-        if data.get("isLast") is True:
+        if is_last or not issues:
             break
 
-        next_page_token = data.get("nextPageToken")
-        if not next_page_token:
-            break
+        if not new_token:
+            raise RuntimeError("Jira search/jql: missing nextPageToken but isLast=false (pagination would loop)")
 
-        # Safety guard against pagination loops
-        if next_page_token in seen_tokens:
-            raise RuntimeError("Pagination loop detected in Jira /search/jql (repeated nextPageToken).")
-        seen_tokens.add(next_page_token)
+        if new_token in seen_tokens:
+            raise RuntimeError("Jira pagination loop detected (nextPageToken repeated)")
+        seen_tokens.add(new_token)
 
+        next_page_token = new_token
         time.sleep(0.1)
 
 
-def fetch_issue_changelog(issue_id: str) -> Dict[str, Any]:
-    base_url = f"{JIRA_BASE_URL.rstrip('/')}/rest/api/3/issue/{issue_id}/changelog"
+# ------------------------
+# Jira fetch: per-issue changelog
+# ------------------------
+def fetch_issue_changelog(issue_key: str) -> List[Dict[str, Any]]:
+    base = JIRA_SITE.rstrip("/")
+    url = f"{base}/rest/api/3/issue/{issue_key}/changelog"
 
     start_at = 0
-    max_results = 100  # Jira commonly supports up to 100 here
-    all_values: List[Dict[str, Any]] = []
+    rows: List[Dict[str, Any]] = []
+    ingested_at = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat()
 
     while True:
-        resp = requests.get(
-            base_url,
-            headers=_jira_headers(),
-            params={"startAt": start_at, "maxResults": max_results},
-            timeout=REQUEST_TIMEOUT,
-        )
+        params = {"startAt": start_at, "maxResults": CHANGELOG_PAGE_SIZE}
+        resp = requests.get(url, headers=_jira_headers(), params=params, timeout=REQUEST_TIMEOUT)
         if resp.status_code >= 400:
-            raise RuntimeError(f"Changelog fetch error {resp.status_code} for issue_id={issue_id}: {resp.text[:300]}")
+            raise RuntimeError(f"Jira changelog error {resp.status_code} for {issue_key}: {resp.text[:800]}")
 
         data = resp.json()
         values = data.get("values", []) or []
-        all_values.extend(values)
+        total = data.get("total")
+        is_last = bool(data.get("isLast", False))
 
-        if data.get("isLast") is True or not values:
+        for h in values:
+            hist_id = str(h.get("id") or "")
+            created = h.get("created")
+            author = ((h.get("author") or {}).get("displayName") or None)
+
+            items = h.get("items") or []
+            items_json = json.dumps(items, ensure_ascii=False, separators=(",", ":"))
+            if len(items_json) > 50000:
+                items_json = items_json[:50000]
+
+            rows.append({
+                "issue_key": issue_key,
+                "project_key": issue_key.split("-")[0] if "-" in issue_key else None,
+                "history_id": hist_id,
+                "history_created": _dt(created).isoformat() if created else None,
+                "author": author,
+                "items_json": items_json,
+                "_ingested_at": ingested_at,
+            })
+
+        if is_last:
             break
 
         start_at += len(values)
-        time.sleep(0.05)
+        if total is not None and start_at >= int(total):
+            break
 
-    return {"values": all_values}
+        if not values:
+            break
 
+        time.sleep(0.1)
 
-
-def extract_status_histories(changelog_json: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Return list of histories containing ONLY status-change items."""
-    histories = changelog_json.get("values") or changelog_json.get("histories") or []
-    out: List[Dict[str, Any]] = []
-
-    for h in histories:
-        items = h.get("items") or []
-        status_items = [it for it in items if (it.get("field") == "status")]
-        if not status_items:
-            continue
-
-        h2 = dict(h)
-        h2["items"] = status_items
-        out.append(h2)
-
-    return out
+    return rows
 
 
 # ------------------------
-# Entrypoint
+# Cloud Run entrypoint
 # ------------------------
-
 def hello_http(request):
     try:
         ensure_table()
 
-        if not (JIRA_BASE_URL and JIRA_EMAIL and JIRA_API_TOKEN):
-            raise RuntimeError("Missing Jira env vars: JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN")
-
         body = request.get_json(silent=True) or {}
+        project_key = body.get("project_key") or body.get("project") or TARGET_PROJECT_KEY
+        if not isinstance(project_key, str) or not project_key.strip():
+            raise RuntimeError("Pass a string for project_key/project")
 
-        project_key = body.get("project_key") or TARGET_PROJECT_KEY
         dry_run = bool(body.get("dry_run", False))
+        debug = bool(body.get("debug", False))
 
         now = datetime.datetime.now(datetime.timezone.utc)
 
-        since_ts: Optional[datetime.datetime] = None
-        until_ts: Optional[datetime.datetime] = None
+        lookback_days = int(body.get("lookback_days", DEFAULT_LOOKBACK_DAYS))
+        lookback_days = min(lookback_days, MAX_LOOKBACK_DAYS)
+
+        since_ts = now - datetime.timedelta(days=lookback_days)
+        until_ts = now
 
         if body.get("since_ts"):
             since_ts = datetime.datetime.fromisoformat(body["since_ts"])
@@ -311,83 +331,60 @@ def hello_http(request):
             if until_ts.tzinfo is None:
                 until_ts = until_ts.replace(tzinfo=datetime.timezone.utc)
 
-        lookback_days = int(body.get("lookback_days", DEFAULT_LOOKBACK_DAYS))
+        # clamp to max lookback
+        min_since = now - datetime.timedelta(days=lookback_days)
+        if since_ts < min_since:
+            since_ts = min_since
 
-        if since_ts is None:
-            last_ts = get_last_issue_updated_ts()
-            if last_ts is not None:
-                since_ts = last_ts - datetime.timedelta(days=2)
-            else:
-                since_ts = now - datetime.timedelta(days=lookback_days)
+        if debug:
+            # sanity check: list 1 issue key and fetch 1 changelog page
+            keys = []
+            for k in fetch_issue_keys(project_key, since_ts, until_ts):
+                keys.append(k)
+                break
+            if not keys:
+                return jsonify({"status": "DEBUG", "message": "No issues found in window", "project_key": project_key}), 200
 
-            # clamp
-            min_since = now - datetime.timedelta(days=lookback_days)
-            if since_ts < min_since:
-                since_ts = min_since
+            sample_key = keys[0]
+            sample_rows = fetch_issue_changelog(sample_key)[:5]
+            return jsonify({
+                "status": "DEBUG",
+                "project_key": project_key,
+                "since_ts": since_ts.isoformat(),
+                "until_ts": until_ts.isoformat(),
+                "sample_issue_key": sample_key,
+                "sample_rows": sample_rows,
+            }), 200
 
-        if until_ts is None:
-            until_ts = now
-
-        issues_seen = 0
-        histories_seen = 0
-        inserted_rows = 0
+        pages_processed = 0
+        total_histories = 0
+        inserted = 0
         all_errors: List[Any] = []
-        pages = 0
 
-        for issue_page in fetch_issue_keys(project_key, since_ts, until_ts):
-            pages += 1
+        # iterate issue keys; each key we treat as one "page" for metrics
+        for issue_key in fetch_issue_keys(project_key, since_ts, until_ts):
+            pages_processed += 1
 
-            rows_to_insert: List[Dict[str, Any]] = []
-            ingested_at = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat()
-
-            for stub in issue_page:
-                issues_seen += 1
-                issue_id = stub["id"]
-                issue_key = stub["key"]
-                issue_updated = stub.get("updated")
-
-                cj = fetch_issue_changelog(issue_id)
-                status_histories = extract_status_histories(cj)
-
-                for h in status_histories:
-                    histories_seen += 1
-                    row = {
-                        "issue_id": issue_id,
-                        "issue_key": issue_key,
-                        "history_id": str(h.get("id")),
-                        "history_created": _dt(h["created"]).isoformat() if h.get("created") else None,
-                        "author_display_name": ((h.get("author") or {}).get("displayName")),
-                        "author_account_id": ((h.get("author") or {}).get("accountId")),
-                        "items_json": json.dumps(h.get("items") or [], ensure_ascii=False),
-                        "payload": None,
-                        "issue_updated": _dt(issue_updated).isoformat() if issue_updated else None,
-                        "_ingested_at": ingested_at,
-                    }
-                    rows_to_insert.append(row)
-
-                # Avoid hammering Jira too hard
-                time.sleep(0.05)
+            rows = fetch_issue_changelog(issue_key)
+            total_histories += len(rows)
 
             if not dry_run:
-                ins, errs = insert_rows(rows_to_insert)
-                inserted_rows += ins
+                ins, errs = insert_rows(rows)
+                inserted += ins
                 if errs:
                     all_errors.extend(errs)
 
         status = "OK" if not all_errors else "PARTIAL"
-        resp = {
+        return jsonify({
             "status": status,
             "project_key": project_key,
             "since_ts": since_ts.isoformat(),
             "until_ts": until_ts.isoformat(),
-            "pages_processed": pages,
-            "issues_seen": issues_seen,
-            "status_histories_seen": histories_seen,
-            "rows_inserted": inserted_rows,
+            "issues_processed": pages_processed,
+            "histories_fetched": total_histories,
+            "rows_inserted": inserted,
             "errors": all_errors[:50],
-        }
-        code = 200 if status == "OK" else 207
-        return jsonify(resp), code
+        }), (200 if status == "OK" else 207)
 
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500

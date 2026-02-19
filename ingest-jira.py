@@ -48,7 +48,7 @@ from google.cloud import bigquery
 # ------------------------
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 BQ_DATASET_ID = os.getenv("BQ_DATASET_ID", "qa_metrics")
-BQ_TABLE_ID = os.getenv("BQ_TABLE_ID", "jira_issues")
+BQ_TABLE_ID = os.getenv("BQ_TABLE_ID", "jira_issues_v2")
 
 JIRA_SITE = os.getenv("JIRA_SITE") or os.getenv("JIRA_BASE_URL")
 JIRA_USER = os.getenv("JIRA_USER") or os.getenv("JIRA_EMAIL")
