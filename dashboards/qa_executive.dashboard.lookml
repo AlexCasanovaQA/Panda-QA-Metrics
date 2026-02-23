@@ -429,13 +429,13 @@
     explore: gamebench_daily_metrics
     fields: [gamebench_daily_metrics.metric_date_date, gamebench_daily_metrics.platform, gamebench_daily_metrics.median_fps]
     filters:
-      gamebench_daily_metrics.metric_date_date: "1 days"
+      gamebench_daily_metrics.is_latest_metric_date: "yes"
     sorts: [gamebench_daily_metrics.metric_date_date desc, gamebench_daily_metrics.platform]
     listen:
       env: gamebench_daily_metrics.environment
       platform: gamebench_daily_metrics.platform
     note_display: hover
-    note_text: "Definition: Snapshot of median FPS by platform on the most recent available day. Calculation: median_fps for metric_date within 1 day."
+    note_text: "Definition: Snapshot of median FPS by platform on the latest available day in GameBench daily metrics. Calculation: median_fps filtered to is_latest_metric_date = yes."
     row: 57
     col: 0
     width: 12
@@ -448,12 +448,12 @@
     explore: gamebench_daily_metrics
     fields: [gamebench_daily_metrics.fps_stability_pct]
     filters:
-      gamebench_daily_metrics.metric_date_date: "1 days"
+      gamebench_daily_metrics.is_latest_metric_date: "yes"
     listen:
       env: gamebench_daily_metrics.environment
       platform: gamebench_daily_metrics.platform
     note_display: hover
-    note_text: "Definition: Current session stability proxy. Calculation: fps_stability_pct on the most recent date. Note: Used as a proxy because crash-free sessions are not available in this explore."
+    note_text: "Definition: Current session stability proxy from the latest available day in GameBench daily metrics. Calculation: fps_stability_pct filtered to is_latest_metric_date = yes. Note: Used as a proxy because crash-free sessions are not available in this explore."
     row: 57
     col: 12
     width: 12
