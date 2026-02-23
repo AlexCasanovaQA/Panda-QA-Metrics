@@ -1,289 +1,183 @@
-"""
-TestRail users ingestion -> BigQuery (Cloud Run / Functions Framework)
+"""Ingest TestRail users into BigQuery.
 
-Why:
-- Looker filters/graphs currently show QA User IDs (numeric). This ingests TestRail users so we can map IDs -> email/name.
+Important: many TestRail instances restrict `get_users` to site admins.
+For non-admin API keys, TestRail supports `get_users/{project_id}`.
 
-Secrets (GCP Secret Manager) - keep aligned with the other TestRail ingestion services:
-- TESTRAIL_BASE_URL       e.g. https://<company>.testrail.io
-- TESTRAIL_USER           (email/username)
+Env vars:
+- TESTRAIL_URL (e.g. https://<company>.testrail.io)
+- TESTRAIL_EMAIL
 - TESTRAIL_API_KEY
-- TESTRAIL_PROJECT_ID     (single project) OR
-- TESTRAIL_PROJECT_IDS    (comma-separated list)
+- TESTRAIL_PROJECT_IDS (comma-separated) OR TESTRAIL_PROJECT_ID
 
-Required env vars:
-- GCP_PROJECT_ID
-Optional env vars:
-- BQ_DATASET_ID (default: qa_metrics)
-- BQ_TABLE_ID   (default: testrail_users)
-- BQ_INSERT_MAX_ROWS (default: 500)
-- BQ_INSERT_MAX_BYTES (default: 8_000_000)
-- REQUEST_TIMEOUT (default: 60)
+BQ env vars:
+- BQ_DATASET_ID (default qa_metrics)
+- BQ_TABLE_ID (default testrail_users)
 
-Notes:
-- Some TestRail instances restrict GET /get_users to administrators. For non-admins, the API typically requires a project scope.
-  This ingester tries:
-    1) /get_users/{project_id}
-    2) /get_users&project_id={project_id}
-  and merges/dedupes users across the provided project id(s).
+HTTP body overrides:
+- project_ids
 """
 
-import os
 import json
-import datetime
-import time
-from typing import Any, Dict, Iterable, List, Tuple
+import os
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Set
 
+import functions_framework
 import requests
-from flask import jsonify
 from google.cloud import bigquery
-from google.cloud import secretmanager
 
 
-# ---------------------------
-# Config
-# ---------------------------
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
-BQ_DATASET_ID = os.getenv("BQ_DATASET_ID", "qa_metrics")
-BQ_TABLE_ID = os.getenv("BQ_TABLE_ID", "testrail_users")
+BQ_DATASET_ID = os.environ.get("BQ_DATASET_ID", "qa_metrics")
+BQ_TABLE_ID = os.environ.get("BQ_TABLE_ID", "testrail_users")
 
-BQ_INSERT_MAX_ROWS = int(os.getenv("BQ_INSERT_MAX_ROWS", "500"))
-BQ_INSERT_MAX_BYTES = int(os.getenv("BQ_INSERT_MAX_BYTES", "8000000"))
-REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "60"))
-
-# retries for TestRail API calls
-HTTP_MAX_RETRIES = int(os.getenv("HTTP_MAX_RETRIES", "4"))
-HTTP_RETRY_BACKOFF_SECS = float(os.getenv("HTTP_RETRY_BACKOFF_SECS", "1.2"))
+TESTRAIL_URL = os.environ.get("TESTRAIL_URL")
+TESTRAIL_EMAIL = os.environ.get("TESTRAIL_EMAIL")
+TESTRAIL_API_KEY = os.environ.get("TESTRAIL_API_KEY")
+TESTRAIL_PROJECT_IDS = os.environ.get("TESTRAIL_PROJECT_IDS") or os.environ.get("TESTRAIL_PROJECT_ID") or ""
 
 
-# ---------------------------
-# Secrets helper (same idea as other ingesters)
-# ---------------------------
-def get_secret(name: str) -> str:
-    if not GCP_PROJECT_ID:
-        raise RuntimeError("Missing env var: GCP_PROJECT_ID")
-
-    client = secretmanager.SecretManagerServiceClient()
-    secret_path = f"projects/{GCP_PROJECT_ID}/secrets/{name}/versions/latest"
-    resp = client.access_secret_version(request={"name": secret_path})
-    return resp.payload.data.decode("utf-8").strip()
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _testrail_base_url() -> str:
-    base = get_secret("TESTRAIL_BASE_URL").rstrip("/")
-    # standardize to API root
-    if not base.endswith("/index.php?/api/v2"):
-        base = base + "/index.php?/api/v2"
-    return base
+def _get_project_id() -> str:
+    pid = os.environ.get("GCP_PROJECT_ID")
+    if pid:
+        return pid
+    return bigquery.Client().project
 
 
-def _testrail_auth():
-    return (get_secret("TESTRAIL_USER"), get_secret("TESTRAIL_API_KEY"))
+def _auth() -> requests.auth.HTTPBasicAuth:
+    if not (TESTRAIL_EMAIL and TESTRAIL_API_KEY):
+        raise RuntimeError("Missing TESTRAIL_EMAIL or TESTRAIL_API_KEY")
+    return requests.auth.HTTPBasicAuth(TESTRAIL_EMAIL, TESTRAIL_API_KEY)
 
 
-def _project_ids() -> List[int]:
-    # prefer explicit list, else single id
-    ids_raw = None
-    try:
-        ids_raw = get_secret("TESTRAIL_PROJECT_IDS")
-    except Exception:
-        ids_raw = None
-
-    if ids_raw:
-        ids = []
-        for part in ids_raw.split(","):
-            part = part.strip()
-            if part:
-                ids.append(int(part))
-        if ids:
-            return ids
-
-    # fallback single
-    pid = int(get_secret("TESTRAIL_PROJECT_ID"))
-    return [pid]
+def _get(path: str) -> Any:
+    if not TESTRAIL_URL:
+        raise RuntimeError("Missing TESTRAIL_URL")
+    url = TESTRAIL_URL.rstrip("/") + path
+    r = requests.get(url, auth=_auth(), timeout=60)
+    r.raise_for_status()
+    return r.json()
 
 
-# ---------------------------
-# BigQuery helpers
-# ---------------------------
-def _safe_json_size(obj: Any) -> int:
-    return len(json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-
-
-def _chunk_rows(rows: List[Dict[str, Any]], max_rows: int, max_bytes: int) -> Iterable[List[Dict[str, Any]]]:
-    batch: List[Dict[str, Any]] = []
-    batch_bytes = 0
-
-    for r in rows:
-        r_bytes = _safe_json_size(r)
-
-        if batch and (len(batch) >= max_rows or batch_bytes + r_bytes > max_bytes):
-            yield batch
-            batch = []
-            batch_bytes = 0
-
-        batch.append(r)
-        batch_bytes += r_bytes
-
-        if len(batch) >= max_rows:
-            yield batch
-            batch = []
-            batch_bytes = 0
-
-    if batch:
-        yield batch
-
-
-def _bq_client() -> bigquery.Client:
-    if not GCP_PROJECT_ID:
-        raise RuntimeError("Missing env var: GCP_PROJECT_ID")
-    return bigquery.Client(project=GCP_PROJECT_ID)
-
-
-def ensure_table() -> None:
-    bq = _bq_client()
-    table_fq = f"{GCP_PROJECT_ID}.{BQ_DATASET_ID}.{BQ_TABLE_ID}"
-
-    schema = [
+def _ensure_table(bq: bigquery.Client, table_ref: bigquery.TableReference) -> None:
+    desired_schema = [
         bigquery.SchemaField("user_id", "INT64", mode="REQUIRED"),
         bigquery.SchemaField("name", "STRING"),
         bigquery.SchemaField("email", "STRING"),
         bigquery.SchemaField("is_active", "BOOL"),
+        bigquery.SchemaField("is_admin", "BOOL"),
         bigquery.SchemaField("role_id", "INT64"),
+        bigquery.SchemaField("project_id", "INT64"),
+        bigquery.SchemaField("raw_json", "STRING"),
         bigquery.SchemaField("_ingested_at", "TIMESTAMP"),
     ]
 
-    table = bigquery.Table(table_fq, schema=schema)
-    table.time_partitioning = bigquery.TimePartitioning(type_=bigquery.TimePartitioningType.DAY, field="_ingested_at")
-    table.clustering_fields = ["user_id"]
-
-    bq.create_table(table, exists_ok=True)
-
-
-def insert_rows(rows: List[Dict[str, Any]]) -> Tuple[int, List[Any]]:
-    if not rows:
-        return 0, []
-
-    bq = _bq_client()
-    table_fq = f"{GCP_PROJECT_ID}.{BQ_DATASET_ID}.{BQ_TABLE_ID}"
-
-    inserted = 0
-    all_errors: List[Any] = []
-
-    for chunk in _chunk_rows(rows, max_rows=BQ_INSERT_MAX_ROWS, max_bytes=BQ_INSERT_MAX_BYTES):
-        row_ids = [str(r.get("user_id")) for r in chunk]
-        errors = bq.insert_rows_json(table_fq, chunk, row_ids=row_ids)
-        if errors:
-            all_errors.extend(errors)
-        else:
-            inserted += len(chunk)
-
-    return inserted, all_errors
+    try:
+        table = bq.get_table(table_ref)
+        existing = {f.name for f in table.schema}
+        to_add = [f for f in desired_schema if f.name not in existing]
+        if to_add:
+            table.schema = list(table.schema) + to_add
+            bq.update_table(table, ["schema"])
+            print(f"Added {len(to_add)} columns to {table_ref}")
+    except Exception:
+        table = bigquery.Table(table_ref, schema=desired_schema)
+        table.time_partitioning = bigquery.TimePartitioning(field="_ingested_at")
+        bq.create_table(table)
+        print(f"Created table {table_ref}")
 
 
-# ---------------------------
-# TestRail API
-# ---------------------------
-def _http_get(url: str) -> requests.Response:
-    last = None
-    for attempt in range(1, HTTP_MAX_RETRIES + 1):
+def _display_user(u: Dict[str, Any]) -> str:
+    name = (u.get("name") or "").strip()
+    email = (u.get("email") or "").strip()
+    if name and email:
+        return f"{name} ({email})"
+    return name or email or str(u.get("id"))
+
+
+@functions_framework.http
+def ingest_testrail_users(request):
+    req = request.get_json(silent=True) or {}
+
+    proj_raw = req.get("project_ids") or TESTRAIL_PROJECT_IDS
+    project_ids = [p.strip() for p in str(proj_raw).split(",") if p.strip()]
+    if not project_ids:
+        return (
+            json.dumps({"error": "No project ids provided. Set TESTRAIL_PROJECT_IDS or pass project_ids"}),
+            400,
+            {"Content-Type": "application/json"},
+        )
+
+    bq = bigquery.Client(project=_get_project_id())
+    table_ref = bq.dataset(BQ_DATASET_ID).table(BQ_TABLE_ID)
+    _ensure_table(bq, table_ref)
+
+    ingested_at = _utc_now_iso()
+
+    rows: List[Dict[str, Any]] = []
+    seen: Set[int] = set()
+
+    for pid in project_ids:
         try:
-            resp = requests.get(url, auth=_testrail_auth(), timeout=REQUEST_TIMEOUT)
-            # retry on 5xx / timeouts / gateway
-            if resp.status_code >= 500:
-                raise RuntimeError(f"{resp.status_code} {resp.text[:300]}")
-            return resp
+            users = _get(f"/index.php?/api/v2/get_users/{pid}")
         except Exception as e:
-            last = e
-            if attempt < HTTP_MAX_RETRIES:
-                time.sleep(HTTP_RETRY_BACKOFF_SECS * attempt)
-            else:
-                raise RuntimeError(f"HTTP failed after retries: {last}") from last
+            print(f"Failed get_users/{pid}: {e}")
+            continue
 
+        if isinstance(users, dict) and "users" in users:
+            users = users["users"]
 
-def fetch_users_for_project(project_id: int) -> List[Dict[str, Any]]:
-    base = _testrail_base_url()
+        if not isinstance(users, list):
+            print(f"Unexpected response type for project {pid}: {type(users)}")
+            continue
 
-    # 1) path variant (preferred, matches get_runs/<project_id> style)
-    url1 = f"{base}/get_users/{project_id}"
-    r1 = _http_get(url1)
-    if r1.status_code == 200:
-        return r1.json() or []
-
-    # 2) query variant (some instances use &project_id=)
-    url2 = f"{base}/get_users&project_id={project_id}"
-    r2 = _http_get(url2)
-    if r2.status_code == 200:
-        return r2.json() or []
-
-    # If forbidden / bad request, surface details
-    msg = (r2.text or r1.text or "")[:800]
-    raise RuntimeError(f"TestRail API error {r2.status_code}: {msg}")
-
-
-def fetch_users() -> List[Dict[str, Any]]:
-    users_by_id: Dict[int, Dict[str, Any]] = {}
-
-    for pid in _project_ids():
-        arr = fetch_users_for_project(pid)
-        for u in arr:
+        for u in users:
+            if not isinstance(u, dict):
+                continue
+            uid = u.get("id")
+            if uid is None:
+                continue
             try:
-                uid = int(u.get("id"))
+                uid_int = int(uid)
             except Exception:
                 continue
 
-            # merge strategy: prefer non-empty fields
-            cur = users_by_id.get(uid, {})
-            merged = dict(cur)
-            for k in ["name", "email", "is_active", "role_id"]:
-                v = u.get(k)
-                if v is not None and v != "":
-                    merged[k] = v
-            merged["id"] = uid
-            users_by_id[uid] = merged
+            # Keep one row per (user_id, project_id) so we preserve project scoping
+            row = {
+                "user_id": uid_int,
+                "name": u.get("name"),
+                "email": u.get("email"),
+                "is_active": bool(u.get("is_active")) if u.get("is_active") is not None else None,
+                "is_admin": bool(u.get("is_admin")) if u.get("is_admin") is not None else None,
+                "role_id": int(u["role_id"]) if u.get("role_id") is not None else None,
+                "project_id": int(pid),
+                "raw_json": json.dumps(u, ensure_ascii=False),
+                "_ingested_at": ingested_at,
+            }
+            rows.append(row)
 
-    # stable order by id
-    out = [users_by_id[k] for k in sorted(users_by_id.keys())]
-    return out
-
-
-# ---------------------------
-# Cloud Run entrypoint
-# ---------------------------
-def hello_http(request):
-    try:
-        ensure_table()
-
-        users = fetch_users()
-        ingested_at = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat()
-
-        rows = []
-        for u in users:
-            rows.append(
-                {
-                    "user_id": int(u.get("id")),
-                    "name": u.get("name"),
-                    "email": u.get("email"),
-                    "is_active": bool(u.get("is_active")) if u.get("is_active") is not None else None,
-                    "role_id": int(u.get("role_id")) if u.get("role_id") is not None else None,
-                    "_ingested_at": ingested_at,
-                }
+    if rows:
+        errors = bq.insert_rows_json(table_ref, rows)
+        if errors:
+            print("BigQuery insert errors (first 3):", errors[:3])
+            return (
+                json.dumps({"error": "BigQuery insert failed", "details": errors[:3]}),
+                500,
+                {"Content-Type": "application/json"},
             )
 
-        ins, errs = insert_rows(rows)
-        status = "OK" if not errs else "PARTIAL"
-        return (
-            jsonify(
-                {
-                    "status": status,
-                    "projects": _project_ids(),
-                    "rows_fetched": len(rows),
-                    "rows_inserted": ins,
-                    "errors": errs[:50],
-                }
-            ),
-            (200 if status == "OK" else 207),
-        )
-
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+    return (
+        json.dumps(
+            {
+                "ok": True,
+                "projects": project_ids,
+                "rows_inserted": len(rows),
+                "bq_table": f"{table_ref.project}.{table_ref.dataset_id}.{table_ref.table_id}",
+            }
+        ),
+        200,
+        {"Content-Type": "application/json"},
+    )
