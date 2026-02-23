@@ -177,31 +177,12 @@
       severity: jira_issues_latest.severity
     note_display: hover
     note_text: "Definition: Percentage distribution of bugs created within the selected Date Range by severity. Calculation: COUNT of bugs grouped by severity for the current Date Range filter."
+    show_value_labels: true
+    label_type: labPer
     series_colors: {critical: "#D64550", high: "#F28B30", medium: "#F2C94C", low: "#2D9CDB"}
     row: 11
     col: 0
-    width: 12
-    height: 6
-
-  - name: entered_by_severity_30d
-    title: Entered (Date Range) by Severity
-    type: looker_pie
-    model: panda_qa_metrics
-    explore: jira_issues_latest
-    fields: [jira_issues_latest.severity, jira_issues_latest.issues]
-    filters:
-      jira_issues_latest.issue_type: "Bug,Defect"
-    listen:
-      date_range: jira_issues_latest.created_date
-      pod: jira_issues_latest.team
-      priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity
-    note_display: hover
-    note_text: "Definition: Percentage distribution of bugs created within the selected Date Range by severity. Calculation: COUNT of bugs grouped by severity for the current Date Range filter."
-    series_colors: {critical: "#D64550", high: "#F28B30", medium: "#F2C94C", low: "#2D9CDB"}
-    row: 11
-    col: 12
-    width: 12
+    width: 24
     height: 6
 
 
