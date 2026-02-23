@@ -369,7 +369,7 @@ WITH fixed AS (
     DATE(changed_at) AS event_date,
     COUNT(DISTINCT issue_key) AS fixed_count
   FROM `qa_metrics.jira_status_changes`
-  WHERE to_status IN ('Resolved', 'Closed', 'Verified')
+  WHERE LOWER(TRIM(COALESCE(to_status, ''))) IN ('resolved', 'closed', 'verified', 'done')
   GROUP BY 1
 ),
 reopened AS (
