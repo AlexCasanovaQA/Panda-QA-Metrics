@@ -1,0 +1,29 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "--build-arg"
+      - "SOURCE_FILE=ingest-gamebench.py"
+      - "-t"
+      - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:$SHORT_SHA"
+      - "-t"
+      - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:latest"
+      - "."
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "ingest-gamebench"
+      - "--image=europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:$SHORT_SHA"
+      - "--region=europe-west1"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+
+images:
+  - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:$SHORT_SHA"
+  - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:latest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY

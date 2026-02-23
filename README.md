@@ -135,6 +135,8 @@ gcloud run deploy jira-ingest --image gcr.io/YOUR_PROJECT/jira-ingest --region e
 
 Repeat for the other scripts changing `SOURCE_FILE`.
 
+For `ingest-gamebench`, this repo also includes a ready-to-use Cloud Build pipeline (`cloudbuild.yaml`) that builds with `SOURCE_FILE=ingest-gamebench.py` and deploys the Cloud Run service `ingest-gamebench` in `europe-west1`.
+
 ### Option B: Local run
 ```bash
 pip install -r requirements.txt
