@@ -24,6 +24,35 @@ view: jira_issues_latest {
   dimension: status_category { type: string sql: ${TABLE}.status_category ;; }
   dimension: priority { type: string sql: ${TABLE}.priority ;; }
   dimension: severity { type: string sql: ${TABLE}.severity ;; }
+  dimension: severity_normalized {
+    label: "Severity"
+    type: string
+    order_by_field: severity_sort_order
+    sql:
+      CASE
+        WHEN ${TABLE}.severity IS NULL OR TRIM(${TABLE}.severity) = '' THEN '(unknown)'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(blocker|s0|sev[\s_-]*0|critical)') THEN 'Critical'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s1|sev[\s_-]*1|high|major)') THEN 'High'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s2|sev[\s_-]*2|medium|moderate)') THEN 'Medium'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s3|sev[\s_-]*3|low|minor|trivial)') THEN 'Low'
+        ELSE ${TABLE}.severity
+      END ;;
+    description: "Normalized Jira severity bucket for executive reporting. Maps common Jira variants (S0/S1/S2/S3, Sev 0-3, Blocker/Critical/High/Medium/Low) into stable labels."
+  }
+
+  dimension: severity_sort_order {
+    hidden: yes
+    type: number
+    sql:
+      CASE
+        WHEN ${severity_normalized} = 'Critical' THEN 1
+        WHEN ${severity_normalized} = 'High' THEN 2
+        WHEN ${severity_normalized} = 'Medium' THEN 3
+        WHEN ${severity_normalized} = 'Low' THEN 4
+        WHEN ${severity_normalized} = '(unknown)' THEN 99
+        ELSE 50
+      END ;;
+  }
 
   dimension: assignee { type: string sql: ${TABLE}.assignee ;; }
   dimension: reporter { type: string sql: ${TABLE}.reporter ;; }

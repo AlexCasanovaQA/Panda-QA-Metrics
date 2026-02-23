@@ -30,7 +30,7 @@
     type: field_filter
     model: panda_qa_metrics
     explore: jira_issues_latest
-    field: jira_issues_latest.severity
+    field: jira_issues_latest.severity_normalized
 
   - name: env
     title: GameBench Environment
@@ -68,7 +68,7 @@
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity
+      severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Number of bugs/defects created today in Jira. Calculation: COUNT(issue_key) filtered by issue_type in (Bug, Defect) and created_date=today. Use: Detect daily intake spikes and compare against triage/fix capacity."
     row: 3
@@ -105,7 +105,7 @@
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity
+      severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Current active bug backlog. Calculation: COUNT of issues where statusCategory != Done. Use: Measure current operational pressure and pending closure volume."
     row: 6
@@ -125,7 +125,7 @@
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity
+      severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Current QA verification queue. Calculation: COUNT of bugs with qa_verification_state='QA Verification' (normalizes states such as Ready for QA, In QA, Awaiting QA Verification)."
     row: 3
@@ -145,7 +145,7 @@
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity
+      severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Bugs waiting for or currently in regression. Calculation: COUNT with status in (Ready for Regression, In Regression). Use: Evaluate ongoing regression testing load."
     row: 3
@@ -167,19 +167,19 @@
     type: looker_pie
     model: panda_qa_metrics
     explore: jira_issues_latest
-    fields: [jira_issues_latest.severity, jira_issues_latest.issues]
+    fields: [jira_issues_latest.severity_normalized, jira_issues_latest.issues]
     filters:
       jira_issues_latest.issue_type: "Bug,Defect"
     listen:
       date_range: jira_issues_latest.created_date
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity
+      severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Percentage distribution of bugs created within the selected Date Range by severity. Calculation: COUNT of bugs grouped by severity for the current Date Range filter."
     show_value_labels: true
     label_type: labPer
-    series_colors: {critical: "#D64550", high: "#F28B30", medium: "#F2C94C", low: "#2D9CDB"}
+    series_colors: {Critical: "#D64550", High: "#F28B30", Medium: "#F2C94C", Low: "#2D9CDB", "(unknown)": "#BDBDBD"}
     row: 11
     col: 0
     width: 24
@@ -200,7 +200,7 @@
       date_range: jira_issues_latest.created_date
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity
+      severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Daily trend of incoming bugs by priority for the selected Date Range. Calculation: COUNT of bugs by created_date and priority. Use: Detect whether critical intake grows faster than resolution capacity."
     series_colors: {Highest: "#D64550", High: "#F28B30", Medium: "#F2C94C", Low: "#2D9CDB", Lowest: "#6FCF97"}
@@ -258,7 +258,7 @@
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity
+      severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Active backlog split by POD/team. Calculation: COUNT of active bugs (statusCategory != Done) grouped by team. Use: Balance workload across pods."
     row: 29
@@ -279,7 +279,7 @@
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity
+      severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Active backlog by current priority. Calculation: COUNT of active bugs grouped by priority. Use: Validate the mix of pending criticality."
     row: 29
@@ -299,7 +299,7 @@
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity
+      severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Distribution of bugs by current Jira status. Calculation: COUNT of bugs grouped by status. Use: Identify bottlenecks in QA/dev workflow."
     row: 35
@@ -356,7 +356,7 @@
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity
+      severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Active bugs by fixVersion (milestone proxy). Calculation: COUNT of active bugs grouped by fix_versions. Use: Prioritize by release/milestone."
     row: 41
