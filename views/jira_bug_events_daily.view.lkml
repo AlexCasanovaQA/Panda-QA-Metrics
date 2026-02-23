@@ -4,7 +4,7 @@ view: jira_bug_events_daily {
   dimension_group: event_date {
     type: time
     timeframes: [date, week, month]
-    sql: ${TABLE}.event_date ;;
+    sql: TIMESTAMP(${TABLE}.event_date) ;;
   }
 
   dimension: event_type { type: string sql: ${TABLE}.event_type ;; }

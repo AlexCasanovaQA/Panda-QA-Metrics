@@ -4,7 +4,7 @@ view: jira_fix_fail_rate_daily {
   dimension_group: event_date {
     type: time
     timeframes: [date, week, month]
-    sql: ${TABLE}.event_date ;;
+    sql: TIMESTAMP(${TABLE}.event_date) ;;
   }
 
   dimension: fixed_count { type: number sql: ${TABLE}.fixed_count ;; }
