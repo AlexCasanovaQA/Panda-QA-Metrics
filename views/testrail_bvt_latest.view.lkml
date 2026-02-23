@@ -12,7 +12,7 @@ view: testrail_bvt_latest {
 
   measure: pass_rate {
     type: number
-    sql: ${TABLE}.pass_rate_calc ;;
+    sql: AVG(${TABLE}.pass_rate_calc) ;;
     value_format_name: percent_2
   }
 }
