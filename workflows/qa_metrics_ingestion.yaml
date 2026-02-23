@@ -7,7 +7,8 @@ main:
           - request_args: ${default(args, request_args)}
           - days: ${default(map.get(request_args, "days"), 7)}
           - lookback_days: ${default(map.get(request_args, "lookback_days"), 90)}
-          - project_key: ${default(map.get(request_args, "project_key"), "PC")}
+          - project_keys_csv: ${default(map.get(request_args, "project_keys"), default(sys.get_env("QA_METRICS_PROJECT_KEYS"), default(map.get(request_args, "project_key"), default(sys.get_env("QA_METRICS_PROJECT_KEY"), ""))))}
+          - project_keys_list: []
 
           - jira_url: "https://ingest-jira-147201244534.europe-west1.run.app"
           - jira_changelog_url: "https://ingest-jira-changelog-147201244534.europe-west1.run.app"
@@ -37,12 +38,12 @@ main:
 
           # ingest-jira REQUIERE project_keys (lista)
           - payload_jira:
-              project_keys: ${[project_key]}
+              project_keys: ${project_keys_list}
               lookback_days: ${lookback_days}
 
           # ingest-jira-changelog espera project_keys como string CSV
           - payload_changelog:
-              project_keys: ${project_key}
+              project_keys: ${project_keys_csv}
               lookback_days: ${lookback_days}
 
           # test runs / results suelen ser incremental y pueden ignorar body,
@@ -63,6 +64,19 @@ main:
           - payload_gamebench_ios:
               days: ${days}
               platform: "ios"
+
+    - normalize_project_keys:
+        switch:
+          - condition: ${project_keys_csv != ""}
+            assign:
+              - project_keys_list: ${text.split(project_keys_csv, ",")}
+              - payload_jira.project_keys: ${text.split(project_keys_csv, ",")}
+
+    - log_effective_project_keys:
+        call: sys.log
+        args:
+          severity: "INFO"
+          text: '${"qa_metrics_ingestion project keys: " + payload_changelog.project_keys}'
 
     # --------------------------
     # JIRA ISSUES
