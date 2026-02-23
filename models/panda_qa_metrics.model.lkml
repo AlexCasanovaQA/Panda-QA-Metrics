@@ -1,15 +1,9 @@
 connection: "qa-panda-metrics-exp"
 
-include: "/scopely_panda/views/qa_metrics/*.view.lkml"
-include: "/scopely_panda/dashboards/qa_metrics/*.dashboard.lookml"
+include: "/views/*.view.lkml"
+include: "/dashboards/*.dashboard.lookml"
 
-
-# Existing KPI explore (used by QA KPIs dashboards)
-explore: qa_kpi_facts {
-  from: qa_kpi_facts
-  label: "QA KPI Facts"
-}
-# Base explore (legacy dashboards use this name)
+# Primary KPI explore
 explore: qa_kpi_facts {
   label: "QA KPIs"
   description: "Unified KPI fact table (public + private)."
@@ -22,3 +16,9 @@ explore: panda_qa_kpi_facts {
   description: "Alias explore for dashboards that reference panda_qa_kpi_facts.* fields."
   from: qa_kpi_facts
 }
+
+# Dashboard-specific explores
+explore: jira_issues_latest { from: jira_issues_latest }
+explore: jira_bug_events_daily { from: jira_bug_events_daily }
+explore: bugsnag_errors_latest { from: bugsnag_errors_latest }
+explore: gamebench_daily_metrics { from: gamebench_daily_metrics }
