@@ -57,6 +57,20 @@ def testrail_project_ids() -> List[int]:
     except Exception:
         return [int(os.environ.get("TESTRAIL_PROJECT_ID", "0"))] if os.environ.get("TESTRAIL_PROJECT_ID") else []
 
+def as_int(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+def as_timestamp_iso(value: Any) -> Optional[str]:
+    ts = as_int(value)
+    if ts is None or ts <= 0:
+        return None
+    return datetime.fromtimestamp(ts, timezone.utc).isoformat().replace("+00:00", "Z")
+
 # ----------------- BigQuery -----------------
 def ensure_table() -> None:
     schema = [
@@ -127,45 +141,82 @@ def request_with_retries(method: str, url: str, *, auth: Tuple[str,str]) -> requ
     raise RuntimeError(f"HTTP failed after retries: {last_exc}")
 
 # ----------------- Fetch -----------------
-def fetch_runs(project_id: int, since_ts: datetime) -> List[Dict[str, Any]]:
-    base = testrail_base_url()
+def fetch_runs(project_id: int, since_ts: datetime, *, auth: Tuple[str, str], base: str) -> List[Dict[str, Any]]:
     created_after = int(since_ts.timestamp())
-    url = f"{base}/get_runs/{project_id}&created_after={created_after}&include_all=1"
+    limit = 250
+    offset = 0
 
-    resp = request_with_retries("GET", url, auth=testrail_auth())
-    data = resp.json()
+    runs: List[Dict[str, Any]] = []
+    while True:
+        url = (
+            f"{base}/get_runs/{project_id}&created_after={created_after}&include_all=1"
+            f"&limit={limit}&offset={offset}"
+        )
 
-    # API can return list directly or dict with 'runs'
-    if isinstance(data, dict) and "runs" in data:
-        runs = data.get("runs") or []
-    else:
-        runs = data or []
+        resp = request_with_retries("GET", url, auth=auth)
+        data = resp.json()
+
+        # API can return list directly or dict with 'runs'
+        if isinstance(data, dict):
+            if data.get("error"):
+                raise RuntimeError(f"TestRail get_runs error for project {project_id}: {data.get('error')}")
+            page_runs = data.get("runs") if "runs" in data else []
+            if page_runs is None:
+                page_runs = []
+            runs.extend([r for r in page_runs if isinstance(r, dict)])
+
+            size = data.get("size")
+            page_limit = data.get("limit", limit)
+            page_offset = data.get("offset", offset)
+
+            if size is not None and page_limit is not None and page_offset is not None:
+                if int(page_offset) + int(page_limit) >= int(size):
+                    break
+                offset = int(page_offset) + int(page_limit)
+                continue
+            if len(page_runs) < limit:
+                break
+            offset += limit
+            continue
+
+        if isinstance(data, list):
+            page_runs = [r for r in data if isinstance(r, dict)]
+            runs.extend(page_runs)
+            if len(page_runs) < limit:
+                break
+            offset += limit
+            continue
+
+        raise RuntimeError(
+            f"Unexpected TestRail get_runs response type for project {project_id}: {type(data).__name__}: {str(data)[:200]}"
+        )
 
     rows: List[Dict[str, Any]] = []
     ingested_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     for r in runs:
-        created_on = r.get("created_on")
-        completed_on = r.get("completed_on")
+        run_id = as_int(r.get("id"))
+        if run_id is None:
+            continue
 
         rows.append({
             "project_id": int(project_id),
-            "run_id": int(r.get("id")),
-            "suite_id": r.get("suite_id"),
-            "plan_id": r.get("plan_id"),
+            "run_id": run_id,
+            "suite_id": as_int(r.get("suite_id")),
+            "plan_id": as_int(r.get("plan_id")),
             "name": r.get("name"),
             "is_completed": bool(r.get("is_completed")),
-            "created_on": datetime.fromtimestamp(created_on, timezone.utc).isoformat().replace("+00:00", "Z") if created_on else None,
-            "completed_on": datetime.fromtimestamp(completed_on, timezone.utc).isoformat().replace("+00:00", "Z") if completed_on else None,
-            "assignedto_id": r.get("assignedto_id"),
-            "created_by": r.get("created_by"),
-            "passed_count": r.get("passed_count", 0),
-            "failed_count": r.get("failed_count", 0),
-            "blocked_count": r.get("blocked_count", 0),
-            "retest_count": r.get("retest_count", 0),
-            "untested_count": r.get("untested_count", 0),
+            "created_on": as_timestamp_iso(r.get("created_on")),
+            "completed_on": as_timestamp_iso(r.get("completed_on")),
+            "assignedto_id": as_int(r.get("assignedto_id")),
+            "created_by": as_int(r.get("created_by")),
+            "passed_count": as_int(r.get("passed_count")) or 0,
+            "failed_count": as_int(r.get("failed_count")) or 0,
+            "blocked_count": as_int(r.get("blocked_count")) or 0,
+            "retest_count": as_int(r.get("retest_count")) or 0,
+            "untested_count": as_int(r.get("untested_count")) or 0,
             "url": r.get("url"),
-            "milestone_id": r.get("milestone_id"),
+            "milestone_id": as_int(r.get("milestone_id")),
             "config": json.dumps(r.get("config") or {}),
             "_ingested_at": ingested_at,
             "payload": json.dumps(r),
@@ -201,6 +252,8 @@ def insert_rows(rows: List[Dict[str, Any]]) -> None:
 def hello_http(request):
     try:
         ensure_table()
+        auth = testrail_auth()
+        base = testrail_base_url()
 
         since_ts = get_last_created_on()
         pids = testrail_project_ids()
@@ -209,7 +262,7 @@ def hello_http(request):
 
         all_rows: List[Dict[str, Any]] = []
         for pid in pids:
-            all_rows.extend(fetch_runs(pid, since_ts))
+            all_rows.extend(fetch_runs(pid, since_ts, auth=auth, base=base))
 
         insert_rows(all_rows)
         return (jsonify({"status":"OK","rows":len(all_rows), "since": since_ts.isoformat()}), 200)
