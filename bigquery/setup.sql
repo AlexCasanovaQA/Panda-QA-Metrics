@@ -2,10 +2,11 @@
 -- Dataset default: qa_metrics
 -- IMPORTANT: adjust dataset location if needed.
 
-CREATE SCHEMA IF NOT EXISTS `qa_metrics` OPTIONS(location="US");
+BEGIN
 
 -- Keep only required objects (drops everything else in dataset)
 DECLARE keep_objects ARRAY<STRING> DEFAULT [
+
   -- Raw ingestion tables (as used by current code defaults)
   'jira_issues_v2',
   'jira_changelog_v2',
@@ -37,6 +38,8 @@ DECLARE keep_objects ARRAY<STRING> DEFAULT [
   'qa_kpi_facts_enriched',
   'gamebench_sessions_latest'
 ];
+
+CREATE SCHEMA IF NOT EXISTS `qa_metrics` OPTIONS(location="US");
 
 FOR obj IN (
   SELECT table_name, table_type
@@ -1834,3 +1837,5 @@ SELECT
   f.*,
   COALESCE(NULLIF(f.severity, ""), "Unspecified") AS priority_label
 FROM `qa_metrics.qa_kpi_facts` f;
+
+END;
