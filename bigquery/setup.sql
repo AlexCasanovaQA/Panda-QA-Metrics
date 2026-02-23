@@ -4,6 +4,53 @@
 
 CREATE SCHEMA IF NOT EXISTS `qa_metrics` OPTIONS(location="US");
 
+-- Keep only required objects (drops everything else in dataset)
+DECLARE keep_objects ARRAY<STRING> DEFAULT [
+  -- Raw ingestion tables (as used by current code defaults)
+  'jira_issues_v2',
+  'jira_changelog_v2',
+  'testrail_runs',
+  'testrail_results',
+  'bugsnag_errors',
+  'gamebench_sessions_v1',
+
+  -- Manual/mapping/source tables
+  'manual_kpi_values',
+  'source_project_mapping',
+  'qa_user_crosswalk',
+  'release_calendar',
+  'build_size_manual',
+  'gamebench_daily_metrics',
+
+  -- Derived views used by Looker
+  'kpi_catalog',
+  'jira_issues_latest',
+  'testrail_runs_latest',
+  'bugsnag_errors_latest',
+  'jira_status_changes',
+  'jira_bug_events_daily',
+  'jira_fix_fail_rate_daily',
+  'jira_mttr_fixed_daily',
+  'jira_active_bug_count_daily',
+  'testrail_bvt_latest',
+  'qa_kpi_facts',
+  'qa_kpi_facts_enriched',
+  'gamebench_sessions_latest'
+];
+
+FOR obj IN (
+  SELECT table_name, table_type
+  FROM `qa_metrics`.INFORMATION_SCHEMA.TABLES
+  WHERE table_name NOT IN UNNEST(keep_objects)
+)
+DO
+  EXECUTE IMMEDIATE FORMAT(
+    'DROP %s `qa_metrics.%s`',
+    IF(obj.table_type = 'VIEW', 'VIEW', 'TABLE'),
+    obj.table_name
+  );
+END FOR;
+
 -- -----------------------------
 -- Manual KPI inputs (for KPIs that cannot be fully automated)
 -- -----------------------------
@@ -216,7 +263,7 @@ FROM (
   SELECT
     *,
     ROW_NUMBER() OVER (PARTITION BY issue_key ORDER BY updated DESC, _ingested_at DESC) AS rn
-  FROM `qa_metrics.jira_issues`
+  FROM `qa_metrics.jira_issues_v2`
 )
 WHERE rn = 1;
 
@@ -250,7 +297,7 @@ SELECT
   c.history_created AS changed_at,
   JSON_VALUE(item, '$.fromString') AS from_status,
   JSON_VALUE(item, '$.toString') AS to_status
-FROM `qa_metrics.jira_changelog` c,
+FROM `qa_metrics.jira_changelog_v2` c,
 UNNEST(JSON_EXTRACT_ARRAY(c.items_json)) AS item
 WHERE JSON_VALUE(item, '$.field') = 'status';
 
@@ -443,6 +490,16 @@ CREATE TABLE IF NOT EXISTS `qa_metrics.gamebench_daily_metrics` (
 )
 PARTITION BY metric_date
 CLUSTER BY environment, platform, app_version;
+
+CREATE OR REPLACE VIEW `qa_metrics.gamebench_sessions_latest` AS
+SELECT * EXCEPT(rn)
+FROM (
+  SELECT
+    *,
+    ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY time_pushed DESC, _ingested_at DESC) AS rn
+  FROM `qa_metrics.gamebench_sessions_v1`
+)
+WHERE rn = 1;
 
 -- -----------------------------
 -- KPI Facts View (used by Looker)
@@ -1771,3 +1828,9 @@ SELECT
   unit,
   source
 FROM `qa_metrics.manual_kpi_values`;
+
+CREATE OR REPLACE VIEW `qa_metrics.qa_kpi_facts_enriched` AS
+SELECT
+  f.*,
+  COALESCE(NULLIF(f.severity, ""), "Unspecified") AS priority_label
+FROM `qa_metrics.qa_kpi_facts` f;
