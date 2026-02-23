@@ -313,7 +313,7 @@ CREATE OR REPLACE VIEW `qa_metrics.jira_bug_events_daily` AS
 WITH bug_base AS (
   SELECT
     issue_key,
-    DATE(created_at) AS created_date,
+    DATE(created) AS created_date,
     COALESCE(NULLIF(TRIM(priority), ''), 'Unspecified') AS priority_label,
     COALESCE(NULLIF(TRIM(severity), ''),
       CASE
@@ -399,18 +399,18 @@ WITH fixed_cohort AS (
 bugs AS (
   SELECT
     issue_key,
-    created_at
+    created
   FROM `qa_metrics.jira_issues_latest`
   WHERE LOWER(issue_type) = 'bug'
-    AND created_at IS NOT NULL
+    AND created IS NOT NULL
 )
 SELECT
   DATE(fc.fixed_at) AS event_date,
-  AVG(TIMESTAMP_DIFF(fc.fixed_at, b.created_at, SECOND) / 3600.0) AS mttr_hours
+  AVG(TIMESTAMP_DIFF(fc.fixed_at, b.created, SECOND) / 3600.0) AS mttr_hours
 FROM fixed_cohort fc
 JOIN bugs b
   ON b.issue_key = fc.issue_key
-WHERE fc.fixed_at >= b.created_at
+WHERE fc.fixed_at >= b.created
 GROUP BY 1;
 
 CREATE OR REPLACE VIEW `qa_metrics.jira_mttr_claimed_fixed_daily` AS
@@ -425,33 +425,33 @@ WITH claimed_fixed_events AS (
 bugs AS (
   SELECT
     issue_key,
-    created_at
+    created
   FROM `qa_metrics.jira_issues_latest`
   WHERE LOWER(issue_type) = 'bug'
-    AND created_at IS NOT NULL
+    AND created IS NOT NULL
 )
 SELECT
   DATE(cfe.claimed_fixed_at) AS event_date,
-  AVG(TIMESTAMP_DIFF(cfe.claimed_fixed_at, b.created_at, SECOND) / 3600.0) AS avg_mttr_hours,
+  AVG(TIMESTAMP_DIFF(cfe.claimed_fixed_at, b.created, SECOND) / 3600.0) AS avg_mttr_hours,
   COUNT(DISTINCT cfe.issue_key) AS issues_count
 FROM claimed_fixed_events cfe
 JOIN bugs b
   ON b.issue_key = cfe.issue_key
-WHERE cfe.claimed_fixed_at >= b.created_at
+WHERE cfe.claimed_fixed_at >= b.created
 GROUP BY 1;
 
 CREATE OR REPLACE VIEW `qa_metrics.jira_active_bug_count_daily` AS
 WITH bug_lifecycle AS (
   SELECT
     ji.issue_key,
-    DATE(ji.created_at) AS created_date,
+    DATE(ji.created) AS created_date,
     DATE(MIN(sc.changed_at)) AS fixed_date
   FROM `qa_metrics.jira_issues_latest` ji
   LEFT JOIN `qa_metrics.jira_status_changes` sc
     ON sc.issue_key = ji.issue_key
    AND sc.to_status IN ('Resolved', 'Closed', 'Verified')
   WHERE LOWER(ji.issue_type) = 'bug'
-    AND ji.created_at IS NOT NULL
+    AND ji.created IS NOT NULL
   GROUP BY 1,2
 ),
 date_spine AS (
