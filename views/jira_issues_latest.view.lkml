@@ -31,13 +31,14 @@ view: jira_issues_latest {
     sql:
       CASE
         WHEN ${TABLE}.severity IS NULL OR TRIM(${TABLE}.severity) = '' THEN '(unknown)'
-        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(blocker|s0|sev[\s_-]*0|critical)') THEN 'Critical'
-        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s1|sev[\s_-]*1|high|major)') THEN 'High'
-        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s2|sev[\s_-]*2|medium|moderate)') THEN 'Medium'
-        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s3|sev[\s_-]*3|low|minor|trivial)') THEN 'Low'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s0|sev[\s_-]*0|blocker|showstopper)') THEN '(S0) Blocker'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s1|sev[\s_-]*1|critical|high)') THEN '(S1) Critical'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s2|sev[\s_-]*2|major|medium|moderate)') THEN '(S2) Major'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s3|sev[\s_-]*3|minor|low)') THEN '(S3) Minor'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s4|sev[\s_-]*4|trivial|lowest)') THEN '(S4) Trivial'
         ELSE ${TABLE}.severity
       END ;;
-    description: "Normalized Jira severity bucket for executive reporting. Maps common Jira variants (S0/S1/S2/S3, Sev 0-3, Blocker/Critical/High/Medium/Low) into stable labels."
+    description: "Normalized Jira severity bucket for executive reporting. Maps Jira variants to canonical labels: (S0) Blocker, (S1) Critical, (S2) Major, (S3) Minor, (S4) Trivial."
   }
 
   dimension: severity_sort_order {
@@ -45,10 +46,11 @@ view: jira_issues_latest {
     type: number
     sql:
       CASE
-        WHEN ${severity_normalized} = 'Critical' THEN 1
-        WHEN ${severity_normalized} = 'High' THEN 2
-        WHEN ${severity_normalized} = 'Medium' THEN 3
-        WHEN ${severity_normalized} = 'Low' THEN 4
+        WHEN ${severity_normalized} = '(S0) Blocker' THEN 1
+        WHEN ${severity_normalized} = '(S1) Critical' THEN 2
+        WHEN ${severity_normalized} = '(S2) Major' THEN 3
+        WHEN ${severity_normalized} = '(S3) Minor' THEN 4
+        WHEN ${severity_normalized} = '(S4) Trivial' THEN 5
         WHEN ${severity_normalized} = '(unknown)' THEN 99
         ELSE 50
       END ;;
