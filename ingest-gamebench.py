@@ -64,6 +64,14 @@ def _req(method: str, url: str, *, json_body: Optional[Dict[str, Any]] = None, p
                 json=json_body,
                 timeout=HTTP_TIMEOUT,
             )
+            if r.status_code in (401, 403):
+                # Secret Manager can rotate credentials while this instance is warm.
+                # Clear the cached token so the next attempt fetches the latest secret.
+                _token.cache_clear()
+                backoff = min(MAX_BACKOFF, BASE_BACKOFF * (2 ** attempt))
+                jitter = random.uniform(0, 0.25 * backoff)
+                time.sleep(backoff + jitter)
+                continue
             if r.status_code in (429, 500, 502, 503, 504):
                 backoff = min(MAX_BACKOFF, BASE_BACKOFF * (2 ** attempt))
                 jitter = random.uniform(0, 0.25 * backoff)
@@ -169,6 +177,16 @@ def upsert_rows(rows: List[Dict[str, Any]]) -> int:
         raise RuntimeError(str(errors)[:1200])
     return len(rows)
 
+def _flush_rows_capped(rows: List[Dict[str, Any]], inserted: int) -> Tuple[int, bool]:
+    if not rows:
+        return inserted, False
+    remaining = MAX_SESSIONS_PER_RUN - inserted
+    if remaining <= 0:
+        return inserted, True
+    if len(rows) <= remaining:
+        return inserted + upsert_rows(rows), False
+    return inserted + upsert_rows(rows[:remaining]), True
+
 def _sanitize_days(v: Any) -> int:
     try:
         days = int(v)
@@ -210,7 +228,7 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
             dtp = _to_dt(_get(s, "timePushed") or _get(s, "time_pushed"))
             if dtp and dtp < since:
                 if rows_to_insert:
-                    inserted += upsert_rows(rows_to_insert)
+                    inserted, _ = _flush_rows_capped(rows_to_insert, inserted)
                 return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted}
 
             # Fetch details for metrics
@@ -262,16 +280,20 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
             rows_to_insert.append(row)
 
             if len(rows_to_insert) >= 100:
-                inserted += upsert_rows(rows_to_insert)
+                inserted, stopped = _flush_rows_capped(rows_to_insert, inserted)
                 rows_to_insert = []
+                if stopped:
+                    return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted, "stopped": "max_sessions"}
 
             if inserted >= MAX_SESSIONS_PER_RUN:
                 if rows_to_insert:
-                    inserted += upsert_rows(rows_to_insert)
+                    inserted, _ = _flush_rows_capped(rows_to_insert, inserted)
                 return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted, "stopped": "max_sessions"}
 
         if rows_to_insert:
-            inserted += upsert_rows(rows_to_insert)
+            inserted, stopped = _flush_rows_capped(rows_to_insert, inserted)
+            if stopped:
+                return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted, "stopped": "max_sessions"}
 
         if inserted >= MAX_SESSIONS_PER_RUN:
             return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted, "stopped": "max_sessions"}
