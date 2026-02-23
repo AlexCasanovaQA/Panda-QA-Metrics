@@ -4,7 +4,7 @@ view: jira_active_bug_count_daily {
   dimension_group: metric_date {
     type: time
     timeframes: [date, week, month]
-    sql: ${TABLE}.metric_date ;;
+    sql: TIMESTAMP(${TABLE}.metric_date) ;;
   }
 
   measure: active_bug_count {

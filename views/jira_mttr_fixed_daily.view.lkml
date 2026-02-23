@@ -4,7 +4,7 @@ view: jira_mttr_fixed_daily {
   dimension_group: event_date {
     type: time
     timeframes: [date, week, month]
-    sql: ${TABLE}.event_date ;;
+    sql: TIMESTAMP(${TABLE}.event_date) ;;
   }
 
   measure: avg_mttr_hours {
