@@ -50,7 +50,7 @@
   - name: header_scoreboard
     type: text
     title_text: "Scoreboard"
-    body_text: "Quick health view (today + active)."
+    body_text: "Quick health view (today + active). Fixed window tiles: Bugs entered today, Fixes today. Filter-driven tiles: all charts labeled as Trend and operational time-series."
 
   - name: bugs_entered_today
     title: Bugs entered today
@@ -80,9 +80,7 @@
     filters:
       jira_bug_events_daily.event_type: "fixed"
       jira_bug_events_daily.event_date_date: "today"
-    listen:
-      date_range: jira_bug_events_daily.event_date_date
-    note_text: "Jira (changelog) | Bugs transitioned to Fixed today."
+    note_text: "Jira (changelog) | Bugs transitioned to Fixed today. Fixed-window tile: event_date_date=today takes precedence over dashboard date_range."
     row: 3
     col: 4
     width: 4
@@ -412,19 +410,18 @@
     height: 4
 
   - name: gb_median_fps_7d
-    title: Trend (7d) | Median FPS by platform
+    title: Trend | Median FPS by platform
     type: looker_line
     model: panda_qa_metrics
     explore: gamebench_daily_metrics
     fields: [gamebench_daily_metrics.metric_date_date, gamebench_daily_metrics.median_fps, gamebench_daily_metrics.platform]
     pivots: [gamebench_daily_metrics.platform]
-    filters:
-      gamebench_daily_metrics.metric_date_date: "7 days"
     sorts: [gamebench_daily_metrics.metric_date_date]
     listen:
+      date_range: gamebench_daily_metrics.metric_date_date
       env: gamebench_daily_metrics.environment
       platform: gamebench_daily_metrics.platform
-    note_text: "GameBench | Daily median FPS (median across sessions), pivoted by platform."
+    note_text: "GameBench | Daily median FPS (median across sessions), pivoted by platform. Filter-driven by dashboard date_range."
     row: 52
     col: 0
     width: 16
@@ -510,18 +507,17 @@
     height: 2
 
   - name: testcases_completed_by_day_7d
-    title: Trend (7d) | Test cases completed by day
+    title: Trend | Test cases completed by day
     type: looker_line
     model: panda_qa_metrics
     explore: testrail_runs_latest
     fields: [testrail_runs_latest.completed_on_date, testrail_runs_latest.executed_cases]
     filters:
       testrail_runs_latest.is_completed: "yes"
-      testrail_runs_latest.completed_on_date: "7 days"
     sorts: [testrail_runs_latest.completed_on_date]
     listen:
       date_range: testrail_runs_latest.completed_on_date
-    note_text: "TestRail | Ejecutado = passed + failed + blocked + retest (excluye untested) por día de completed_on."
+    note_text: "TestRail | Ejecutado = passed + failed + blocked + retest (excluye untested) por día de completed_on. Filter-driven by dashboard date_range."
     row: 68
     col: 8
     width: 8
