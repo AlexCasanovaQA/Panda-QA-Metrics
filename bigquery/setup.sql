@@ -326,7 +326,7 @@ WITH bug_base AS (
     ) AS severity_label,
     COALESCE(NULLIF(TRIM(team), ''), 'Unassigned') AS pod
   FROM `qa_metrics.jira_issues_latest`
-  WHERE LOWER(issue_type) = 'bug'
+  WHERE LOWER(TRIM(issue_type)) IN ('bug', 'defect')
 ),
 status_events AS (
   SELECT
@@ -403,7 +403,7 @@ bugs AS (
     issue_key,
     created
   FROM `qa_metrics.jira_issues_latest`
-  WHERE LOWER(issue_type) = 'bug'
+  WHERE LOWER(TRIM(issue_type)) IN ('bug', 'defect')
     AND created IS NOT NULL
 )
 SELECT
@@ -429,7 +429,7 @@ bugs AS (
     issue_key,
     created
   FROM `qa_metrics.jira_issues_latest`
-  WHERE LOWER(issue_type) = 'bug'
+  WHERE LOWER(TRIM(issue_type)) IN ('bug', 'defect')
     AND created IS NOT NULL
 )
 SELECT
@@ -452,7 +452,7 @@ WITH bug_lifecycle AS (
   LEFT JOIN `qa_metrics.jira_status_changes` sc
     ON sc.issue_key = ji.issue_key
    AND sc.to_status IN ('Resolved', 'Closed', 'Verified')
-  WHERE LOWER(ji.issue_type) = 'bug'
+  WHERE LOWER(TRIM(ji.issue_type)) IN ('bug', 'defect')
     AND ji.created IS NOT NULL
   GROUP BY 1,2
 ),
@@ -573,7 +573,7 @@ jira AS (
 jira_bugs AS (
   SELECT *
   FROM jira
-  WHERE LOWER(issue_type) = 'bug'
+  WHERE LOWER(TRIM(issue_type)) IN ('bug', 'defect')
 ),
 jira_done_story_points AS (
   SELECT *
