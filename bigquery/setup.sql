@@ -31,6 +31,7 @@ DECLARE keep_objects ARRAY<STRING> DEFAULT [
   'jira_bug_events_daily',
   'jira_fix_fail_rate_daily',
   'jira_mttr_fixed_daily',
+  'jira_mttr_claimed_fixed_daily',
   'jira_active_bug_count_daily',
   'testrail_bvt_latest',
   'qa_kpi_facts',
@@ -407,6 +408,33 @@ FROM fixed_cohort fc
 JOIN bugs b
   ON b.issue_key = fc.issue_key
 WHERE fc.fixed_at >= b.created_at
+GROUP BY 1;
+
+CREATE OR REPLACE VIEW `qa_metrics.jira_mttr_claimed_fixed_daily` AS
+WITH claimed_fixed_events AS (
+  SELECT
+    sc.issue_key,
+    MIN(sc.changed_at) AS claimed_fixed_at
+  FROM `qa_metrics.jira_status_changes` sc
+  WHERE sc.to_status IN ('Resolved', 'Closed', 'Verified')
+  GROUP BY 1
+),
+bugs AS (
+  SELECT
+    issue_key,
+    created_at
+  FROM `qa_metrics.jira_issues_latest`
+  WHERE LOWER(issue_type) = 'bug'
+    AND created_at IS NOT NULL
+)
+SELECT
+  DATE(cfe.claimed_fixed_at) AS event_date,
+  AVG(TIMESTAMP_DIFF(cfe.claimed_fixed_at, b.created_at, SECOND) / 3600.0) AS avg_mttr_hours,
+  COUNT(DISTINCT cfe.issue_key) AS issues_count
+FROM claimed_fixed_events cfe
+JOIN bugs b
+  ON b.issue_key = cfe.issue_key
+WHERE cfe.claimed_fixed_at >= b.created_at
 GROUP BY 1;
 
 CREATE OR REPLACE VIEW `qa_metrics.jira_active_bug_count_daily` AS
