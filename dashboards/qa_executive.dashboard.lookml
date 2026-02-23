@@ -53,7 +53,7 @@
     body_text: "Top KPIs (current state): incident inflow, throughput, and live backlog. Each tile includes an info icon (i) with the KPI definition and calculation."
     row: 0
     col: 0
-    width: 16
+    width: 24
     height: 2
 
   - name: bugs_entered_today
@@ -73,7 +73,7 @@
     note_text: "Definition: Number of bugs/defects created today in Jira. Calculation: COUNT(issue_key) filtered by issue_type in (Bug, Defect) and created_date=today. Use: Detect daily intake spikes and compare against triage/fix capacity."
     row: 3
     col: 0
-    width: 3
+    width: 6
     height: 3
 
   - name: fixes_today
@@ -88,9 +88,10 @@
     note_display: hover
     note_text: "Definition: Bugs that moved to Fixed status today. Calculation: COUNT of changelog events with event_type=fixed and event_date=today. Note: This tile keeps a fixed daily window and does not depend on the global date_range filter."
     row: 3
-    col: 3
-    width: 3
+    col: 6
+    width: 6
     height: 3
+
 
   - name: active_bugs_now
     title: Active bugs now
@@ -107,9 +108,9 @@
       severity: jira_issues_latest.severity
     note_display: hover
     note_text: "Definition: Current active bug backlog. Calculation: COUNT of issues where statusCategory != Done. Use: Measure current operational pressure and pending closure volume."
-    row: 3
-    col: 6
-    width: 3
+    row: 6
+    col: 0
+    width: 24
     height: 3
 
   - name: qa_verification_queue_now
@@ -128,8 +129,8 @@
     note_display: hover
     note_text: "Definition: Current QA verification queue. Calculation: COUNT of bugs with qa_verification_state='QA Verification' (normalizes states such as Ready for QA, In QA, Awaiting QA Verification)."
     row: 3
-    col: 9
-    width: 3
+    col: 12
+    width: 6
     height: 3
 
   - name: awaiting_regression_now
@@ -148,17 +149,17 @@
     note_display: hover
     note_text: "Definition: Bugs waiting for or currently in regression. Calculation: COUNT with status in (Ready for Regression, In Regression). Use: Evaluate ongoing regression testing load."
     row: 3
-    col: 12
-    width: 3
+    col: 18
+    width: 6
     height: 3
 
   - name: header_incoming
     type: text
     title_text: "Incoming defects"
     body_text: "Bug intake analysis by severity and priority, with proportional distribution and daily trend."
-    row: 6
+    row: 9
     col: 0
-    width: 16
+    width: 24
     height: 2
 
   - name: entered_by_severity_7d
@@ -177,9 +178,9 @@
     note_display: hover
     note_text: "Definition: Percentage distribution of bugs created in the last 7 days by severity. Calculation: COUNT of bugs grouped by severity in a rolling 7-day window."
     series_colors: {critical: "#D64550", high: "#F28B30", medium: "#F2C94C", low: "#2D9CDB"}
-    row: 8
+    row: 11
     col: 0
-    width: 8
+    width: 12
     height: 6
 
   - name: entered_by_severity_30d
@@ -198,9 +199,9 @@
     note_display: hover
     note_text: "Definition: Percentage distribution of bugs created in the last 30 days by severity. Calculation: COUNT of bugs grouped by severity in a rolling 30-day window."
     series_colors: {critical: "#D64550", high: "#F28B30", medium: "#F2C94C", low: "#2D9CDB"}
-    row: 8
-    col: 8
-    width: 8
+    row: 11
+    col: 12
+    width: 12
     height: 6
 
 
@@ -222,9 +223,9 @@
     note_display: hover
     note_text: "Definition: Daily trend of incoming bugs by priority (last 7 days). Calculation: COUNT of bugs by created_date and priority. Use: Detect whether critical intake grows faster than resolution capacity."
     series_colors: {Highest: "#D64550", High: "#F28B30", Medium: "#F2C94C", Low: "#2D9CDB", Lowest: "#6FCF97"}
-    row: 14
+    row: 17
     col: 0
-    width: 16
+    width: 24
     height: 6
 
   - name: fixed_by_priority_7d
@@ -241,9 +242,9 @@
       date_range: jira_bug_events_daily.event_date_date
     note_display: hover
     note_text: "Definition: Distribution of bugs fixed in the last 7 days by priority. Calculation: COUNT of fixed events grouped by priority_label over a 7-day window."
-    row: 20
+    row: 23
     col: 0
-    width: 8
+    width: 12
     height: 6
 
   - name: fixed_by_priority_30d
@@ -260,9 +261,9 @@
       date_range: jira_bug_events_daily.event_date_date
     note_display: hover
     note_text: "Definition: Distribution of bugs fixed in the last 30 days by priority. Calculation: COUNT of fixed events grouped by priority_label over a 30-day window."
-    row: 20
-    col: 8
-    width: 8
+    row: 23
+    col: 12
+    width: 12
     height: 6
 
   - name: active_bugs_by_pod
@@ -281,9 +282,9 @@
       severity: jira_issues_latest.severity
     note_display: hover
     note_text: "Definition: Active backlog split by POD/team. Calculation: COUNT of active bugs (statusCategory != Done) grouped by team. Use: Balance workload across pods."
-    row: 26
+    row: 29
     col: 0
-    width: 8
+    width: 12
     height: 6
 
   - name: active_bugs_by_priority
@@ -302,9 +303,9 @@
       severity: jira_issues_latest.severity
     note_display: hover
     note_text: "Definition: Active backlog by current priority. Calculation: COUNT of active bugs grouped by priority. Use: Validate the mix of pending criticality."
-    row: 26
-    col: 8
-    width: 8
+    row: 29
+    col: 12
+    width: 12
     height: 6
 
   - name: bugs_by_current_status
@@ -322,9 +323,9 @@
       severity: jira_issues_latest.severity
     note_display: hover
     note_text: "Definition: Distribution of bugs by current Jira status. Calculation: COUNT of bugs grouped by status. Use: Identify bottlenecks in QA/dev workflow."
-    row: 32
+    row: 35
     col: 0
-    width: 8
+    width: 12
     height: 6
 
   - name: active_bug_count_over_time
@@ -339,9 +340,9 @@
     note_display: hover
     note_text: "Definition: Daily evolution of active bug inventory. Calculation: Daily active_bug_count snapshot by date. Use: See whether backlog is converging or diverging."
     series_colors: {jira_active_bug_count_daily.active_bug_count: "#2F80ED"}
-    row: 32
-    col: 8
-    width: 8
+    row: 35
+    col: 12
+    width: 12
     height: 6
 
   - name: reopened_over_time
@@ -358,9 +359,9 @@
     note_display: hover
     note_text: "Definition: Reopened bugs per day. Calculation: COUNT of changelog events with event_type=reopened by date. Use: Proxy for fix quality and functional escapes."
     series_colors: {jira_bug_events_daily.bugs: "#EB5757"}
-    row: 38
+    row: 41
     col: 0
-    width: 8
+    width: 12
     height: 6
 
   - name: fix_version_proxy_milestone
@@ -379,18 +380,18 @@
       severity: jira_issues_latest.severity
     note_display: hover
     note_text: "Definition: Active bugs by fixVersion (milestone proxy). Calculation: COUNT of active bugs grouped by fix_versions. Use: Prioritize by release/milestone."
-    row: 38
-    col: 8
-    width: 8
+    row: 41
+    col: 12
+    width: 12
     height: 6
 
   - name: header_bugsnag
     type: text
     title_text: "BugSnag"
     body_text: "Production stability: active error volume and BugSnag severity mix."
-    row: 44
+    row: 47
     col: 0
-    width: 16
+    width: 24
     height: 2
 
   - name: bugsnag_active_errors
@@ -401,9 +402,9 @@
     fields: [bugsnag_errors_latest.active_errors]
     note_display: hover
     note_text: "Definition: Active production errors not yet closed. Calculation: COUNT of errors where status is not in resolved/closed."
-    row: 46
+    row: 49
     col: 0
-    width: 4
+    width: 6
     height: 3
 
   - name: bugsnag_high_critical_active
@@ -414,9 +415,9 @@
     fields: [bugsnag_errors_latest.high_critical_active_errors]
     note_display: hover
     note_text: "Definition: Highest-impact subset of active errors. Calculation: COUNT of active errors with severity in (critical, error)."
-    row: 46
-    col: 4
-    width: 4
+    row: 49
+    col: 6
+    width: 6
     height: 3
 
   - name: bugsnag_active_by_severity
@@ -428,18 +429,18 @@
     note_display: hover
     note_text: "Definition: Composition of active errors by severity. Calculation: COUNT of active_errors grouped by severity. Use: Understand the current risk profile."
     series_colors: {critical: "#D64550", error: "#F28B30", warning: "#F2C94C", info: "#56CCF2"}
-    row: 46
-    col: 8
-    width: 8
+    row: 49
+    col: 12
+    width: 12
     height: 6
 
   - name: header_gamebench
     type: text
     title_text: "GameBench"
     body_text: "Gameplay performance: current snapshots and trends by platform/environment."
-    row: 52
+    row: 55
     col: 0
-    width: 16
+    width: 24
     height: 2
 
   - name: current_fps_by_platform
@@ -456,9 +457,9 @@
       platform: gamebench_daily_metrics.platform
     note_display: hover
     note_text: "Definition: Snapshot of median FPS by platform on the most recent available day. Calculation: median_fps for metric_date within 1 day."
-    row: 54
+    row: 57
     col: 0
-    width: 8
+    width: 12
     height: 5
 
   - name: current_session_stability
@@ -474,9 +475,9 @@
       platform: gamebench_daily_metrics.platform
     note_display: hover
     note_text: "Definition: Current session stability proxy. Calculation: fps_stability_pct on the most recent date. Note: Used as a proxy because crash-free sessions are not available in this explore."
-    row: 54
-    col: 8
-    width: 8
+    row: 57
+    col: 12
+    width: 12
     height: 5
 
   - name: gb_median_fps_7d
@@ -494,18 +495,18 @@
     note_display: hover
     note_text: "Definition: Daily median FPS trend by platform. Calculation: median_fps by date pivoted by platform, governed by the global date_range."
     series_colors: {Android: "#27AE60", iOS: "#2D9CDB"}
-    row: 59
+    row: 62
     col: 0
-    width: 16
+    width: 24
     height: 6
 
   - name: header_ops
     type: text
     title_text: "Operational QA metrics"
     body_text: "Operational QA metrics: fix quality, resolution speed, build size, and test execution."
-    row: 65
+    row: 68
     col: 0
-    width: 16
+    width: 24
     height: 2
 
   - name: jira_fix_fail_rate_trend
@@ -520,9 +521,9 @@
     note_display: hover
     note_text: "Definition: Daily fix fail rate. Calculation: reopened/fixed per day. Interpretation: Higher values mean more fixes return due to regressions or insufficient coverage."
     series_colors: {jira_fix_fail_rate_daily.fix_fail_rate: "#EB5757"}
-    row: 67
+    row: 70
     col: 0
-    width: 8
+    width: 12
     height: 6
 
   - name: jira_mttr_hours_trend
@@ -539,9 +540,9 @@
     note_display: hover
     note_text: "Definition: Daily operational MTTR in hours. Calculation: average(first transition to Resolved/Closed/Verified - created_at), aggregated by claimed fixed date."
     series_colors: {jira_mttr_claimed_fixed_daily.avg_mttr_hours: "#9B51E0"}
-    row: 67
-    col: 8
-    width: 8
+    row: 70
+    col: 12
+    width: 12
     height: 6
 
   - name: current_build_size_by_platform
@@ -555,9 +556,9 @@
     sorts: [build_size_manual.metric_date_date desc, build_size_manual.platform]
     note_display: hover
     note_text: "Definition: Most recent build size by platform/environment. Calculation: Snapshot from manual table within a 7-day window ordered by descending date."
-    row: 73
+    row: 76
     col: 0
-    width: 8
+    width: 12
     height: 4
 
   - name: build_size_mb_trend
@@ -573,18 +574,18 @@
     note_display: hover
     note_text: "Definition: Build size evolution in MB by platform. Calculation: build_size_mb by date pivoted by platform."
     series_colors: {Android: "#27AE60", iOS: "#2D9CDB"}
-    row: 77
+    row: 80
     col: 0
-    width: 8
+    width: 12
     height: 6
 
   - name: header_testrail
     type: text
     title_text: "TestRail"
     body_text: "TestRail execution health: daily throughput and quality signal from the latest run/build."
-    row: 73
-    col: 8
-    width: 8
+    row: 76
+    col: 12
+    width: 12
     height: 2
 
   - name: testcases_completed_by_day_7d
@@ -601,9 +602,9 @@
     note_display: hover
     note_text: "Definition: Executed test cases per day (excludes untested). Calculation: passed+failed+blocked+retest by completed_on, controlled by global date_range."
     series_colors: {testrail_runs_latest.executed_cases: "#2D9CDB"}
-    row: 75
-    col: 8
-    width: 8
+    row: 78
+    col: 12
+    width: 12
     height: 4
 
   - name: current_pass_rate
@@ -620,9 +621,9 @@
       date_range: testrail_runs_latest.completed_on_date
     note_display: hover
     note_text: "Definition: Pass rate of the latest completed run. Calculation: SUM(passed)/SUM(passed+failed+blocked+retest) using the most recent run by completed_on and run_id."
-    row: 79
-    col: 8
-    width: 4
+    row: 82
+    col: 12
+    width: 6
     height: 3
 
   - name: bvt_pass_rate_latest_build
@@ -637,7 +638,7 @@
       date_range: testrail_bvt_latest.completed_on_date
     note_display: hover
     note_text: "Definition: BVT pass rate for the latest available build/run. Calculation: pass_rate from testrail_bvt_latest for the most recent record."
-    row: 79
-    col: 12
-    width: 4
+    row: 82
+    col: 18
+    width: 6
     height: 3
