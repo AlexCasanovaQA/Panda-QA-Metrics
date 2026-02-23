@@ -95,6 +95,17 @@ For manual/source-fed tables, ensure an equivalent daily load process exists:
 - `qa_metrics.build_size_manual`
 - `qa_metrics.gamebench_daily_metrics`
 
+### Gamebench daily aggregate refresh
+Use `bigquery/gamebench_daily_refresh.sql` to upsert daily Gamebench aggregates into `qa_metrics.gamebench_daily_metrics`.
+
+Recommended frequency:
+- At least once per day (UTC), preferably right after `ingest-gamebench` completes.
+- Optional: every 4-6 hours if you need fresher performance telemetry tiles.
+
+Orchestration options:
+- **Workflow-integrated (included):** `workflows/qa_metrics_ingestion.yaml` now runs the BigQuery `MERGE` as a `gamebench_daily_refresh` step after Android/iOS ingestion calls.
+- **Scheduled Query + Cloud Scheduler:** create a BigQuery Scheduled Query that executes `bigquery/gamebench_daily_refresh.sql`, then trigger it after your ingestion workflow.
+
 If these refreshes are skipped, Looker explores can compile correctly but charts may render with no rows.
 
 ## 3) Field Mapping (per your requirements)
