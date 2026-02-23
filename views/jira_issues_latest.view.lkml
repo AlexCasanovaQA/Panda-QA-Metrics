@@ -9,6 +9,18 @@ view: jira_issues_latest {
 
   dimension: issue_type { type: string sql: ${TABLE}.issue_type ;; }
   dimension: status { type: string sql: ${TABLE}.status ;; }
+  dimension: qa_verification_state {
+    type: string
+    sql:
+      CASE
+        WHEN REGEXP_CONTAINS(
+          LOWER(COALESCE(${TABLE}.status, '')),
+          r'(ready\\s*for\\s*qa|in\\s*qa|awaiting\\s*qa\\s*verification|qa\\s*verification|qa\\s*review|ready\\s*for\\s*verification|in\\s*verification)'
+        ) THEN 'QA Verification'
+        ELSE 'Other'
+      END ;;
+    description: "Normalized QA verification state based on Jira status patterns to avoid project-specific hardcoded status lists in dashboards."
+  }
   dimension: status_category { type: string sql: ${TABLE}.status_category ;; }
   dimension: priority { type: string sql: ${TABLE}.priority ;; }
   dimension: severity { type: string sql: ${TABLE}.severity ;; }

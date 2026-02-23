@@ -68,7 +68,7 @@
     note_text: "Jira | Count of bugs created today."
     row: 3
     col: 0
-    width: 4
+    width: 3
     height: 3
 
   - name: fixes_today
@@ -82,8 +82,8 @@
       jira_bug_events_daily.event_date_date: "today"
     note_text: "Jira (changelog) | Bugs transitioned to Fixed today. Fixed-window tile: event_date_date=today takes precedence over dashboard date_range."
     row: 3
-    col: 4
-    width: 4
+    col: 3
+    width: 3
     height: 3
 
   - name: active_bugs_now
@@ -101,8 +101,27 @@
       severity: jira_issues_latest.severity
     note_text: "Jira | Current bugs where statusCategory != Done."
     row: 3
-    col: 8
-    width: 4
+    col: 6
+    width: 3
+    height: 3
+
+  - name: qa_verification_queue_now
+    title: QA verification queue now
+    type: single_value
+    model: panda_qa_metrics
+    explore: jira_issues_latest
+    fields: [jira_issues_latest.issues]
+    filters:
+      jira_issues_latest.issue_type: "Bug,Defect"
+      jira_issues_latest.qa_verification_state: "QA Verification"
+    listen:
+      pod: jira_issues_latest.team
+      priority: jira_issues_latest.priority
+      severity: jira_issues_latest.severity
+    note_text: "Jira | Bugs currently in normalized QA verification states (e.g., Ready for QA, In QA, Awaiting QA Verification)."
+    row: 3
+    col: 9
+    width: 3
     height: 3
 
   - name: awaiting_regression_now
@@ -121,7 +140,7 @@
     note_text: "Jira | Bugs currently in agreed regression states (Ready for Regression, In Regression)."
     row: 3
     col: 12
-    width: 4
+    width: 3
     height: 3
 
   - name: header_incoming
