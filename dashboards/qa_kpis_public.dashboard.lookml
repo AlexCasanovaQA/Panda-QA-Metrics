@@ -15,11 +15,11 @@
     explore: qa_kpi_facts
     field: qa_kpi_facts.pod
   - name: priority
-	title: Priority
-	type: field_filter
-	model: panda_qa_metrics
-	explore: qa_kpi_facts
-	field: qa_kpi_facts.priority_label
+    title: Priority
+    type: field_filter
+    model: panda_qa_metrics
+    explore: qa_kpi_facts
+    field: qa_kpi_facts.priority_label
   - name: feature
     title: Feature
     type: field_filter
