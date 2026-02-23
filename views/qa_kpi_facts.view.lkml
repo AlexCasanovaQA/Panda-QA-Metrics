@@ -71,8 +71,18 @@ view: qa_kpi_facts {
   }
 
   dimension: severity {
+    label: "Severity"
     type: string
-    sql: COALESCE(NULLIF(${TABLE}.severity, ''), '(unknown)') ;;
+    sql:
+      CASE
+        WHEN ${TABLE}.severity IS NULL OR TRIM(${TABLE}.severity) = '' THEN '(unknown)'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s0|sev[\s_-]*0|blocker|showstopper)') THEN '(S0) Blocker'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s1|sev[\s_-]*1|critical|high)') THEN '(S1) Critical'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s2|sev[\s_-]*2|major|medium|moderate)') THEN '(S2) Major'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s3|sev[\s_-]*3|minor|low)') THEN '(S3) Minor'
+        WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s4|sev[\s_-]*4|trivial|lowest)') THEN '(S4) Trivial'
+        ELSE ${TABLE}.severity
+      END ;;
   }
 
   dimension: unit {

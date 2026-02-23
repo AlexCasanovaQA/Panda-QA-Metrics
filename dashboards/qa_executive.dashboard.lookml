@@ -179,7 +179,7 @@
     note_text: "Definition: Percentage distribution of bugs created within the selected Date Range by severity. Calculation: COUNT of bugs grouped by severity for the current Date Range filter."
     show_value_labels: true
     label_type: labPer
-    series_colors: {Critical: "#D64550", High: "#F28B30", Medium: "#F2C94C", Low: "#2D9CDB", "(unknown)": "#BDBDBD"}
+    series_colors: {"(S0) Blocker": "#D64550", "(S1) Critical": "#F28B30", "(S2) Major": "#F2C94C", "(S3) Minor": "#2D9CDB", "(S4) Trivial": "#6FCF97", "(unknown)": "#BDBDBD"}
     row: 11
     col: 0
     width: 24
