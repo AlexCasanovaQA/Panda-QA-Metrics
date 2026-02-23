@@ -3,6 +3,7 @@ import os
 import time
 import random
 from datetime import datetime, timezone, timedelta
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
 import google.auth
@@ -31,14 +32,17 @@ BASE_BACKOFF = float(os.environ.get("BASE_BACKOFF_SECONDS", "1.0"))
 MAX_BACKOFF = float(os.environ.get("MAX_BACKOFF_SECONDS", "30.0"))
 
 # ----------------- Secrets -----------------
+@lru_cache(maxsize=None)
 def get_secret(name: str) -> str:
     secret_name = f"projects/{PROJECT_ID}/secrets/{name}/versions/latest"
     resp = sm.access_secret_version(request={"name": secret_name})
     return resp.payload.data.decode("utf-8").strip()
 
+@lru_cache(maxsize=1)
 def testrail_auth() -> Tuple[str, str]:
     return (get_secret("TESTRAIL_USER"), get_secret("TESTRAIL_API_KEY"))
 
+@lru_cache(maxsize=1)
 def testrail_base_url() -> str:
     base = get_secret("TESTRAIL_BASE_URL").rstrip("/")
     if not base.endswith("index.php?/api/v2"):
@@ -111,7 +115,7 @@ def get_last_created_on() -> datetime:
     return ts - timedelta(days=OVERLAP_DAYS)
 
 # ----------------- HTTP -----------------
-def request_with_retries(method: str, url: str, *, auth: Tuple[str,str]) -> requests.Response:
+def request_with_retries(method: str, url: str, *, auth: Tuple[str, str]) -> requests.Response:
     last_exc: Optional[Exception] = None
     for attempt in range(MAX_RETRIES):
         try:
@@ -130,46 +134,88 @@ def request_with_retries(method: str, url: str, *, auth: Tuple[str,str]) -> requ
             time.sleep(backoff + jitter)
     raise RuntimeError(f"HTTP failed after retries: {last_exc}")
 
+
+def _iter_paginated(path: str, *, auth: Tuple[str, str]) -> List[Dict[str, Any]]:
+    """Collect paginated TestRail v2 API responses.
+
+    Supports both legacy list responses and the object style with
+    {_links, offset, limit, size, <entity_plural>}.
+    """
+    base = testrail_base_url()
+    page_size = int(os.environ.get("TESTRAIL_PAGE_SIZE", "250"))
+    offset = 0
+    aggregated: List[Dict[str, Any]] = []
+
+    while True:
+        url = f"{base}/{path}&limit={page_size}&offset={offset}"
+        resp = request_with_retries("GET", url, auth=auth)
+        data = resp.json()
+
+        if isinstance(data, dict) and data.get("error"):
+            raise RuntimeError(f"TestRail API error on {path}: {data.get('error')}")
+
+        if isinstance(data, list):
+            aggregated.extend(item for item in data if isinstance(item, dict))
+            break
+
+        if not isinstance(data, dict):
+            raise RuntimeError(
+                f"Unexpected TestRail response type for {path}: {type(data).__name__}: {str(data)[:200]}"
+            )
+
+        entity_list = None
+        for key in ("runs", "results"):
+            if key in data:
+                entity_list = data.get(key) or []
+                break
+        if entity_list is None:
+            # Fallback for unknown object formats.
+            entity_list = []
+
+        aggregated.extend(item for item in entity_list if isinstance(item, dict))
+
+        size = data.get("size")
+        limit = data.get("limit")
+        current_offset = data.get("offset", offset)
+        links = data.get("_links") if isinstance(data.get("_links"), dict) else {}
+        next_link = links.get("next") if isinstance(links, dict) else None
+
+        if next_link:
+            offset = current_offset + (limit or page_size)
+            continue
+
+        if isinstance(size, int) and isinstance(current_offset, int):
+            if current_offset + (limit or page_size) >= size:
+                break
+            offset = current_offset + (limit or page_size)
+            continue
+
+        if len(entity_list) < page_size:
+            break
+        offset += page_size
+
+    return aggregated
+
 # ----------------- Fetch -----------------
 def fetch_runs(project_id: int, since_ts: datetime) -> List[Dict[str, Any]]:
-    base = testrail_base_url()
     created_after = int(since_ts.timestamp())
-    url = f"{base}/get_runs/{project_id}&created_after={created_after}&include_all=1"
-    resp = request_with_retries("GET", url, auth=testrail_auth())
-
-    data = resp.json()
-
-    if isinstance(data, dict):
-        if data.get("error"):
-            raise RuntimeError(f"TestRail get_runs error for project {project_id}: {data.get('error')}")
-        runs = data.get("runs") or []
-    elif isinstance(data, list):
-        runs = data
-    else:
-        raise RuntimeError(
-            f"Unexpected TestRail get_runs response type for project {project_id}: {type(data).__name__}: {str(data)[:200]}"
-        )
-
+    path = f"get_runs/{project_id}&created_after={created_after}&include_all=1"
+    runs = _iter_paginated(path, auth=testrail_auth())
     return [r for r in runs if isinstance(r, dict)]
 
 
 def fetch_results_for_run(run_id: int) -> List[Dict[str, Any]]:
-    base = testrail_base_url()
-    url = f"{base}/get_results_for_run/{run_id}"
-    resp = request_with_retries("GET", url, auth=testrail_auth())
+    path = f"get_results_for_run/{run_id}"
+    return _iter_paginated(path, auth=testrail_auth())
 
-    data = resp.json()
-    if isinstance(data, dict) and data.get("error"):
-        raise RuntimeError(f"TestRail get_results_for_run error for run {run_id}: {data.get('error')}")
-    if isinstance(data, list):
-        return [r for r in data if isinstance(r, dict)]
-    if isinstance(data, dict) and "results" in data:
-        results = data.get("results") or []
-        return [r for r in results if isinstance(r, dict)]
 
-    raise RuntimeError(
-        f"Unexpected TestRail get_results_for_run response type for run {run_id}: {type(data).__name__}: {str(data)[:200]}"
-    )
+def _safe_int(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 # ----------------- Entry -----------------
 def hello_http(request):
@@ -199,11 +245,13 @@ def hello_http(request):
                 if (time.monotonic() - started) > (MAX_RUNTIME_SECONDS - 10):
                     break
 
-                run_id = int(run.get("id"))
+                run_id = _safe_int(run.get("id"))
+                if run_id is None:
+                    continue
                 run_name = run.get("name")
-                suite_id = run.get("suite_id")
-                plan_id = run.get("plan_id")
-                milestone_id = run.get("milestone_id")
+                suite_id = _safe_int(run.get("suite_id"))
+                plan_id = _safe_int(run.get("plan_id"))
+                milestone_id = _safe_int(run.get("milestone_id"))
                 url = run.get("url")
 
                 results = fetch_results_for_run(run_id)
@@ -216,21 +264,21 @@ def hello_http(request):
 
                     rows.append({
                         "project_id": int(pid),
-                        "run_id": int(run_id),
+                        "run_id": run_id,
                         "run_name": run_name,
                         "suite_id": suite_id,
                         "plan_id": plan_id,
                         "milestone_id": milestone_id,
                         "url": url,
 
-                        "test_id": test_id,
-                        "case_id": case_id,
-                        "result_id": result_id,
+                        "test_id": _safe_int(test_id),
+                        "case_id": _safe_int(case_id),
+                        "result_id": _safe_int(result_id),
 
-                        "status_id": res.get("status_id"),
-                        "created_on": datetime.fromtimestamp(created_on, timezone.utc).isoformat().replace("+00:00", "Z") if created_on else None,
-                        "created_by": res.get("created_by"),
-                        "assignedto_id": res.get("assignedto_id"),
+                        "status_id": _safe_int(res.get("status_id")),
+                        "created_on": datetime.fromtimestamp(int(created_on), timezone.utc).isoformat().replace("+00:00", "Z") if created_on else None,
+                        "created_by": _safe_int(res.get("created_by")),
+                        "assignedto_id": _safe_int(res.get("assignedto_id")),
 
                         "comment": res.get("comment"),
                         "defects": ",".join(res.get("defects") or []) if isinstance(res.get("defects"), list) else res.get("defects"),
@@ -242,7 +290,8 @@ def hello_http(request):
                     })
 
                     # insertId: unique result
-                    row_ids.append(f"{pid}:{run_id}:{result_id}" if result_id else None)
+                    stable_result_id = _safe_int(result_id)
+                    row_ids.append(f"{pid}:{run_id}:{stable_result_id}" if stable_result_id else None)
 
                 runs_scanned += 1
 
