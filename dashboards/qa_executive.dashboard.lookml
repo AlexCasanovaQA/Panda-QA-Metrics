@@ -494,12 +494,14 @@
     title: Trend | MTTR (hours) over time
     type: looker_line
     model: panda_qa_metrics
-    explore: jira_mttr_fixed_daily
-    fields: [jira_mttr_fixed_daily.event_date_date, jira_mttr_fixed_daily.avg_mttr_hours]
-    sorts: [jira_mttr_fixed_daily.event_date_date]
+    explore: jira_mttr_claimed_fixed_daily
+    fields: [jira_mttr_claimed_fixed_daily.event_date_date, jira_mttr_claimed_fixed_daily.avg_mttr_hours]
+    filters:
+      jira_mttr_claimed_fixed_daily.event_date_date: "7 days"
+    sorts: [jira_mttr_claimed_fixed_daily.event_date_date]
     listen:
-      date_range: jira_mttr_fixed_daily.event_date_date
-    note_text: "Jira | Average hours from created to fixed for bugs fixed each day."
+      date_range: jira_mttr_claimed_fixed_daily.event_date_date
+    note_text: "Jira (changelog) | MTTR operativo = promedio de horas entre created_at del bug y su PRIMERA transición de estado a Resolved/Closed/Verified (evento claimed fixed), agregado por día del claimed fixed."
     row: 66
     col: 8
     width: 8
