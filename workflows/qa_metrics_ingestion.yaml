@@ -33,9 +33,9 @@ main:
               project_keys: ${[project_key]}
               lookback_days: ${lookback_days}
 
-          # ingest-jira-changelog acepta project_key
+          # ingest-jira-changelog REQUIERE project_keys (lista)
           - payload_changelog:
-              project_key: ${project_key}
+              project_keys: ${[project_key]}
               lookback_days: ${lookback_days}
 
           # test runs / results suelen ser incremental y pueden ignorar body,
