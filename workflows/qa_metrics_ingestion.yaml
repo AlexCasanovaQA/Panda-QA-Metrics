@@ -421,9 +421,10 @@ main:
 
             - gamebench_data_quality_parse:
                 assign:
-                  - gb_dq_fields: ${map.get(list.get(default(map.get(gb_dq_resp, "rows"), []), 0), "f")}
-                  - gb_dq_sessions_count: ${int(map.get(list.get(gb_dq_fields, 0), "v"))}
-                  - gb_dq_daily_count: ${int(map.get(list.get(gb_dq_fields, 1), "v"))}
+                  - gb_dq_rows: ${default(map.get(gb_dq_resp, "rows"), [])}
+                  - gb_dq_fields: ${if(len(gb_dq_rows) > 0, default(map.get(gb_dq_rows[0], "f"), []), [])}
+                  - gb_dq_sessions_count: ${if(len(gb_dq_fields) > 0, int(default(map.get(gb_dq_fields[0], "v"), "0")), 0)}
+                  - gb_dq_daily_count: ${if(len(gb_dq_fields) > 1, int(default(map.get(gb_dq_fields[1], "v"), "0")), 0)}
                   - gb_dq_is_ok: ${gb_dq_sessions_count > 0 and gb_dq_daily_count > 0}
                   - results.gamebench_data_quality:
                       checks:
