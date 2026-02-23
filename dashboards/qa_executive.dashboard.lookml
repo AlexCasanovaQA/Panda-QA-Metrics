@@ -163,20 +163,20 @@
     height: 2
 
   - name: entered_by_severity_7d
-    title: Entered (last 7d) by Severity
+    title: Entered (Date Range) by Severity
     type: looker_pie
     model: panda_qa_metrics
     explore: jira_issues_latest
     fields: [jira_issues_latest.severity, jira_issues_latest.issues]
     filters:
       jira_issues_latest.issue_type: "Bug,Defect"
-      jira_issues_latest.created_date: "7 days"
     listen:
+      date_range: jira_issues_latest.created_date
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
     note_display: hover
-    note_text: "Definition: Percentage distribution of bugs created in the last 7 days by severity. Calculation: COUNT of bugs grouped by severity in a rolling 7-day window."
+    note_text: "Definition: Percentage distribution of bugs created within the selected Date Range by severity. Calculation: COUNT of bugs grouped by severity for the current Date Range filter."
     series_colors: {critical: "#D64550", high: "#F28B30", medium: "#F2C94C", low: "#2D9CDB"}
     row: 11
     col: 0
@@ -184,20 +184,20 @@
     height: 6
 
   - name: entered_by_severity_30d
-    title: Entered (last 30d) by Severity
+    title: Entered (Date Range) by Severity
     type: looker_pie
     model: panda_qa_metrics
     explore: jira_issues_latest
     fields: [jira_issues_latest.severity, jira_issues_latest.issues]
     filters:
       jira_issues_latest.issue_type: "Bug,Defect"
-      jira_issues_latest.created_date: "30 days"
     listen:
+      date_range: jira_issues_latest.created_date
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
     note_display: hover
-    note_text: "Definition: Percentage distribution of bugs created in the last 30 days by severity. Calculation: COUNT of bugs grouped by severity in a rolling 30-day window."
+    note_text: "Definition: Percentage distribution of bugs created within the selected Date Range by severity. Calculation: COUNT of bugs grouped by severity for the current Date Range filter."
     series_colors: {critical: "#D64550", high: "#F28B30", medium: "#F2C94C", low: "#2D9CDB"}
     row: 11
     col: 12
@@ -206,7 +206,7 @@
 
 
   - name: incoming_bugs_created_daily_by_priority
-    title: Incoming bugs created daily (last 7d)
+    title: Incoming bugs created daily (Date Range)
     type: looker_column
     model: panda_qa_metrics
     explore: jira_issues_latest
@@ -214,14 +214,14 @@
     pivots: [jira_issues_latest.priority]
     filters:
       jira_issues_latest.issue_type: "Bug,Defect"
-      jira_issues_latest.created_date: "7 days"
     sorts: [jira_issues_latest.created_date]
     listen:
+      date_range: jira_issues_latest.created_date
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
     note_display: hover
-    note_text: "Definition: Daily trend of incoming bugs by priority (last 7 days). Calculation: COUNT of bugs by created_date and priority. Use: Detect whether critical intake grows faster than resolution capacity."
+    note_text: "Definition: Daily trend of incoming bugs by priority for the selected Date Range. Calculation: COUNT of bugs by created_date and priority. Use: Detect whether critical intake grows faster than resolution capacity."
     series_colors: {Highest: "#D64550", High: "#F28B30", Medium: "#F2C94C", Low: "#2D9CDB", Lowest: "#6FCF97"}
     row: 17
     col: 0
@@ -229,38 +229,36 @@
     height: 6
 
   - name: fixed_by_priority_7d
-    title: Fixed (last 7d) by Priority
+    title: Fixed (Date Range) by Priority
     type: looker_pie
     model: panda_qa_metrics
     explore: jira_bug_events_daily
     fields: [jira_bug_events_daily.priority_label, jira_bug_events_daily.bugs]
     filters:
       jira_bug_events_daily.event_type: "fixed"
-      jira_bug_events_daily.event_date_date: "7 days"
     sorts: [jira_bug_events_daily.bugs desc]
     listen:
       date_range: jira_bug_events_daily.event_date_date
     note_display: hover
-    note_text: "Definition: Distribution of bugs fixed in the last 7 days by priority. Calculation: COUNT of fixed events grouped by priority_label over a 7-day window."
+    note_text: "Definition: Distribution of bugs fixed within the selected Date Range by priority. Calculation: COUNT of fixed events grouped by priority_label for the current Date Range filter."
     row: 23
     col: 0
     width: 12
     height: 6
 
   - name: fixed_by_priority_30d
-    title: Fixed (last 30d) by Priority
+    title: Fixed (Date Range) by Priority
     type: looker_pie
     model: panda_qa_metrics
     explore: jira_bug_events_daily
     fields: [jira_bug_events_daily.priority_label, jira_bug_events_daily.bugs]
     filters:
       jira_bug_events_daily.event_type: "fixed"
-      jira_bug_events_daily.event_date_date: "30 days"
     sorts: [jira_bug_events_daily.bugs desc]
     listen:
       date_range: jira_bug_events_daily.event_date_date
     note_display: hover
-    note_text: "Definition: Distribution of bugs fixed in the last 30 days by priority. Calculation: COUNT of fixed events grouped by priority_label over a 30-day window."
+    note_text: "Definition: Distribution of bugs fixed within the selected Date Range by priority. Calculation: COUNT of fixed events grouped by priority_label for the current Date Range filter."
     row: 23
     col: 12
     width: 12
