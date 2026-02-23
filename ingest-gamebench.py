@@ -3,6 +3,7 @@ import os
 import time
 import random
 import re
+from functools import lru_cache
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -43,10 +44,12 @@ def _secret(name: str) -> str:
     sname = f"projects/{PROJECT_ID}/secrets/{name}/versions/latest"
     return sm.access_secret_version(request={"name": sname}).payload.data.decode("utf-8").strip()
 
+@lru_cache(maxsize=1)
+def _token() -> str:
+    return _secret("GAMEBENCH_TOKEN")
+
 def _auth() -> Tuple[str, str]:
-    # Docs: use Basic auth username:api_token  citeturn0search0
-    token = _secret("GAMEBENCH_TOKEN")
-    return (DEFAULT_USER, token)
+    return (DEFAULT_USER, _token())
 
 def _req(method: str, url: str, *, json_body: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> requests.Response:
     last_exc: Optional[Exception] = None
@@ -84,8 +87,22 @@ def _parse_ts(v: Any) -> Optional[str]:
         sec = v / 1000.0 if v > 1e12 else v
         return datetime.fromtimestamp(sec, timezone.utc).isoformat().replace("+00:00", "Z")
     if isinstance(v, str):
-        return v
+        s = v.strip()
+        if not s:
+            return None
+        # Keep as-is for unknown formats, but normalize common UTC suffix.
+        return s.replace("+00:00", "Z")
     return None
+
+def _to_dt(v: Any) -> Optional[datetime]:
+    ts = _parse_ts(v)
+    if not ts:
+        return None
+    try:
+        parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 def _get(d: Dict[str, Any], *keys, default=None):
     cur: Any = d
@@ -121,10 +138,15 @@ def ensure_table_exists() -> None:
     # Table is created via SQL, but keep safe.
     pass
 
-def search_sessions(company_id: str, apps: List[str], page: int) -> List[Dict[str, Any]]:
+def search_sessions(company_id: str, collection_id: str, apps: List[str], page: int) -> List[Dict[str, Any]]:
     url = f"{BASE_URL.rstrip('/')}/v1/sessions"
     params = {"company": company_id, "pageSize": PAGE_SIZE, "page": page, "sort": "timePushed:desc"}
-    body = {"apps": apps, "devices": [], "manufacturers": []}
+    body = {
+        "apps": apps,
+        "devices": [],
+        "manufacturers": [],
+        "collectionId": collection_id,
+    }
     data = _req("POST", url, json_body=body, params=params).json()
     # Response is typically {sessions:[...], total:...} or a list; handle both
     if isinstance(data, dict):
@@ -147,9 +169,26 @@ def upsert_rows(rows: List[Dict[str, Any]]) -> int:
         raise RuntimeError(str(errors)[:1200])
     return len(rows)
 
+def _sanitize_days(v: Any) -> int:
+    try:
+        days = int(v)
+    except Exception:
+        return 7
+    return min(max(days, 1), 365)
+
+def _normalize_apps(app_packages: Any) -> List[str]:
+    if isinstance(app_packages, list):
+        return [str(x).strip() for x in app_packages if str(x).strip()]
+    if isinstance(app_packages, str):
+        return _split_packages(app_packages)
+    return _split_packages(DEFAULT_APP_PACKAGES)
+
 def ingest(days: int, platform: Optional[str], company_id: str, collection_id: str, app_packages: List[str]) -> Dict[str, Any]:
     since = datetime.now(timezone.utc) - timedelta(days=days)
     ingested_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    if not app_packages:
+        raise ValueError("No app packages provided. Set GAMEBENCH_APP_PACKAGES or pass app_packages.")
 
     fetched = 0
     inserted = 0
@@ -157,27 +196,22 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
 
     for page in range(0, 500):
         pages += 1
-        sessions = search_sessions(company_id, app_packages, page)
+        sessions = search_sessions(company_id, collection_id, app_packages, page)
         if not sessions:
             break
+
+        rows_to_insert: List[Dict[str, Any]] = []
 
         for s in sessions:
             sid = _get(s, "id") or _get(s, "sessionId") or _get(s, "_id")
             if not sid:
                 continue
 
-            tp = _parse_ts(_get(s, "timePushed") or _get(s, "time_pushed"))
-            # if we can't parse, fetch details anyway
-            if tp:
-                # parse to dt for cutoff
-                try:
-                    # handle Z / +00:00
-                    tps = tp.replace("Z", "+00:00")
-                    dtp = datetime.fromisoformat(tps)
-                except Exception:
-                    dtp = None
-                if dtp and dtp < since:
-                    return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted}
+            dtp = _to_dt(_get(s, "timePushed") or _get(s, "time_pushed"))
+            if dtp and dtp < since:
+                if rows_to_insert:
+                    inserted += upsert_rows(rows_to_insert)
+                return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted}
 
             # Fetch details for metrics
             detail = get_session(str(sid))
@@ -225,10 +259,22 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
                 "_ingested_at": ingested_at,
             }
 
-            inserted += upsert_rows([row])
+            rows_to_insert.append(row)
+
+            if len(rows_to_insert) >= 100:
+                inserted += upsert_rows(rows_to_insert)
+                rows_to_insert = []
 
             if inserted >= MAX_SESSIONS_PER_RUN:
+                if rows_to_insert:
+                    inserted += upsert_rows(rows_to_insert)
                 return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted, "stopped": "max_sessions"}
+
+        if rows_to_insert:
+            inserted += upsert_rows(rows_to_insert)
+
+        if inserted >= MAX_SESSIONS_PER_RUN:
+            return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted, "stopped": "max_sessions"}
 
         # continue pages
 
@@ -236,16 +282,11 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
 
 def ingest_gamebench(request):
     body = request.get_json(silent=True) or {}
-    days = int(body.get("days", 7))
+    days = _sanitize_days(body.get("days", 7))
     platform = body.get("platform")  # android/ios or None
     company_id = body.get("company_id") or DEFAULT_COMPANY_ID
     collection_id = body.get("collection_id") or DEFAULT_COLLECTION_ID
-
-    app_packages = body.get("app_packages")
-    if isinstance(app_packages, list):
-        apps = app_packages
-    else:
-        apps = _split_packages(DEFAULT_APP_PACKAGES)
+    apps = _normalize_apps(body.get("app_packages"))
 
     try:
         result = ingest(days=days, platform=platform, company_id=company_id, collection_id=collection_id, app_packages=apps)
