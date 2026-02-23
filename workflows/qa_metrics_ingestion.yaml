@@ -3,7 +3,8 @@ main:
   steps:
     - init:
         assign:
-          - request_args: ${default(args, {})}
+          - request_args: {}
+          - request_args: ${default(args, request_args)}
           - days: ${default(map.get(request_args, "days"), 7)}
           - lookback_days: ${default(map.get(request_args, "lookback_days"), 90)}
           - project_key: ${default(map.get(request_args, "project_key"), "PC")}
