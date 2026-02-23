@@ -1,468 +1,257 @@
-"""Ingest GameBench sessions into BigQuery.
-
-This script is designed for Cloud Run (Functions Framework) like the other QA metrics ingestors.
-
-Auth
-- Preferred: Basic auth using GAMEBENCH_USER + GAMEBENCH_TOKEN (API token)
-- Optional: Bearer auth using GAMEBENCH_BEARER_TOKEN
-
-Config
-- GAMEBENCH_COMPANY_ID (required)
-- GAMEBENCH_APP_PACKAGES (comma-separated). Example:
-    com.scopely.wwedomination,com.scopely.internal.wwedomination
-
-BQ
-- BQ_DATASET_ID (default qa_metrics)
-- BQ_TABLE_ID (default gamebench_sessions_v1)
-
-Incremental
-- If the table already has rows, we query MAX(time_pushed) and re-fetch with an overlap.
-
-Notes
-- GameBench APIs can vary slightly across tenants; we store raw_json for future-proofing.
-- The metric extraction uses a robust "flatten + fuzzy match" strategy.
-"""
-
-import base64
 import json
 import os
-import re
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+import time
+import random
+from datetime import datetime, timezone, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
-import functions_framework
+import google.auth
 import requests
-from google.cloud import bigquery
+from flask import jsonify
+from google.cloud import bigquery, secretmanager
 
+# ----------------- GCP / BigQuery -----------------
+_, PROJECT_ID = google.auth.default()
+DATASET_ID = os.environ.get("BQ_DATASET", "qa_metrics")
+TABLE_ID = f"{PROJECT_ID}.{DATASET_ID}.gamebench_sessions_v1"
 
-GB_BASE_URL = os.environ.get("GAMEBENCH_BASE_URL", "https://api.gamebench.net").rstrip("/")
-GB_COMPANY_ID = os.environ.get("GAMEBENCH_COMPANY_ID")
-GB_USER = os.environ.get("GAMEBENCH_USER") or os.environ.get("GAMEBENCH_USERNAME")
-GB_TOKEN = os.environ.get("GAMEBENCH_TOKEN")
-GB_BEARER = os.environ.get("GAMEBENCH_BEARER_TOKEN")
-GB_APP_PACKAGES = os.environ.get(
+bq = bigquery.Client(project=PROJECT_ID)
+sm = secretmanager.SecretManagerServiceClient()
+
+BASE_URL = os.environ.get("GAMEBENCH_BASE_URL", "https://web.gamebench.net")
+DEFAULT_COMPANY_ID = os.environ.get("GAMEBENCH_COMPANY_ID", "AWGaWNjXBxsUazsJuoUp")
+DEFAULT_COLLECTION_ID = os.environ.get("GAMEBENCH_COLLECTION_ID", "7cf80f11-6915-4e6c-b70c-4ad7ed44aaf9")
+
+# Avoid commas in env var to keep gcloud happy; we accept | or comma in parsing.
+DEFAULT_APP_PACKAGES = os.environ.get(
     "GAMEBENCH_APP_PACKAGES",
-    "com.scopely.wwedomination,com.scopely.internal.wwedomination",
+    "com.scopely.internal.wwedomination|com.scopely.wwedomination",
 )
 
-DEFAULT_LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS", "30"))
-DEFAULT_OVERLAP_DAYS = int(os.environ.get("OVERLAP_DAYS", "3"))
-MAX_SESSIONS_PER_RUN = int(os.environ.get("MAX_SESSIONS_PER_RUN", "500"))
+# If GAMEBENCH_USER isn't set, we fall back to this to keep it "ready".
+DEFAULT_USER = os.environ.get("GAMEBENCH_USER", "alex.casanova@scopely.com")
 
-BQ_DATASET_ID = os.environ.get("BQ_DATASET_ID", "qa_metrics")
-BQ_TABLE_ID = os.environ.get("BQ_TABLE_ID", "gamebench_sessions_v1")
+HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "30"))
+MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "6"))
+BASE_BACKOFF = float(os.environ.get("BASE_BACKOFF_SECONDS", "1.0"))
+MAX_BACKOFF = float(os.environ.get("MAX_BACKOFF_SECONDS", "30.0"))
+PAGE_SIZE = int(os.environ.get("GAMEBENCH_PAGE_SIZE", "50"))
+MAX_SESSIONS_PER_RUN = int(os.environ.get("MAX_SESSIONS_PER_RUN", "200"))
 
+def _secret(name: str) -> str:
+    sname = f"projects/{PROJECT_ID}/secrets/{name}/versions/latest"
+    return sm.access_secret_version(request={"name": sname}).payload.data.decode("utf-8").strip()
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+def _auth() -> Tuple[str, str]:
+    # Docs: use Basic auth username:api_token  citeturn0search0
+    token = _secret("GAMEBENCH_TOKEN")
+    return (DEFAULT_USER, token)
 
-
-def _iso(ts: Optional[datetime]) -> Optional[str]:
-    return ts.isoformat().replace("+00:00", "Z") if ts else None
-
-
-def _get_project_id() -> str:
-    pid = os.environ.get("GCP_PROJECT_ID")
-    if pid:
-        return pid
-    return bigquery.Client().project
-
-
-def _headers() -> Dict[str, str]:
-    h = {"Accept": "application/json"}
-    if GB_BEARER:
-        h["Authorization"] = f"Bearer {GB_BEARER}"
-        return h
-
-    # Basic auth header
-    if GB_USER and GB_TOKEN:
-        token = base64.b64encode(f"{GB_USER}:{GB_TOKEN}".encode("utf-8")).decode("ascii")
-        h["Authorization"] = f"Basic {token}"
-    return h
-
-
-def _request(method: str, path: str, *, params: Optional[Dict[str, Any]] = None, json_body: Any = None) -> Any:
-    url = f"{GB_BASE_URL}{path}"
-    r = requests.request(method, url, headers=_headers(), params=params, json=json_body, timeout=60)
-    if r.status_code >= 400:
-        # Helpful debug
+def _req(method: str, url: str, *, json_body: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> requests.Response:
+    last_exc: Optional[Exception] = None
+    for attempt in range(MAX_RETRIES):
         try:
-            body = r.json()
-        except Exception:
-            body = r.text
-        raise RuntimeError(f"GameBench API error {r.status_code} {url}: {body}")
-    return r.json()
+            r = requests.request(
+                method,
+                url,
+                auth=_auth(),
+                headers={"accept": "application/json", "Content-Type": "application/json"},
+                params=params,
+                json=json_body,
+                timeout=HTTP_TIMEOUT,
+            )
+            if r.status_code in (429, 500, 502, 503, 504):
+                backoff = min(MAX_BACKOFF, BASE_BACKOFF * (2 ** attempt))
+                jitter = random.uniform(0, 0.25 * backoff)
+                time.sleep(backoff + jitter)
+                continue
+            r.raise_for_status()
+            return r
+        except Exception as e:
+            last_exc = e
+            backoff = min(MAX_BACKOFF, BASE_BACKOFF * (2 ** attempt))
+            jitter = random.uniform(0, 0.25 * backoff)
+            time.sleep(backoff + jitter)
+    raise RuntimeError(f"HTTP failed after retries: {last_exc}")
 
+def _parse_ts(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    # timePushed may be epoch ms or iso string
+    if isinstance(v, (int, float)):
+        # assume ms if large
+        sec = v / 1000.0 if v > 1e12 else v
+        return datetime.fromtimestamp(sec, timezone.utc).isoformat().replace("+00:00", "Z")
+    if isinstance(v, str):
+        return v
+    return None
 
-def _ensure_table(bq: bigquery.Client, table_ref: bigquery.TableReference) -> None:
-    schema = [
-        bigquery.SchemaField("session_id", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("company_id", "STRING"),
-        bigquery.SchemaField("time_pushed", "TIMESTAMP"),
-        bigquery.SchemaField("time_started", "TIMESTAMP"),
-        bigquery.SchemaField("duration_seconds", "INT64"),
-        bigquery.SchemaField("account", "STRING"),
-        bigquery.SchemaField("app_package", "STRING"),
-        bigquery.SchemaField("app_name", "STRING"),
-        bigquery.SchemaField("app_version", "STRING"),
-        bigquery.SchemaField("environment", "STRING"),
-        bigquery.SchemaField("platform", "STRING"),
-        bigquery.SchemaField("device_model", "STRING"),
-        bigquery.SchemaField("device_manufacturer", "STRING"),
-        bigquery.SchemaField("os_version", "STRING"),
-        bigquery.SchemaField("gpu_model", "STRING"),
-        bigquery.SchemaField("seconds_played", "FLOAT64"),
-        bigquery.SchemaField("median_fps", "FLOAT64"),
-        bigquery.SchemaField("fps_stability_pct", "FLOAT64"),
-        bigquery.SchemaField("fps_stability_index", "FLOAT64"),
-        bigquery.SchemaField("cpu_avg_pct", "FLOAT64"),
-        bigquery.SchemaField("cpu_max_pct", "FLOAT64"),
-        bigquery.SchemaField("memory_avg_mb", "FLOAT64"),
-        bigquery.SchemaField("memory_max_mb", "FLOAT64"),
-        bigquery.SchemaField("power_avg_mw", "FLOAT64"),
-        bigquery.SchemaField("current_avg_ma", "FLOAT64"),
-        bigquery.SchemaField("battery_mah", "FLOAT64"),
-        bigquery.SchemaField("download_mb", "FLOAT64"),
-        bigquery.SchemaField("upload_mb", "FLOAT64"),
-        bigquery.SchemaField("raw_json", "STRING"),
-        bigquery.SchemaField("_ingested_at", "TIMESTAMP"),
-    ]
+def _get(d: Dict[str, Any], *keys, default=None):
+    cur: Any = d
+    for k in keys:
+        if cur is None:
+            return default
+        if isinstance(cur, dict):
+            cur = cur.get(k)
+        else:
+            return default
+    return cur if cur is not None else default
 
+def _f(v: Any) -> Optional[float]:
     try:
-        table = bq.get_table(table_ref)
-        existing = {f.name for f in table.schema}
-        to_add = [f for f in schema if f.name not in existing]
-        if to_add:
-            table.schema = list(table.schema) + to_add
-            bq.update_table(table, ["schema"])
-            print(f"Added {len(to_add)} columns to {table_ref}")
-    except Exception:
-        table = bigquery.Table(table_ref, schema=schema)
-        table.time_partitioning = bigquery.TimePartitioning(field="_ingested_at")
-        bq.create_table(table)
-        print(f"Created table {table_ref}")
-
-
-def _get_latest_time_pushed(bq: bigquery.Client, table_ref: bigquery.TableReference) -> Optional[datetime]:
-    sql = f"SELECT MAX(time_pushed) AS max_ts FROM `{table_ref.project}.{table_ref.dataset_id}.{table_ref.table_id}`"
-    try:
-        rows = list(bq.query(sql).result())
-        if not rows:
+        if v is None or v == "":
             return None
-        return rows[0].get("max_ts")
-    except Exception as e:
-        print("Warning: could not query latest time_pushed:", e)
+        return float(v)
+    except Exception:
         return None
 
+def _environment(app_package: Optional[str]) -> str:
+    if not app_package:
+        return "unknown"
+    return "dev" if ".internal." in app_package else "prod"
 
-def _flatten(obj: Any, prefix: str = "") -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            key = f"{prefix}.{k}" if prefix else str(k)
-            out.update(_flatten(v, key))
-    elif isinstance(obj, list):
-        for i, v in enumerate(obj[:200]):
-            key = f"{prefix}[{i}]"
-            out.update(_flatten(v, key))
-    else:
-        out[prefix] = obj
-    return out
+def _split_packages(s: str) -> List[str]:
+    if not s:
+        return []
+    parts = re.split(r"[|,;\s]+", s.strip())
+    return [p for p in parts if p]
 
+def ensure_table_exists() -> None:
+    # Table is created via SQL, but keep safe.
+    pass
 
-def _pick_number(flat: Dict[str, Any], patterns: List[str]) -> Optional[float]:
-    """Find the first numeric value whose key path matches one of the regex patterns."""
-    for pat in patterns:
-        rx = re.compile(pat, re.IGNORECASE)
-        for k, v in flat.items():
-            if v is None:
-                continue
-            if rx.search(k):
-                try:
-                    return float(v)
-                except Exception:
-                    continue
-    return None
-
-
-def _pick_string(flat: Dict[str, Any], patterns: List[str]) -> Optional[str]:
-    for pat in patterns:
-        rx = re.compile(pat, re.IGNORECASE)
-        for k, v in flat.items():
-            if v is None:
-                continue
-            if rx.search(k):
-                if isinstance(v, (str, int, float, bool)):
-                    return str(v)
-    return None
-
-
-def _parse_ts(value: Any) -> Optional[datetime]:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        # try ISO
-        try:
-            if value.endswith("Z"):
-                return datetime.fromisoformat(value.replace("Z", "+00:00"))
-            return datetime.fromisoformat(value)
-        except Exception:
-            pass
-    if isinstance(value, (int, float)):
-        # seconds vs ms heuristic
-        v = float(value)
-        if v > 1e12:
-            v = v / 1000.0
-        return datetime.fromtimestamp(v, tz=timezone.utc)
-    return None
-
-
-def _search_sessions(company_id: str, app_packages: List[str], since: datetime, until: datetime, page: int, page_size: int) -> Any:
-    """Call advanced-search/sessions and return raw JSON."""
-    body = {
-        "sessionInfo": {
-            "dateStart": int(since.timestamp()),
-            "dateEnd": int(until.timestamp()),
-        },
-        "appInfo": {
-            "package": app_packages,
-        },
-    }
-
-    params = {
-        "company": company_id,
-        "page": page,
-        "pageSize": page_size,
-        "sort": "timePushed:desc",
-    }
-
-    return _request("POST", "/v1/advanced-search/sessions", params=params, json_body=body)
-
-
-def _extract_sessions_list(resp: Any) -> List[Dict[str, Any]]:
-    if isinstance(resp, list):
-        return [x for x in resp if isinstance(x, dict)]
-    if isinstance(resp, dict):
-        for key in ["sessions", "results", "items", "data"]:
-            val = resp.get(key)
-            if isinstance(val, list):
-                return [x for x in val if isinstance(x, dict)]
+def search_sessions(company_id: str, apps: List[str], page: int) -> List[Dict[str, Any]]:
+    url = f"{BASE_URL.rstrip('/')}/v1/sessions"
+    params = {"company": company_id, "pageSize": PAGE_SIZE, "page": page, "sort": "timePushed:desc"}
+    body = {"apps": apps, "devices": [], "manufacturers": []}
+    data = _req("POST", url, json_body=body, params=params).json()
+    # Response is typically {sessions:[...], total:...} or a list; handle both
+    if isinstance(data, dict):
+        return data.get("sessions") or data.get("results") or data.get("items") or []
+    if isinstance(data, list):
+        return data
     return []
 
+def get_session(session_id: str) -> Dict[str, Any]:
+    url = f"{BASE_URL.rstrip('/')}/v1/sessions/{session_id}"
+    return _req("GET", url).json()
 
-def _get_session_details(session_id: str, company_id: str) -> Dict[str, Any]:
-    return _request("GET", f"/v1/sessions/{session_id}", params={"company": company_id})
+def upsert_rows(rows: List[Dict[str, Any]]) -> int:
+    if not rows:
+        return 0
+    # best-effort de-dupe using insertId=session_id
+    row_ids = [r.get("session_id") for r in rows]
+    errors = bq.insert_rows_json(TABLE_ID, rows, row_ids=row_ids)
+    if errors:
+        raise RuntimeError(str(errors)[:1200])
+    return len(rows)
 
+def ingest(days: int, platform: Optional[str], company_id: str, collection_id: str, app_packages: List[str]) -> Dict[str, Any]:
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    ingested_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-def _build_row(details: Dict[str, Any], company_id: str) -> Dict[str, Any]:
-    flat = _flatten(details)
-
-    session_id = (
-        _pick_string(flat, [r"^sessionId$", r"sessionId$", r"^id$", r"\.sessionId$"]) or ""
-    )
-
-    time_pushed = _parse_ts(_pick_number(flat, [r"timePushed$", r"\.timePushed$"])) or _parse_ts(
-        _pick_string(flat, [r"timePushed$", r"\.timePushed$"])
-    )
-    time_started = _parse_ts(_pick_number(flat, [r"timeStarted$", r"dateStart$", r"\.timeStarted$"])) or _parse_ts(
-        _pick_string(flat, [r"timeStarted$", r"dateStart$", r"\.timeStarted$"])
-    )
-
-    app_package = _pick_string(flat, [r"appInfo\.package$", r"app\.package$", r"packageName$", r"package$"]) 
-    app_name = _pick_string(flat, [r"appInfo\.name$", r"app\.name$", r"appName$"]) 
-    app_version = _pick_string(flat, [r"appVersion$", r"appInfo\.version$", r"versionName$", r"app\.version$"]) 
-
-    environment = None
-    if app_package:
-        environment = "dev" if ".internal." in app_package else "prod"
-
-    # Platform heuristic: OS / device type
-    os_version = _pick_string(flat, [r"osVersion$", r"deviceInfo\.osVersion$", r"os\.version$"]) 
-    platform = None
-    if os_version and re.search(r"^iOS", os_version, re.IGNORECASE):
-        platform = "iOS"
-    elif os_version and re.search(r"android", os_version, re.IGNORECASE):
-        platform = "Android"
-    else:
-        # fallback: device manufacturer sometimes indicates Apple
-        manu = _pick_string(flat, [r"manufacturer$", r"deviceInfo\.manufacturer$"]) 
-        if manu and manu.lower() == "apple":
-            platform = "iOS"
-
-    device_model = _pick_string(flat, [r"deviceInfo\.model$", r"device\.model$", r"deviceModel$"]) 
-    device_manufacturer = _pick_string(flat, [r"deviceInfo\.manufacturer$", r"device\.manufacturer$", r"manufacturer$"]) 
-    gpu_model = _pick_string(flat, [r"gpu.*model", r"gpuModel"]) 
-
-    # Duration / playtime
-    seconds_played = _pick_number(flat, [r"secondsPlayed$", r"durationSeconds$", r"playTimeSeconds$"]) 
-    duration_seconds = None
-    if seconds_played is not None:
-        duration_seconds = int(seconds_played)
-
-    # Key performance metrics (fuzzy match)
-    median_fps = _pick_number(flat, [r"median.*fps", r"fps.*median", r"fpsMedian"]) 
-    fps_stability_pct = _pick_number(flat, [r"stability.*%", r"fpsStability.*percent", r"fpsStabilityPct", r"stabilityPercent"]) 
-    fps_stability_index = _pick_number(flat, [r"stability.*index", r"fpsStabilityIndex"]) 
-
-    cpu_avg_pct = _pick_number(flat, [r"cpu.*avg", r"avgCpu", r"cpuAvg"]) 
-    cpu_max_pct = _pick_number(flat, [r"cpu.*max", r"maxCpu", r"cpuMax"]) 
-
-    memory_avg_mb = _pick_number(flat, [r"memory.*avg", r"avgMemory", r"memoryAvg"]) 
-    memory_max_mb = _pick_number(flat, [r"memory.*max", r"maxMemory", r"memoryMax"]) 
-
-    power_avg_mw = _pick_number(flat, [r"mWatt", r"power.*avg", r"avgPower", r"powerAvg"]) 
-    current_avg_ma = _pick_number(flat, [r"mAmp", r"current.*avg", r"avgCurrent", r"currentAvg"]) 
-    battery_mah = _pick_number(flat, [r"mAh", r"battery.*mah", r"mahConsumed", r"batteryMah"]) 
-
-    download_mb = _pick_number(flat, [r"download", r"mbDownloaded", r"downloadMb"]) 
-    upload_mb = _pick_number(flat, [r"upload", r"mbUploaded", r"uploadMb"]) 
-
-    row = {
-        "session_id": session_id,
-        "company_id": company_id,
-        "time_pushed": _iso(time_pushed),
-        "time_started": _iso(time_started),
-        "duration_seconds": duration_seconds,
-        "account": _pick_string(flat, [r"account$", r"user$", r"tester$"]),
-        "app_package": app_package,
-        "app_name": app_name,
-        "app_version": app_version,
-        "environment": environment,
-        "platform": platform,
-        "device_model": device_model,
-        "device_manufacturer": device_manufacturer,
-        "os_version": os_version,
-        "gpu_model": gpu_model,
-        "seconds_played": seconds_played,
-        "median_fps": median_fps,
-        "fps_stability_pct": fps_stability_pct,
-        "fps_stability_index": fps_stability_index,
-        "cpu_avg_pct": cpu_avg_pct,
-        "cpu_max_pct": cpu_max_pct,
-        "memory_avg_mb": memory_avg_mb,
-        "memory_max_mb": memory_max_mb,
-        "power_avg_mw": power_avg_mw,
-        "current_avg_ma": current_avg_ma,
-        "battery_mah": battery_mah,
-        "download_mb": download_mb,
-        "upload_mb": upload_mb,
-        "raw_json": json.dumps(details, ensure_ascii=False),
-        "_ingested_at": _iso(_utc_now()),
-    }
-
-    return row
-
-
-@functions_framework.http
-def ingest_gamebench(request):
-    req = request.get_json(silent=True) or {}
-
-    company_id = req.get("company_id") or GB_COMPANY_ID
-    if not company_id:
-        return (
-            json.dumps({"error": "Missing company_id. Set GAMEBENCH_COMPANY_ID or pass company_id"}),
-            400,
-            {"Content-Type": "application/json"},
-        )
-
-    app_packages_raw = req.get("app_packages") or GB_APP_PACKAGES
-    app_packages = [p.strip() for p in str(app_packages_raw).split(",") if p.strip()]
-
-    lookback_days = int(req.get("lookback_days") or DEFAULT_LOOKBACK_DAYS)
-    overlap_days = int(req.get("overlap_days") or DEFAULT_OVERLAP_DAYS)
-
-    if not (_headers().get("Authorization")):
-        return (
-            json.dumps({"error": "Missing auth. Set GAMEBENCH_USER+GAMEBENCH_TOKEN or GAMEBENCH_BEARER_TOKEN"}),
-            400,
-            {"Content-Type": "application/json"},
-        )
-
-    bq = bigquery.Client(project=_get_project_id())
-    table_ref = bq.dataset(BQ_DATASET_ID).table(BQ_TABLE_ID)
-    _ensure_table(bq, table_ref)
-
-    until = _utc_now()
-    latest = _get_latest_time_pushed(bq, table_ref)
-    if latest:
-        since = latest - timedelta(days=overlap_days)
-        mode = "incremental"
-    else:
-        since = until - timedelta(days=lookback_days)
-        mode = "bootstrap"
-
-    print(f"GameBench ingest mode={mode} since={since} until={until} apps={app_packages}")
-
+    fetched = 0
     inserted = 0
-    fetched_sessions = 0
+    pages = 0
 
-    page = 0
-    page_size = 100
-
-    while True:
-        resp = _search_sessions(company_id, app_packages, since, until, page, page_size)
-        sessions = _extract_sessions_list(resp)
+    for page in range(0, 500):
+        pages += 1
+        sessions = search_sessions(company_id, app_packages, page)
         if not sessions:
             break
 
-        # Extract session IDs
-        ids: List[str] = []
         for s in sessions:
-            sid = s.get("sessionId") or s.get("id") or s.get("session_id")
-            if sid:
-                ids.append(str(sid))
-
-        if not ids:
-            break
-
-        for sid in ids:
-            fetched_sessions += 1
-            if fetched_sessions > MAX_SESSIONS_PER_RUN:
-                print(f"Reached MAX_SESSIONS_PER_RUN={MAX_SESSIONS_PER_RUN}, stopping.")
-                break
-
-            try:
-                details = _get_session_details(sid, company_id)
-            except Exception as e:
-                print(f"Failed session details {sid}: {e}")
+            sid = _get(s, "id") or _get(s, "sessionId") or _get(s, "_id")
+            if not sid:
                 continue
 
-            row = _build_row(details, company_id)
-            if not row.get("session_id"):
-                # fallback to sid
-                row["session_id"] = sid
+            tp = _parse_ts(_get(s, "timePushed") or _get(s, "time_pushed"))
+            # if we can't parse, fetch details anyway
+            if tp:
+                # parse to dt for cutoff
+                try:
+                    # handle Z / +00:00
+                    tps = tp.replace("Z", "+00:00")
+                    dtp = datetime.fromisoformat(tps)
+                except Exception:
+                    dtp = None
+                if dtp and dtp < since:
+                    return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted}
 
-            # Use insertId for best-effort de-dup
-            errors = bq.insert_rows_json(table_ref, [row], row_ids=[row["session_id"]])
-            if errors:
-                print("BigQuery insert error (first):", errors[:1])
-            else:
-                inserted += 1
+            # Fetch details for metrics
+            detail = get_session(str(sid))
+            fetched += 1
 
-        if fetched_sessions > MAX_SESSIONS_PER_RUN:
-            break
+            app_pkg = _get(detail, "app") or _get(detail, "appPackage") or _get(detail, "app_package") or _get(s, "app")
+            plat = _get(detail, "platform") or _get(detail, "os") or _get(detail, "device", "platform")
+            if platform and plat and str(plat).lower() != platform.lower():
+                continue
 
-        # If response has paging metadata, we can stop when we reach the end.
-        # Otherwise, stop when page returns fewer than page_size.
-        if len(sessions) < page_size:
-            break
-
-        page += 1
-
-    return (
-        json.dumps(
-            {
-                "ok": True,
-                "mode": mode,
+            # Best-effort field mapping (API keys vary by account/setup)
+            row = {
+                "session_id": str(sid),
+                "time_pushed": _parse_ts(_get(detail, "timePushed") or _get(detail, "time_pushed") or _get(s, "timePushed")),
                 "company_id": company_id,
-                "apps": app_packages,
-                "since": _iso(since),
-                "until": _iso(until),
-                "sessions_fetched": fetched_sessions,
-                "rows_inserted": inserted,
-                "bq_table": f"{table_ref.project}.{table_ref.dataset_id}.{table_ref.table_id}",
+                "collection_id": collection_id,
+                "environment": _environment(app_pkg),
+                "platform": (str(plat).lower() if plat else None),
+                "app_package": app_pkg,
+                "app_version": _get(detail, "appVersion") or _get(detail, "app_version"),
+                "user_email": _get(detail, "user") or _get(detail, "account") or DEFAULT_USER,
+                "device_model": _get(detail, "device") or _get(detail, "deviceModel") or _get(detail, "device_model"),
+                "device_manufacturer": _get(detail, "manufacturer") or _get(detail, "deviceManufacturer") or _get(detail, "device_manufacturer"),
+                "os_version": _get(detail, "osVersion") or _get(detail, "os_version"),
+                "gpu_model": _get(detail, "gpuModel") or _get(detail, "gpu_model"),
+                "seconds_played": _f(_get(detail, "secondsPlayed") or _get(detail, "seconds_played")),
+                "median_fps": _f(_get(detail, "medianFps") or _get(detail, "median_fps") or _get(detail, "fps", "median") or _get(detail, "fpsMedian")),
+                "fps_1p_low": _f(_get(detail, "fps1pLow") or _get(detail, "fps_1p_low")),
+                "fps_stability_pct": _f(_get(detail, "fpsStabilityPct") or _get(detail, "fps_stability_pct")),
+                "fps_stability_index": _f(_get(detail, "fpsStabilityIndex") or _get(detail, "fps_stability_index")),
+                "janks_per_10m": _f(_get(detail, "janksPer10m") or _get(detail, "janks_per_10m")),
+                "big_janks_per_10m": _f(_get(detail, "bigJanksPer10m") or _get(detail, "big_janks_per_10m")),
+                "small_janks_per_10m": _f(_get(detail, "smallJanksPer10m") or _get(detail, "small_janks_per_10m")),
+                "cpu_avg_pct": _f(_get(detail, "cpuAvgPct") or _get(detail, "cpu_avg_pct")),
+                "cpu_max_pct": _f(_get(detail, "cpuMaxPct") or _get(detail, "cpu_max_pct")),
+                "memory_avg_mb": _f(_get(detail, "memoryAvgMb") or _get(detail, "memory_avg_mb")),
+                "memory_max_mb": _f(_get(detail, "memoryMaxMb") or _get(detail, "memory_max_mb")),
+                "power_avg_mw": _f(_get(detail, "powerAvgMw") or _get(detail, "power_avg_mw")),
+                "current_avg_ma": _f(_get(detail, "currentAvgMa") or _get(detail, "current_avg_ma")),
+                "battery_mah": _f(_get(detail, "batteryMah") or _get(detail, "battery_mah")),
+                "download_mb": _f(_get(detail, "downloadMb") or _get(detail, "download_mb")),
+                "upload_mb": _f(_get(detail, "uploadMb") or _get(detail, "upload_mb")),
+                "session_url": _get(detail, "url") or f"{BASE_URL.rstrip('/')}/dashboard/sessions/{sid}/Summary?collectionId={collection_id}&companyId={company_id}",
+                "raw_json": json.dumps(detail, ensure_ascii=False)[:500000],
+                "_ingested_at": ingested_at,
             }
-        ),
-        200,
-        {"Content-Type": "application/json"},
-    )
+
+            inserted += upsert_rows([row])
+
+            if inserted >= MAX_SESSIONS_PER_RUN:
+                return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted, "stopped": "max_sessions"}
+
+        # continue pages
+
+    return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted}
+
+def ingest_gamebench(request):
+    body = request.get_json(silent=True) or {}
+    days = int(body.get("days", 7))
+    platform = body.get("platform")  # android/ios or None
+    company_id = body.get("company_id") or DEFAULT_COMPANY_ID
+    collection_id = body.get("collection_id") or DEFAULT_COLLECTION_ID
+
+    app_packages = body.get("app_packages")
+    if isinstance(app_packages, list):
+        apps = app_packages
+    else:
+        apps = _split_packages(DEFAULT_APP_PACKAGES)
+
+    try:
+        result = ingest(days=days, platform=platform, company_id=company_id, collection_id=collection_id, app_packages=apps)
+        return jsonify({"status": "OK", **result}), 200
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+# Default Functions Framework target
+def hello_http(request):
+    return ingest_gamebench(request)
