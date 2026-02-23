@@ -450,34 +450,63 @@
     width: 8
     height: 6
 
-  - name: testrail_test_execution_trend
-    title: Test execution (cases) over time
+  - name: header_testrail
+    type: text
+    title_text: "TestRail"
+    body_text: "Execution throughput and latest quality signal."
+    row: 62
+    col: 8
+    width: 8
+    height: 2
+
+  - name: testcases_completed_by_day_7d
+    title: Test cases completed by day (7d)
     type: looker_line
     model: panda_qa_metrics
     explore: testrail_runs_latest
     fields: [testrail_runs_latest.completed_on_date, testrail_runs_latest.executed_cases]
     filters:
       testrail_runs_latest.is_completed: "yes"
+      testrail_runs_latest.completed_on_date: "7 days"
     sorts: [testrail_runs_latest.completed_on_date]
     listen:
       date_range: testrail_runs_latest.completed_on_date
-    note_text: "TestRail | Executed test cases per completed run date."
-    row: 62
+    note_text: "TestRail | Ejecutado = passed + failed + blocked + retest (excluye untested) por día de completed_on."
+    row: 64
+    col: 8
+    width: 8
+    height: 4
+
+  - name: current_pass_rate
+    title: Current pass rate (latest run)
+    type: single_value
+    model: panda_qa_metrics
+    explore: testrail_runs_latest
+    fields: [testrail_runs_latest.completed_on_date, testrail_runs_latest.pass_rate]
+    filters:
+      testrail_runs_latest.is_completed: "yes"
+    sorts: [testrail_runs_latest.completed_on_date desc, testrail_runs_latest.run_id desc]
+    limit: 1
+    listen:
+      date_range: testrail_runs_latest.completed_on_date
+    note_text: "TestRail | Pass rate = SUM(passed) / SUM(passed + failed + blocked + retest) del último run completado disponible."
+    row: 68
     col: 8
     width: 4
-    height: 6
+    height: 3
 
-  - name: testrail_bvt_pass_rate_trend
-    title: BVT pass rate over time
-    type: looker_line
+  - name: bvt_pass_rate_latest_build
+    title: BVT pass rate (latest build)
+    type: single_value
     model: panda_qa_metrics
     explore: testrail_bvt_latest
     fields: [testrail_bvt_latest.completed_on_date, testrail_bvt_latest.pass_rate]
-    sorts: [testrail_bvt_latest.completed_on_date]
+    sorts: [testrail_bvt_latest.completed_on_date desc, testrail_bvt_latest.run_id desc]
+    limit: 1
     listen:
       date_range: testrail_bvt_latest.completed_on_date
-    note_text: "TestRail BVT | Daily pass rate trend for latest BVT runs."
-    row: 62
+    note_text: "TestRail BVT | Pass rate del último build/run BVT disponible (según pass_rate_calc en testrail_bvt_latest)."
+    row: 68
     col: 12
     width: 4
-    height: 6
+    height: 3
