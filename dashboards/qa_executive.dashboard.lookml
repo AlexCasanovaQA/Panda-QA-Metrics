@@ -394,3 +394,90 @@
     col: 0
     width: 16
     height: 6
+
+  - name: header_ops
+    type: text
+    title_text: "Operational QA metrics"
+    body_text: "Fix fail, MTTR, build size and TestRail execution/BVT health."
+    row: 54
+    col: 0
+    width: 16
+    height: 2
+
+  - name: jira_fix_fail_rate_trend
+    title: Fix fail rate over time
+    type: looker_line
+    model: panda_qa_metrics
+    explore: jira_fix_fail_rate_daily
+    fields: [jira_fix_fail_rate_daily.event_date_date, jira_fix_fail_rate_daily.fix_fail_rate]
+    sorts: [jira_fix_fail_rate_daily.event_date_date]
+    listen:
+      date_range: jira_fix_fail_rate_daily.event_date_date
+    note_text: "Jira | Reopened / Fixed ratio by day."
+    row: 56
+    col: 0
+    width: 8
+    height: 6
+
+  - name: jira_mttr_hours_trend
+    title: MTTR (hours) over time
+    type: looker_line
+    model: panda_qa_metrics
+    explore: jira_mttr_fixed_daily
+    fields: [jira_mttr_fixed_daily.event_date_date, jira_mttr_fixed_daily.avg_mttr_hours]
+    sorts: [jira_mttr_fixed_daily.event_date_date]
+    listen:
+      date_range: jira_mttr_fixed_daily.event_date_date
+    note_text: "Jira | Average hours from created to fixed for bugs fixed each day."
+    row: 56
+    col: 8
+    width: 8
+    height: 6
+
+  - name: build_size_mb_trend
+    title: Build size (MB) over time
+    type: looker_line
+    model: panda_qa_metrics
+    explore: build_size_manual
+    fields: [build_size_manual.metric_date_date, build_size_manual.build_size_mb, build_size_manual.platform]
+    pivots: [build_size_manual.platform]
+    sorts: [build_size_manual.metric_date_date]
+    listen:
+      date_range: build_size_manual.metric_date_date
+    note_text: "Manual build metrics | Daily build size trend by platform."
+    row: 62
+    col: 0
+    width: 8
+    height: 6
+
+  - name: testrail_test_execution_trend
+    title: Test execution (cases) over time
+    type: looker_line
+    model: panda_qa_metrics
+    explore: testrail_runs_latest
+    fields: [testrail_runs_latest.completed_on_date, testrail_runs_latest.executed_cases]
+    filters:
+      testrail_runs_latest.is_completed: "yes"
+    sorts: [testrail_runs_latest.completed_on_date]
+    listen:
+      date_range: testrail_runs_latest.completed_on_date
+    note_text: "TestRail | Executed test cases per completed run date."
+    row: 62
+    col: 8
+    width: 4
+    height: 6
+
+  - name: testrail_bvt_pass_rate_trend
+    title: BVT pass rate over time
+    type: looker_line
+    model: panda_qa_metrics
+    explore: testrail_bvt_latest
+    fields: [testrail_bvt_latest.completed_on_date, testrail_bvt_latest.pass_rate]
+    sorts: [testrail_bvt_latest.completed_on_date]
+    listen:
+      date_range: testrail_bvt_latest.completed_on_date
+    note_text: "TestRail BVT | Daily pass rate trend for latest BVT runs."
+    row: 62
+    col: 12
+    width: 4
+    height: 6
