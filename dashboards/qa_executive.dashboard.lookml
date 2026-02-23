@@ -370,14 +370,49 @@
   - name: header_gamebench
     type: text
     title_text: "GameBench"
-    body_text: "Performance & stability (Android vs iOS)."
+    body_text: "Current snapshots + 7d trends (Android vs iOS)."
     row: 46
     col: 0
     width: 16
     height: 2
 
+  - name: current_fps_by_platform
+    title: Current snapshot | FPS by platform (latest day)
+    type: looker_grid
+    model: panda_qa_metrics
+    explore: gamebench_daily_metrics
+    fields: [gamebench_daily_metrics.metric_date_date, gamebench_daily_metrics.platform, gamebench_daily_metrics.median_fps]
+    filters:
+      gamebench_daily_metrics.metric_date_date: "1 days"
+    sorts: [gamebench_daily_metrics.metric_date_date desc, gamebench_daily_metrics.platform]
+    listen:
+      env: gamebench_daily_metrics.environment
+      platform: gamebench_daily_metrics.platform
+    note_text: "GameBench | Current snapshot table using latest available day in the last day, grouped by platform."
+    row: 48
+    col: 0
+    width: 8
+    height: 4
+
+  - name: current_session_stability
+    title: Current KPI | Session stability (proxy)
+    type: single_value
+    model: panda_qa_metrics
+    explore: gamebench_daily_metrics
+    fields: [gamebench_daily_metrics.fps_stability_pct]
+    filters:
+      gamebench_daily_metrics.metric_date_date: "1 days"
+    listen:
+      env: gamebench_daily_metrics.environment
+      platform: gamebench_daily_metrics.platform
+    note_text: "GameBench proxy | Uses fps_stability_pct as current session stability proxy (no crash-free session metric available in gamebench_daily_metrics)."
+    row: 48
+    col: 8
+    width: 8
+    height: 4
+
   - name: gb_median_fps_7d
-    title: Median FPS (last 7d)
+    title: Trend (7d) | Median FPS by platform
     type: looker_line
     model: panda_qa_metrics
     explore: gamebench_daily_metrics
@@ -390,7 +425,7 @@
       env: gamebench_daily_metrics.environment
       platform: gamebench_daily_metrics.platform
     note_text: "GameBench | Daily median FPS (median across sessions), pivoted by platform."
-    row: 48
+    row: 52
     col: 0
     width: 16
     height: 6
@@ -398,14 +433,14 @@
   - name: header_ops
     type: text
     title_text: "Operational QA metrics"
-    body_text: "Fix fail, MTTR, build size and TestRail execution/BVT health."
-    row: 54
+    body_text: "Current snapshots + trends for fix fail, MTTR, build size and TestRail execution/BVT health."
+    row: 58
     col: 0
     width: 16
     height: 2
 
   - name: jira_fix_fail_rate_trend
-    title: Fix fail rate over time
+    title: Trend | Fix fail rate over time
     type: looker_line
     model: panda_qa_metrics
     explore: jira_fix_fail_rate_daily
@@ -414,13 +449,13 @@
     listen:
       date_range: jira_fix_fail_rate_daily.event_date_date
     note_text: "Jira | Reopened / Fixed ratio by day."
-    row: 56
+    row: 60
     col: 0
     width: 8
     height: 6
 
   - name: jira_mttr_hours_trend
-    title: MTTR (hours) over time
+    title: Trend | MTTR (hours) over time
     type: looker_line
     model: panda_qa_metrics
     explore: jira_mttr_fixed_daily
@@ -429,13 +464,28 @@
     listen:
       date_range: jira_mttr_fixed_daily.event_date_date
     note_text: "Jira | Average hours from created to fixed for bugs fixed each day."
-    row: 56
+    row: 60
     col: 8
     width: 8
     height: 6
 
+  - name: current_build_size_by_platform
+    title: Current snapshot | Build size by platform
+    type: looker_grid
+    model: panda_qa_metrics
+    explore: build_size_manual
+    fields: [build_size_manual.metric_date_date, build_size_manual.platform, build_size_manual.environment, build_size_manual.build_version, build_size_manual.build_size_mb]
+    filters:
+      build_size_manual.metric_date_date: "7 days"
+    sorts: [build_size_manual.metric_date_date desc, build_size_manual.platform]
+    note_text: "Manual build metrics | Current snapshot per platform from latest available builds."
+    row: 66
+    col: 0
+    width: 8
+    height: 4
+
   - name: build_size_mb_trend
-    title: Build size (MB) over time
+    title: Trend | Build size (MB) over time
     type: looker_line
     model: panda_qa_metrics
     explore: build_size_manual
@@ -445,7 +495,7 @@
     listen:
       date_range: build_size_manual.metric_date_date
     note_text: "Manual build metrics | Daily build size trend by platform."
-    row: 62
+    row: 70
     col: 0
     width: 8
     height: 6
@@ -454,13 +504,13 @@
     type: text
     title_text: "TestRail"
     body_text: "Execution throughput and latest quality signal."
-    row: 62
+    row: 66
     col: 8
     width: 8
     height: 2
 
   - name: testcases_completed_by_day_7d
-    title: Test cases completed by day (7d)
+    title: Trend (7d) | Test cases completed by day
     type: looker_line
     model: panda_qa_metrics
     explore: testrail_runs_latest
@@ -472,13 +522,13 @@
     listen:
       date_range: testrail_runs_latest.completed_on_date
     note_text: "TestRail | Ejecutado = passed + failed + blocked + retest (excluye untested) por día de completed_on."
-    row: 64
+    row: 68
     col: 8
     width: 8
     height: 4
 
   - name: current_pass_rate
-    title: Current pass rate (latest run)
+    title: Current KPI | Pass rate (latest run)
     type: single_value
     model: panda_qa_metrics
     explore: testrail_runs_latest
@@ -490,13 +540,13 @@
     listen:
       date_range: testrail_runs_latest.completed_on_date
     note_text: "TestRail | Pass rate = SUM(passed) / SUM(passed + failed + blocked + retest) del último run completado disponible."
-    row: 68
+    row: 72
     col: 8
     width: 4
     height: 3
 
   - name: bvt_pass_rate_latest_build
-    title: BVT pass rate (latest build)
+    title: Current KPI | BVT pass rate (latest build)
     type: single_value
     model: panda_qa_metrics
     explore: testrail_bvt_latest
@@ -506,7 +556,7 @@
     listen:
       date_range: testrail_bvt_latest.completed_on_date
     note_text: "TestRail BVT | Pass rate del último build/run BVT disponible (según pass_rate_calc en testrail_bvt_latest)."
-    row: 68
+    row: 72
     col: 12
     width: 4
     height: 3
