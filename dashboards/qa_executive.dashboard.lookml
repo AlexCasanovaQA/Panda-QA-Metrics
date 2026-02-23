@@ -163,26 +163,49 @@
     height: 2
 
   - name: entered_by_severity_7d
-    title: Entered (Date Range) by Severity
+    title: Entered (7d) by Severity
     type: looker_pie
     model: panda_qa_metrics
     explore: jira_issues_latest
     fields: [jira_issues_latest.severity_normalized, jira_issues_latest.issues]
     filters:
       jira_issues_latest.issue_type: "Bug,Defect"
+      jira_issues_latest.created_date: "7 days"
     listen:
-      date_range: jira_issues_latest.created_date
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Percentage distribution of bugs created within the selected Date Range by severity. Calculation: COUNT of bugs grouped by severity for the current Date Range filter."
+    note_text: "Definition: Percentage distribution of bugs created over the last 7 days by severity. Calculation: COUNT of bugs grouped by severity where created_date is in the last 7 days."
     show_value_labels: true
     label_type: labPer
     series_colors: {"(S0) Blocker": "#D64550", "(S1) Critical": "#F28B30", "(S2) Major": "#F2C94C", "(S3) Minor": "#2D9CDB", "(S4) Trivial": "#6FCF97", "(unknown)": "#BDBDBD"}
     row: 11
     col: 0
-    width: 24
+    width: 12
+    height: 6
+
+  - name: entered_by_severity_30d
+    title: Entered (30d) by Severity
+    type: looker_pie
+    model: panda_qa_metrics
+    explore: jira_issues_latest
+    fields: [jira_issues_latest.severity_normalized, jira_issues_latest.issues]
+    filters:
+      jira_issues_latest.issue_type: "Bug,Defect"
+      jira_issues_latest.created_date: "30 days"
+    listen:
+      pod: jira_issues_latest.team
+      priority: jira_issues_latest.priority
+      severity: jira_issues_latest.severity_normalized
+    note_display: hover
+    note_text: "Definition: Percentage distribution of bugs created over the last 30 days by severity. Calculation: COUNT of bugs grouped by severity where created_date is in the last 30 days."
+    show_value_labels: true
+    label_type: labPer
+    series_colors: {"(S0) Blocker": "#D64550", "(S1) Critical": "#F28B30", "(S2) Major": "#F2C94C", "(S3) Minor": "#2D9CDB", "(S4) Trivial": "#6FCF97", "(unknown)": "#BDBDBD"}
+    row: 11
+    col: 12
+    width: 12
     height: 6
 
 
