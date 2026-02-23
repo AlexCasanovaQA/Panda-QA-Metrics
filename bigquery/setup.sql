@@ -317,10 +317,10 @@ WITH bug_base AS (
     COALESCE(NULLIF(TRIM(priority), ''), 'Unspecified') AS priority_label,
     COALESCE(NULLIF(TRIM(severity), ''),
       CASE
-        WHEN priority IN ('Blocker', 'Critical', 'P0') THEN 'Critical'
-        WHEN priority IN ('High', 'P1') THEN 'High'
-        WHEN priority IN ('Medium', 'P2') THEN 'Medium'
-        WHEN priority IN ('Low', 'P3', 'Minor', 'Trivial') THEN 'Low'
+        WHEN REGEXP_CONTAINS(LOWER(COALESCE(priority, '')), r'(blocker|critical|highest|p0|sev[\s_-]*0|s0)') THEN 'Critical'
+        WHEN REGEXP_CONTAINS(LOWER(COALESCE(priority, '')), r'(high|p1|sev[\s_-]*1|s1)') THEN 'High'
+        WHEN REGEXP_CONTAINS(LOWER(COALESCE(priority, '')), r'(medium|normal|p2|sev[\s_-]*2|s2)') THEN 'Medium'
+        WHEN REGEXP_CONTAINS(LOWER(COALESCE(priority, '')), r'(low|lowest|minor|trivial|p3|p4|sev[\s_-]*3|s3|sev[\s_-]*4|s4)') THEN 'Low'
         ELSE 'Unspecified'
       END
     ) AS severity_label,
