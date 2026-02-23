@@ -210,36 +210,34 @@
     height: 6
 
   - name: fixed_by_priority_7d
-    title: Fixed (Date Range) by Priority
+    title: Fixed (7d) by Priority
     type: looker_pie
     model: panda_qa_metrics
     explore: jira_bug_events_daily
     fields: [jira_bug_events_daily.priority_label, jira_bug_events_daily.bugs]
     filters:
       jira_bug_events_daily.event_type: "fixed"
+      jira_bug_events_daily.event_date_date: "7 days"
     sorts: [jira_bug_events_daily.bugs desc]
-    listen:
-      date_range: jira_bug_events_daily.event_date_date
     note_display: hover
-    note_text: "Definition: Distribution of bugs fixed within the selected Date Range by priority. Calculation: COUNT of fixed events grouped by priority_label for the current Date Range filter."
+    note_text: "Definition: Distribution of bugs fixed over the last 7 days by priority. Calculation: COUNT of fixed events grouped by priority_label where event_date is in the last 7 days."
     row: 23
     col: 0
     width: 12
     height: 6
 
   - name: fixed_by_priority_30d
-    title: Fixed (Date Range) by Priority
+    title: Fixed (30d) by Priority
     type: looker_pie
     model: panda_qa_metrics
     explore: jira_bug_events_daily
     fields: [jira_bug_events_daily.priority_label, jira_bug_events_daily.bugs]
     filters:
       jira_bug_events_daily.event_type: "fixed"
+      jira_bug_events_daily.event_date_date: "30 days"
     sorts: [jira_bug_events_daily.bugs desc]
-    listen:
-      date_range: jira_bug_events_daily.event_date_date
     note_display: hover
-    note_text: "Definition: Distribution of bugs fixed within the selected Date Range by priority. Calculation: COUNT of fixed events grouped by priority_label for the current Date Range filter."
+    note_text: "Definition: Distribution of bugs fixed over the last 30 days by priority. Calculation: COUNT of fixed events grouped by priority_label where event_date is in the last 30 days."
     row: 23
     col: 12
     width: 12
