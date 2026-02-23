@@ -195,15 +195,14 @@
 
   - name: fixed_by_priority_7d
     title: Fixed (last 7d) by Priority
-    type: looker_column
+    type: looker_pie
     model: panda_qa_metrics
     explore: jira_bug_events_daily
-    fields: [jira_bug_events_daily.event_type, jira_bug_events_daily.event_date_date, jira_bug_events_daily.priority_label, jira_bug_events_daily.bugs]
-    pivots: [jira_bug_events_daily.priority_label]
+    fields: [jira_bug_events_daily.priority_label, jira_bug_events_daily.bugs]
     filters:
       jira_bug_events_daily.event_type: "fixed"
       jira_bug_events_daily.event_date_date: "7 days"
-    sorts: [jira_bug_events_daily.event_date_date]
+    sorts: [jira_bug_events_daily.bugs desc]
     listen:
       date_range: jira_bug_events_daily.event_date_date
     note_text: "Jira (changelog) | Bugs fixed in last 7 days by priority."
@@ -214,15 +213,14 @@
 
   - name: fixed_by_priority_30d
     title: Fixed (last 30d) by Priority
-    type: looker_column
+    type: looker_pie
     model: panda_qa_metrics
     explore: jira_bug_events_daily
-    fields: [jira_bug_events_daily.event_type, jira_bug_events_daily.event_date_date, jira_bug_events_daily.priority_label, jira_bug_events_daily.bugs]
-    pivots: [jira_bug_events_daily.priority_label]
+    fields: [jira_bug_events_daily.priority_label, jira_bug_events_daily.bugs]
     filters:
       jira_bug_events_daily.event_type: "fixed"
       jira_bug_events_daily.event_date_date: "30 days"
-    sorts: [jira_bug_events_daily.event_date_date]
+    sorts: [jira_bug_events_daily.bugs desc]
     listen:
       date_range: jira_bug_events_daily.event_date_date
     note_text: "Jira (changelog) | Bugs fixed in last 30 days by priority."
