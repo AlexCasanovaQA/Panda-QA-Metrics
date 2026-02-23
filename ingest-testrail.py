@@ -182,10 +182,13 @@ def fetch_runs(project_id: int, since_ts: datetime, *, auth: Tuple[str, str], ba
         if isinstance(data, list):
             page_runs = [r for r in data if isinstance(r, dict)]
             runs.extend(page_runs)
-            if len(page_runs) < limit:
-                break
-            offset += limit
-            continue
+
+            # Legacy TestRail instances may return a bare list and ignore
+            # pagination params entirely. In that shape, requesting additional
+            # offsets can return the same page forever when len(page_runs)
+            # matches the requested limit. Treat bare-list responses as
+            # non-paginated and stop after the first response.
+            break
 
         raise RuntimeError(
             f"Unexpected TestRail get_runs response type for project {project_id}: {type(data).__name__}: {str(data)[:200]}"
