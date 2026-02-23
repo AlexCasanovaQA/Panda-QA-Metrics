@@ -51,6 +51,9 @@ TEAM_FIELD_ID = os.environ.get("JIRA_TEAM_FIELD_ID", "customfield_10001")
 SEVERITY_FIELD_ID = os.environ.get("JIRA_SEVERITY_FIELD_ID", "").strip() or None
 SPRINT_FIELD_ID = os.environ.get("JIRA_SPRINT_FIELD_ID", "customfield_10020")
 
+# Runtime-resolved severity field id (explicit env var has priority).
+RESOLVED_SEVERITY_FIELD_ID: Optional[str] = SEVERITY_FIELD_ID
+
 
 def _jira_search_fields() -> str:
     """Build the Jira field list for search requests.
@@ -77,8 +80,8 @@ def _jira_search_fields() -> str:
         TEAM_FIELD_ID,
         SPRINT_FIELD_ID,
     ]
-    if SEVERITY_FIELD_ID:
-        fields.append(SEVERITY_FIELD_ID)
+    if RESOLVED_SEVERITY_FIELD_ID:
+        fields.append(RESOLVED_SEVERITY_FIELD_ID)
     # Keep deterministic order and avoid duplicates if ids overlap.
     return ",".join(dict.fromkeys(fields))
 
@@ -153,10 +156,21 @@ def _extract_severity(fields: Dict[str, Any]) -> Optional[str]:
 
     If not configured, we return None (caller can fall back to priority logic).
     """
-    if not SEVERITY_FIELD_ID:
-        return None
+    candidate_keys: List[str] = []
+    if RESOLVED_SEVERITY_FIELD_ID:
+        candidate_keys.append(RESOLVED_SEVERITY_FIELD_ID)
 
-    raw = fields.get(SEVERITY_FIELD_ID)
+    # Fallbacks commonly present in some Jira setups.
+    candidate_keys.extend(["severity", "customfield_severity"])
+
+    raw = None
+    for field_key in candidate_keys:
+        raw = fields.get(field_key)
+        if raw is not None:
+            break
+
+    if raw is None:
+        return None
 
     # Severity could be {"value": "(S1) Critical"} or {"name": "..."}
     if isinstance(raw, dict):
@@ -175,6 +189,55 @@ def _extract_severity(fields: Dict[str, Any]) -> Optional[str]:
             return first
 
     return None
+
+
+def _resolve_severity_field_id() -> Optional[str]:
+    """Resolve Jira severity field id.
+
+    Priority:
+    1) Explicit env var JIRA_SEVERITY_FIELD_ID.
+    2) Auto-detect from Jira /field metadata using field name heuristics.
+    """
+    if SEVERITY_FIELD_ID:
+        print(f"Using explicit severity field id from env: {SEVERITY_FIELD_ID}")
+        return SEVERITY_FIELD_ID
+
+    try:
+        payload = _jira_get("/rest/api/3/field")
+    except Exception as exc:
+        print(f"Could not auto-detect Jira severity field id: {exc}")
+        return None
+
+    if not isinstance(payload, list):
+        return None
+
+    def _score_field(name: str) -> int:
+        lname = (name or "").strip().lower()
+        if lname in {"severity", "severidad"}:
+            return 3
+        if "severity" in lname or "severidad" in lname:
+            return 2
+        return 0
+
+    best: Optional[str] = None
+    best_score = 0
+    for fld in payload:
+        if not isinstance(fld, dict):
+            continue
+        field_id = fld.get("id")
+        field_name = str(fld.get("name") or "")
+        score = _score_field(field_name)
+        if not field_id or score == 0:
+            continue
+        if score > best_score:
+            best = str(field_id)
+            best_score = score
+
+    if best:
+        print(f"Auto-detected severity field id: {best}")
+    else:
+        print("No Jira severity field detected from /field metadata; severity may remain unknown.")
+    return best
 
 
 def _ensure_table(bq: bigquery.Client, table_ref: bigquery.TableReference) -> None:
@@ -361,6 +424,9 @@ def ingest_jira(request):
 
     until = _utc_now()
     since = until - timedelta(days=lookback_days)
+
+    global RESOLVED_SEVERITY_FIELD_ID
+    RESOLVED_SEVERITY_FIELD_ID = _resolve_severity_field_id()
 
     bq = bigquery.Client(project=_get_project_id())
     table_ref = bq.dataset(BQ_DATASET_ID).table(BQ_TABLE_ID)
