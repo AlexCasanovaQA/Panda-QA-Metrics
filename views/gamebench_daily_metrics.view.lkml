@@ -9,6 +9,12 @@ view: gamebench_daily_metrics {
     sql: TIMESTAMP(${TABLE}.metric_date) ;;
   }
 
+  dimension: is_latest_metric_date {
+    type: yesno
+    sql: ${TABLE}.metric_date = (SELECT MAX(metric_date) FROM `qa_metrics.gamebench_daily_metrics`) ;;
+    description: "True when the row belongs to the latest available metric_date in gamebench_daily_metrics."
+  }
+
   dimension: environment { type: string sql: ${TABLE}.environment ;; }
   dimension: platform { type: string sql: ${TABLE}.platform ;; }
   dimension: app_package { type: string sql: ${TABLE}.app_package ;; }
