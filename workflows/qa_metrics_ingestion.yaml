@@ -3,9 +3,10 @@ main:
   steps:
     - init:
         assign:
-          - days: ${default(map.get(args, "days"), 7)}
-          - lookback_days: ${default(map.get(args, "lookback_days"), 90)}
-          - project_key: ${default(map.get(args, "project_key"), "PC")}
+          - request_args: ${default(args, {})}
+          - days: ${default(map.get(request_args, "days"), 7)}
+          - lookback_days: ${default(map.get(request_args, "lookback_days"), 90)}
+          - project_key: ${default(map.get(request_args, "project_key"), "PC")}
 
           - jira_url: "https://ingest-jira-147201244534.europe-west1.run.app"
           - jira_changelog_url: "https://ingest-jira-changelog-147201244534.europe-west1.run.app"
@@ -33,9 +34,9 @@ main:
               project_keys: ${[project_key]}
               lookback_days: ${lookback_days}
 
-          # ingest-jira-changelog REQUIERE project_keys (lista)
+          # ingest-jira-changelog espera project_keys como string CSV
           - payload_changelog:
-              project_keys: ${[project_key]}
+              project_keys: ${project_key}
               lookback_days: ${lookback_days}
 
           # test runs / results suelen ser incremental y pueden ignorar body,
