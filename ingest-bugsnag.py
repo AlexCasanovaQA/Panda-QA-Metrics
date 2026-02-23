@@ -3,6 +3,7 @@ import os
 import time
 import random
 from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
 
 import google.auth
@@ -84,16 +85,34 @@ def get_last_seen() -> datetime:
     clamp = datetime.now(timezone.utc) - timedelta(days=LOOKBACK_DAYS)
     return max(last, clamp)
 
-def request_with_retries(method: str, url: str, *, headers: Dict[str, str], params: Dict[str, Any]) -> requests.Response:
+def _parse_retry_after(header_value: Optional[str]) -> Optional[float]:
+    if not header_value:
+        return None
+
+    if header_value.isdigit():
+        return float(header_value)
+
+    try:
+        retry_at = parsedate_to_datetime(header_value)
+    except (TypeError, ValueError):
+        return None
+
+    if retry_at.tzinfo is None:
+        retry_at = retry_at.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    return max(0.0, (retry_at - now).total_seconds())
+
+
+def request_with_retries(method: str, url: str, *, headers: Dict[str, str], params: Optional[Dict[str, Any]] = None) -> requests.Response:
     last_exc: Optional[Exception] = None
     for attempt in range(MAX_RETRIES):
         try:
             r = requests.request(method, url, headers=headers, params=params, timeout=HTTP_TIMEOUT)
 
             if r.status_code in (429, 500, 502, 503, 504):
-                ra = r.headers.get("Retry-After")
-                if ra and ra.isdigit():
-                    sleep_s = min(float(ra), MAX_BACKOFF)
+                retry_after_seconds = _parse_retry_after(r.headers.get("Retry-After"))
+                if retry_after_seconds is not None:
+                    sleep_s = min(retry_after_seconds, MAX_BACKOFF)
                 else:
                     backoff = min(MAX_BACKOFF, BASE_BACKOFF * (2 ** attempt))
                     jitter = random.uniform(0, 0.25 * backoff)
@@ -162,10 +181,21 @@ def fetch_and_insert_bugsnag_errors(since_ts: datetime, started_monotonic: float
 
             resp = request_with_retries("GET", url, headers=headers, params=params)
             data = resp.json() or []
+            if isinstance(data, dict):
+                data = data.get("errors", [])
+            if not isinstance(data, list):
+                raise RuntimeError(f"Unexpected BugSnag payload type: {type(data).__name__}")
             if not data:
                 break
 
             for e in data:
+                in_flight = total_inserted + len(buffer)
+                if in_flight >= MAX_ERRORS_PER_RUN:
+                    if buffer:
+                        insert_rows(buffer)
+                        total_inserted += len(buffer)
+                    return total_inserted
+
                 buffer.append({
                     "project_id": str(project_id),
                     "error_id": e.get("id"),
@@ -179,19 +209,13 @@ def fetch_and_insert_bugsnag_errors(since_ts: datetime, started_monotonic: float
                     "users": int(e.get("users", 0) or 0),
                     "url": e.get("events_url") or e.get("url"),
                     "_ingested_at": ingested_at,
-                    "payload": json.dumps(e),
+                    "payload": json.dumps(e, separators=(",", ":")),
                 })
 
                 if len(buffer) >= BQ_INSERT_CHUNK_SIZE:
                     insert_rows(buffer)
                     total_inserted += len(buffer)
                     buffer = []
-
-                if total_inserted >= MAX_ERRORS_PER_RUN:
-                    if buffer:
-                        insert_rows(buffer)
-                        total_inserted += len(buffer)
-                    return total_inserted
 
             # siguiente página (si existe)
             next_url = resp.links.get("next", {}).get("url")
