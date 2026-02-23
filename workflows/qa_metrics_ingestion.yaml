@@ -3,20 +3,59 @@ main:
   steps:
     - init:
         assign:
+          - days: ${default(map.get(args, "days"), 7)}
+          - lookback_days: ${default(map.get(args, "lookback_days"), 90)}
+          - project_key: ${default(map.get(args, "project_key"), "PC")}
+
           - jira_url: "https://ingest-jira-147201244534.europe-west1.run.app"
           - jira_changelog_url: "https://ingest-jira-changelog-147201244534.europe-west1.run.app"
           - testrail_url: "https://ingest-testrail-147201244534.europe-west1.run.app"
+          - testrail_users_url: "https://ingest-testrail-users-147201244534.europe-west1.run.app"
           - testrail_results_url: "https://ingest-testrail-results-147201244534.europe-west1.run.app"
           - bugsnag_url: "https://ingest-bugsnag-147201244534.europe-west1.run.app"
-          - payload: {}   # POST body
+          - gamebench_url: "https://ingest-gamebench-147201244534.europe-west1.run.app"
+
           - results:
               jira: null
               jira_changelog: null
               testrail: null
+              testrail_users: null
               testrail_results: null
               bugsnag: null
+              gamebench_android: null
+              gamebench_ios: null
+
           - errors: []
           - status: "ok"
+
+          # ingest-jira REQUIERE project_keys (lista)
+          - payload_jira:
+              project_keys: ${[project_key]}
+              lookback_days: ${lookback_days}
+
+          # ingest-jira-changelog acepta project_key
+          - payload_changelog:
+              project_key: ${project_key}
+              lookback_days: ${lookback_days}
+
+          # test runs / results suelen ser incremental y pueden ignorar body,
+          # pero dejamos days para limitar si el servicio lo usa
+          - payload_testrail:
+              days: ${days}
+
+          - payload_testrail_results:
+              days: ${days}
+
+          - payload_bugsnag:
+              days: ${days}
+
+          - payload_gamebench_android:
+              days: ${days}
+              platform: "android"
+
+          - payload_gamebench_ios:
+              days: ${days}
+              platform: "ios"
 
     # --------------------------
     # JIRA ISSUES
@@ -28,11 +67,11 @@ main:
                 call: http.post
                 args:
                   url: ${jira_url}
-                  timeout: 900
+                  timeout: 1800
                   auth:
                     type: OIDC
                     audience: ${jira_url}
-                  body: ${payload}
+                  body: ${payload_jira}
                 result: jira_resp
             - jira_store:
                 assign:
@@ -58,7 +97,7 @@ main:
                   auth:
                     type: OIDC
                     audience: ${jira_changelog_url}
-                  body: ${payload}
+                  body: ${payload_changelog}
                 result: jcl_resp
             - jira_changelog_store:
                 assign:
@@ -80,11 +119,11 @@ main:
                 call: http.post
                 args:
                   url: ${testrail_url}
-                  timeout: 900
+                  timeout: 1800
                   auth:
                     type: OIDC
                     audience: ${testrail_url}
-                  body: ${payload}
+                  body: ${payload_testrail}
                 result: tr_resp
             - testrail_store:
                 assign:
@@ -95,6 +134,32 @@ main:
             - tr_err:
                 assign:
                   - errors: ${list.concat(errors, ["testrail - " + text.decode(json.encode(e))])}
+
+    # --------------------------
+    # TESTRAIL USERS
+    # --------------------------
+    - testrail_users_try:
+        try:
+          steps:
+            - testrail_users_call:
+                call: http.post
+                args:
+                  url: ${testrail_users_url}
+                  timeout: 1800
+                  auth:
+                    type: OIDC
+                    audience: ${testrail_users_url}
+                  body: {}
+                result: tru_resp
+            - testrail_users_store:
+                assign:
+                  - results.testrail_users: ${tru_resp.body}
+        except:
+          as: e
+          steps:
+            - tru_err:
+                assign:
+                  - errors: ${list.concat(errors, ["testrail_users - " + text.decode(json.encode(e))])}
 
     # --------------------------
     # TESTRAIL RESULTS
@@ -110,7 +175,7 @@ main:
                   auth:
                     type: OIDC
                     audience: ${testrail_results_url}
-                  body: ${payload}
+                  body: ${payload_testrail_results}
                 result: trr_resp
             - testrail_results_store:
                 assign:
@@ -136,7 +201,7 @@ main:
                   auth:
                     type: OIDC
                     audience: ${bugsnag_url}
-                  body: ${payload}
+                  body: ${payload_bugsnag}
                 result: bs_resp
             - bugsnag_store:
                 assign:
@@ -147,6 +212,58 @@ main:
             - bs_err:
                 assign:
                   - errors: ${list.concat(errors, ["bugsnag - " + text.decode(json.encode(e))])}
+
+    # --------------------------
+    # GAMEBENCH (Android)
+    # --------------------------
+    - gamebench_android_try:
+        try:
+          steps:
+            - gb_android_call:
+                call: http.post
+                args:
+                  url: ${gamebench_url}
+                  timeout: 1800
+                  auth:
+                    type: OIDC
+                    audience: ${gamebench_url}
+                  body: ${payload_gamebench_android}
+                result: gb_a_resp
+            - gb_android_store:
+                assign:
+                  - results.gamebench_android: ${gb_a_resp.body}
+        except:
+          as: e
+          steps:
+            - gb_android_err:
+                assign:
+                  - errors: ${list.concat(errors, ["gamebench_android - " + text.decode(json.encode(e))])}
+
+    # --------------------------
+    # GAMEBENCH (iOS)
+    # --------------------------
+    - gamebench_ios_try:
+        try:
+          steps:
+            - gb_ios_call:
+                call: http.post
+                args:
+                  url: ${gamebench_url}
+                  timeout: 1800
+                  auth:
+                    type: OIDC
+                    audience: ${gamebench_url}
+                  body: ${payload_gamebench_ios}
+                result: gb_i_resp
+            - gb_ios_store:
+                assign:
+                  - results.gamebench_ios: ${gb_i_resp.body}
+        except:
+          as: e
+          steps:
+            - gb_ios_err:
+                assign:
+                  - errors: ${list.concat(errors, ["gamebench_ios - " + text.decode(json.encode(e))])}
 
     # --------------------------
     # FINAL STATUS

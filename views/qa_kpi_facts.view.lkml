@@ -21,7 +21,9 @@ view: qa_kpi_facts {
     sql: ${TABLE}.privacy_level ;;
   }
 
-  \1COALESCE(NULLIF(${TABLE}.priority_label, ''), '(unknown)') ;;
+  dimension: priority_label {
+    type: string
+    sql: COALESCE(NULLIF(${TABLE}.priority_label, ''), '(unknown)') ;;
   }
 
   dimension_group: metric_date {
@@ -34,29 +36,43 @@ view: qa_kpi_facts {
   # BigQuery qa_kpi_facts.metric_date is DATE, so we expose a TIMESTAMP-typed time dimension for filtering.
   dimension_group: metric_ts {
     type: time
-    timeframes: [time, raw, date, week, month, quarter, year]
+    timeframes: [raw, time, date, week, month, quarter, year]
     sql: TIMESTAMP(${TABLE}.metric_date) ;;
   }
 
-  \1COALESCE(NULLIF(${TABLE}.pod, ''), '(unknown)') ;;
+  dimension: pod {
+    type: string
+    sql: COALESCE(NULLIF(${TABLE}.pod, ''), '(unknown)') ;;
   }
 
-  \1COALESCE(NULLIF(${TABLE}.feature, ''), '(unknown)') ;;
+  dimension: feature {
+    type: string
+    sql: COALESCE(NULLIF(${TABLE}.feature, ''), '(unknown)') ;;
   }
 
-  \1COALESCE(NULLIF(${TABLE}.release, ''), '(unknown)') ;;
+  dimension: release {
+    type: string
+    sql: COALESCE(NULLIF(${TABLE}.release, ''), '(unknown)') ;;
   }
 
-  \1COALESCE(NULLIF(${TABLE}.sprint, ''), '(unknown)') ;;
+  dimension: sprint {
+    type: string
+    sql: COALESCE(NULLIF(${TABLE}.sprint, ''), '(unknown)') ;;
   }
 
-  \1COALESCE(NULLIF(${TABLE}.qa_user, ''), '(unknown)') ;;
+  dimension: qa_user {
+    type: string
+    sql: COALESCE(NULLIF(${TABLE}.qa_user, ''), '(unknown)') ;;
   }
 
-  \1COALESCE(NULLIF(${TABLE}.developer_user, ''), '(unknown)') ;;
+  dimension: developer_user {
+    type: string
+    sql: COALESCE(NULLIF(${TABLE}.developer_user, ''), '(unknown)') ;;
   }
 
-  \1COALESCE(NULLIF(${TABLE}.severity, ''), '(unknown)') ;;
+  dimension: severity {
+    type: string
+    sql: COALESCE(NULLIF(${TABLE}.severity, ''), '(unknown)') ;;
   }
 
   dimension: unit {
