@@ -25,10 +25,11 @@ import json
 import os
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import functions_framework
 import requests
+from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 
 
@@ -98,7 +99,7 @@ def _ensure_table(bq: bigquery.Client, table_ref: bigquery.TableReference) -> No
             table.schema = list(table.schema) + to_add
             bq.update_table(table, ["schema"])
             print(f"Added {len(to_add)} columns to {table_ref}")
-    except Exception:
+    except NotFound:
         table = bigquery.Table(table_ref, schema=desired_schema)
         table.time_partitioning = bigquery.TimePartitioning(field="_ingested_at")
         bq.create_table(table)
@@ -128,10 +129,39 @@ def _get_latest_history_ts(bq: bigquery.Client, table_ref: bigquery.TableReferen
         rows = list(bq.query(sql).result())
         if not rows:
             return None
-        return rows[0].get("max_ts")
+        latest = rows[0].get("max_ts")
+        if latest and latest.tzinfo is None:
+            latest = latest.replace(tzinfo=timezone.utc)
+        return latest
     except Exception as e:
         print("Warning: could not query latest history_created:", e)
         return None
+
+
+def _get_existing_history_ids(
+    bq: bigquery.Client,
+    table_ref: bigquery.TableReference,
+    issue_key: str,
+    history_ids: List[str],
+) -> Set[str]:
+    """Fetch existing history ids for an issue to keep ingestion idempotent across reruns."""
+    if not history_ids:
+        return set()
+
+    sql = f"""
+      SELECT history_id
+      FROM `{table_ref.project}.{table_ref.dataset_id}.{table_ref.table_id}`
+      WHERE issue_key = @issue_key
+        AND history_id IN UNNEST(@history_ids)
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("issue_key", "STRING", issue_key),
+            bigquery.ArrayQueryParameter("history_ids", "STRING", history_ids),
+        ]
+    )
+    rows = bq.query(sql, job_config=job_config).result()
+    return {str(row["history_id"]) for row in rows if row.get("history_id") is not None}
 
 
 def _search_issue_keys(project_key: str, since: datetime, until: datetime, start_at: int, max_results: int = 100) -> Tuple[List[str], Optional[int]]:
@@ -262,10 +292,19 @@ def ingest_jira_changelog(request):
                     print(f"Failed to fetch changelog for {issue_key}: {e}")
                     continue
 
+                history_ids = [str(h.get("id")) for h in histories if h.get("id") is not None]
+                existing_ids = _get_existing_history_ids(bq, table_ref, issue_key, history_ids)
+
                 rows = []
                 for h in histories:
                     hid = h.get("id")
                     if hid is None:
+                        continue
+                    hid = str(hid)
+                    if hid in existing_ids:
+                        continue
+                    created_ts = _parse_jira_ts(h.get("created"))
+                    if created_ts and created_ts < since:
                         continue
                     rows.append(_history_to_rows(issue_key, project_key, h, ingested_at))
 
