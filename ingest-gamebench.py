@@ -183,6 +183,37 @@ def _normalize_apps(app_packages: Any) -> List[str]:
         return _split_packages(app_packages)
     return _split_packages(DEFAULT_APP_PACKAGES)
 
+def _normalize_platform_target(platform: Optional[str]) -> Optional[str]:
+    if platform is None:
+        return None
+    p = str(platform).strip().lower()
+    if not p:
+        return None
+    if "android" in p:
+        return "android"
+    if p in {"ios", "iphone", "ipad"}:
+        return "ios"
+    return p
+
+def _normalize_platform_source(plat: Any) -> Optional[str]:
+    if plat is None:
+        return None
+    p = str(plat).strip().lower()
+    return p or None
+
+def _platform_matches(target_platform: Optional[str], source_platform: Optional[str]) -> bool:
+    if not target_platform:
+        return True
+    if not source_platform:
+        return True
+
+    if target_platform == "android":
+        return "android" in source_platform
+    if target_platform == "ios":
+        return any(token in source_platform for token in ("ios", "iphone", "ipad"))
+
+    return target_platform in source_platform
+
 def ingest(days: int, platform: Optional[str], company_id: str, collection_id: str, app_packages: List[str]) -> Dict[str, Any]:
     since = datetime.now(timezone.utc) - timedelta(days=days)
     ingested_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -193,6 +224,8 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
     fetched = 0
     inserted = 0
     pages = 0
+    rows_skipped_platform = 0
+    target_platform = _normalize_platform_target(platform)
 
     for page in range(0, 500):
         pages += 1
@@ -211,15 +244,21 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
             if dtp and dtp < since:
                 if rows_to_insert:
                     inserted += upsert_rows(rows_to_insert)
-                return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted}
+                return {
+                    "pages": pages,
+                    "sessions_fetched": fetched,
+                    "rows_inserted": inserted,
+                    "rows_skipped_platform": rows_skipped_platform,
+                }
 
             # Fetch details for metrics
             detail = get_session(str(sid))
             fetched += 1
 
             app_pkg = _get(detail, "app") or _get(detail, "appPackage") or _get(detail, "app_package") or _get(s, "app")
-            plat = _get(detail, "platform") or _get(detail, "os") or _get(detail, "device", "platform")
-            if platform and plat and str(plat).lower() != platform.lower():
+            plat = _normalize_platform_source(_get(detail, "platform") or _get(detail, "os") or _get(detail, "device", "platform"))
+            if not _platform_matches(target_platform, plat):
+                rows_skipped_platform += 1
                 continue
 
             # Best-effort field mapping (API keys vary by account/setup)
@@ -268,17 +307,34 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
             if inserted >= MAX_SESSIONS_PER_RUN:
                 if rows_to_insert:
                     inserted += upsert_rows(rows_to_insert)
-                return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted, "stopped": "max_sessions"}
+                return {
+                    "pages": pages,
+                    "sessions_fetched": fetched,
+                    "rows_inserted": inserted,
+                    "rows_skipped_platform": rows_skipped_platform,
+                    "stopped": "max_sessions",
+                }
 
         if rows_to_insert:
             inserted += upsert_rows(rows_to_insert)
 
         if inserted >= MAX_SESSIONS_PER_RUN:
-            return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted, "stopped": "max_sessions"}
+            return {
+                "pages": pages,
+                "sessions_fetched": fetched,
+                "rows_inserted": inserted,
+                "rows_skipped_platform": rows_skipped_platform,
+                "stopped": "max_sessions",
+            }
 
         # continue pages
 
-    return {"pages": pages, "sessions_fetched": fetched, "rows_inserted": inserted}
+    return {
+        "pages": pages,
+        "sessions_fetched": fetched,
+        "rows_inserted": inserted,
+        "rows_skipped_platform": rows_skipped_platform,
+    }
 
 def ingest_gamebench(request):
     body = request.get_json(silent=True) or {}
