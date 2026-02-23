@@ -29,5 +29,30 @@ view: bugsnag_errors_latest {
   dimension: events { type: number sql: ${TABLE}.events ;; }
   dimension: users { type: number sql: ${TABLE}.users ;; }
 
+    dimension: is_active {
+    type: yesno
+    sql: LOWER(IFNULL(${status}, '')) NOT IN ('resolved','closed') ;;
+  }
+
   measure: errors { type: count }
+
+  measure: events_sum {
+    type: sum
+    sql: ${events} ;;
+  }
+
+  measure: users_sum {
+    type: sum
+    sql: ${users} ;;
+  }
+
+  measure: active_errors {
+    type: count
+    filters: [is_active: "yes"]
+  }
+
+  measure: high_critical_active_errors {
+    type: count
+    filters: [is_active: "yes", severity: "critical,error"]
+  }
 }

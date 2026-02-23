@@ -3,6 +3,7 @@ view: testrail_runs_latest {
 
   dimension: run_id { type: number primary_key: yes sql: ${TABLE}.run_id ;; }
   dimension: project_id { type: number sql: ${TABLE}.project_id ;; }
+  dimension: suite_id { type: number sql: ${TABLE}.suite_id ;; }
   dimension: name { type: string sql: ${TABLE}.name ;; }
   dimension: is_completed { type: yesno sql: ${TABLE}.is_completed ;; }
 
@@ -24,5 +25,35 @@ view: testrail_runs_latest {
   dimension: retest_count { type: number sql: ${TABLE}.retest_count ;; }
   dimension: untested_count { type: number sql: ${TABLE}.untested_count ;; }
 
-  measure: runs { type: count }
+    measure: runs { type: count }
+
+  measure: executed_cases {
+    type: sum
+    sql: (${passed_count}+${failed_count}+${blocked_count}+${retest_count}) ;;
+    value_format_name: decimal_0
+  }
+
+  measure: pass_rate {
+    type: number
+    sql: SAFE_DIVIDE(SUM(${passed_count}), NULLIF(SUM(${passed_count}+${failed_count}+${blocked_count}+${retest_count}),0)) ;;
+    value_format_name: percent_2
+  }
+
+  measure: fail_rate {
+    type: number
+    sql: SAFE_DIVIDE(SUM(${failed_count}), NULLIF(SUM(${passed_count}+${failed_count}+${blocked_count}+${retest_count}),0)) ;;
+    value_format_name: percent_2
+  }
+
+  measure: blocked_rate {
+    type: number
+    sql: SAFE_DIVIDE(SUM(${blocked_count}), NULLIF(SUM(${passed_count}+${failed_count}+${blocked_count}+${retest_count}),0)) ;;
+    value_format_name: percent_2
+  }
+
+  measure: retest_rate {
+    type: number
+    sql: SAFE_DIVIDE(SUM(${retest_count}), NULLIF(SUM(${passed_count}+${failed_count}+${blocked_count}+${retest_count}),0)) ;;
+    value_format_name: percent_2
+  }
 }

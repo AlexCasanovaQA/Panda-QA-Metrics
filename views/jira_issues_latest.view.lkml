@@ -11,6 +11,7 @@ view: jira_issues_latest {
   dimension: status { type: string sql: ${TABLE}.status ;; }
   dimension: status_category { type: string sql: ${TABLE}.status_category ;; }
   dimension: priority { type: string sql: ${TABLE}.priority ;; }
+  dimension: severity { type: string sql: ${TABLE}.severity ;; }
 
   dimension: assignee { type: string sql: ${TABLE}.assignee ;; }
   dimension: reporter { type: string sql: ${TABLE}.reporter ;; }

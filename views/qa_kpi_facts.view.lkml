@@ -3,7 +3,6 @@ view: qa_kpi_facts {
 
   dimension: kpi_id {
     type: string
-    primary_key: no
     sql: ${TABLE}.kpi_id ;;
   }
 
@@ -21,12 +20,9 @@ view: qa_kpi_facts {
     type: string
     sql: ${TABLE}.privacy_level ;;
   }
-  
-  dimension: priority_label {
-  type: string
-  sql: ${TABLE}.priority_label ;;
-}
 
+  \1COALESCE(NULLIF(${TABLE}.priority_label, ''), '(unknown)') ;;
+  }
 
   dimension_group: metric_date {
     type: time
@@ -34,49 +30,33 @@ view: qa_kpi_facts {
     sql: ${TABLE}.metric_date ;;
   }
 
-  # NOTE: Dashboard date_filter passes TIMESTAMP boundaries.
+  # Dashboard date_filter passes TIMESTAMP boundaries.
   # BigQuery qa_kpi_facts.metric_date is DATE, so we expose a TIMESTAMP-typed time dimension for filtering.
   dimension_group: metric_ts {
     type: time
-    timeframes: [raw, date, week, month, quarter, year]
+    timeframes: [time, raw, date, week, month, quarter, year]
     sql: TIMESTAMP(${TABLE}.metric_date) ;;
   }
 
-
-  dimension: pod {
-    label: "POD"
-    type: string
-    sql: ${TABLE}.pod ;;
+  \1COALESCE(NULLIF(${TABLE}.pod, ''), '(unknown)') ;;
   }
 
-  dimension: feature {
-    type: string
-    sql: ${TABLE}.feature ;;
+  \1COALESCE(NULLIF(${TABLE}.feature, ''), '(unknown)') ;;
   }
 
-  dimension: release {
-    type: string
-    sql: ${TABLE}.release ;;
+  \1COALESCE(NULLIF(${TABLE}.release, ''), '(unknown)') ;;
   }
 
-  dimension: sprint {
-    type: string
-    sql: ${TABLE}.sprint ;;
+  \1COALESCE(NULLIF(${TABLE}.sprint, ''), '(unknown)') ;;
   }
 
-  dimension: qa_user {
-    type: string
-    sql: ${TABLE}.qa_user ;;
+  \1COALESCE(NULLIF(${TABLE}.qa_user, ''), '(unknown)') ;;
   }
 
-  dimension: developer_user {
-    type: string
-    sql: ${TABLE}.developer_user ;;
+  \1COALESCE(NULLIF(${TABLE}.developer_user, ''), '(unknown)') ;;
   }
 
-  dimension: severity {
-    type: string
-    sql: ${TABLE}.severity ;;
+  \1COALESCE(NULLIF(${TABLE}.severity, ''), '(unknown)') ;;
   }
 
   dimension: unit {
