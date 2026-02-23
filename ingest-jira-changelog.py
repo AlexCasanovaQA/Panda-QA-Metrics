@@ -113,8 +113,15 @@ def _parse_jira_ts(value: Optional[str]) -> Optional[datetime]:
         if value.endswith("+0000"):
             value = value[:-5] + "+00:00"
         if value.endswith("Z"):
-            return datetime.fromisoformat(value.replace("Z", "+00:00"))
-        return datetime.fromisoformat(value)
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        else:
+            parsed = datetime.fromisoformat(value)
+
+        if parsed.tzinfo is None:
+            # Jira sometimes returns timestamps without offsets; treat them as UTC
+            # so cutoff comparisons always use timezone-aware values.
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     except Exception:
         return None
 
