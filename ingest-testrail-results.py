@@ -32,7 +32,6 @@ BASE_BACKOFF = float(os.environ.get("BASE_BACKOFF_SECONDS", "1.0"))
 MAX_BACKOFF = float(os.environ.get("MAX_BACKOFF_SECONDS", "30.0"))
 
 # ----------------- Secrets -----------------
-@lru_cache(maxsize=None)
 def get_secret(name: str) -> str:
     secret_name = f"projects/{PROJECT_ID}/secrets/{name}/versions/latest"
     resp = sm.access_secret_version(request={"name": secret_name})
@@ -217,10 +216,17 @@ def _safe_int(value: Any) -> Optional[int]:
     except (TypeError, ValueError):
         return None
 
+
+def _reset_invocation_caches() -> None:
+    """Avoid reusing secret-derived values across warm invocations."""
+    testrail_auth.cache_clear()
+    testrail_base_url.cache_clear()
+
 # ----------------- Entry -----------------
 def hello_http(request):
     started = time.monotonic()
     try:
+        _reset_invocation_caches()
         ensure_table()
 
         since_ts = get_last_created_on()
