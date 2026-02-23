@@ -50,7 +50,11 @@
   - name: header_scoreboard
     type: text
     title_text: "QA Executive Scoreboard"
-    body_text: "Top KPIs (current state): incident inflow, throughput and live backlog. Cada métrica incluye nota informativa (ícono i) con definición y cálculo."
+    body_text: "Top KPIs (current state): incident inflow, throughput, and live backlog. Each tile includes an info icon (i) with the KPI definition and calculation."
+    row: 0
+    col: 0
+    width: 16
+    height: 2
 
   - name: bugs_entered_today
     title: Bugs entered today
@@ -65,7 +69,7 @@
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
-    note_text: "DEFINICIÓN: número de bugs/defects creados hoy en Jira. CÁLCULO: COUNT(issue_key) con filtros issue_type in (Bug, Defect) y created_date=today. USO: detectar picos de entrada diarios y comparar contra capacidad de triage/fix."
+    note_text: "Definition: Number of bugs/defects created today in Jira. Calculation: COUNT(issue_key) filtered by issue_type in (Bug, Defect) and created_date=today. Use: Detect daily intake spikes and compare against triage/fix capacity."
     row: 3
     col: 0
     width: 3
@@ -80,7 +84,7 @@
     filters:
       jira_bug_events_daily.event_type: "fixed"
       jira_bug_events_daily.event_date_date: "today"
-    note_text: "DEFINICIÓN: bugs que cambiaron a estado Fixed hoy. CÁLCULO: COUNT de eventos de changelog con event_type=fixed y event_date=today. NOTA: esta tarjeta mantiene ventana fija diaria y no depende del filtro global date_range."
+    note_text: "Definition: Bugs that moved to Fixed status today. Calculation: COUNT of changelog events with event_type=fixed and event_date=today. Note: This tile keeps a fixed daily window and does not depend on the global date_range filter."
     row: 3
     col: 3
     width: 3
@@ -99,7 +103,7 @@
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
-    note_text: "DEFINICIÓN: backlog activo de bugs en este momento. CÁLCULO: COUNT de issues con statusCategory != Done. USO: medir presión operativa actual y volumen pendiente de cierre."
+    note_text: "Definition: Current active bug backlog. Calculation: COUNT of issues where statusCategory != Done. Use: Measure current operational pressure and pending closure volume."
     row: 3
     col: 6
     width: 3
@@ -118,7 +122,7 @@
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
-    note_text: "DEFINICIÓN: cola actual de validación QA. CÁLCULO: COUNT de bugs con qa_verification_state='QA Verification' (normaliza estados como Ready for QA, In QA, Awaiting QA Verification)."
+    note_text: "Definition: Current QA verification queue. Calculation: COUNT of bugs with qa_verification_state='QA Verification' (normalizes states such as Ready for QA, In QA, Awaiting QA Verification)."
     row: 3
     col: 9
     width: 3
@@ -137,7 +141,7 @@
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
-    note_text: "DEFINICIÓN: bugs esperando o ejecutando regresión. CÁLCULO: COUNT con status in (Ready for Regression, In Regression). USO: evaluar carga de pruebas de regresión en curso."
+    note_text: "Definition: Bugs waiting for or currently in regression. Calculation: COUNT with status in (Ready for Regression, In Regression). Use: Evaluate ongoing regression testing load."
     row: 3
     col: 12
     width: 3
@@ -146,7 +150,7 @@
   - name: header_incoming
     type: text
     title_text: "Incoming defects"
-    body_text: "Análisis de volumen de entrada de bugs por severidad y prioridad, con proporciones y tendencia diaria."
+    body_text: "Bug intake analysis by severity and priority, with proportional distribution and daily trend."
     row: 6
     col: 0
     width: 16
@@ -165,7 +169,7 @@
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
-    note_text: "DEFINICIÓN: distribución porcentual de bugs creados en los últimos 7 días por severidad. CÁLCULO: COUNT bugs grouped by severity con ventana rolling de 7 días."
+    note_text: "Definition: Percentage distribution of bugs created in the last 7 days by severity. Calculation: COUNT of bugs grouped by severity in a rolling 7-day window."
     series_colors: {critical: "#D64550", high: "#F28B30", medium: "#F2C94C", low: "#2D9CDB"}
     row: 8
     col: 0
@@ -185,7 +189,7 @@
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
-    note_text: "DEFINICIÓN: distribución porcentual de bugs creados en los últimos 30 días por severidad. CÁLCULO: COUNT bugs grouped by severity con ventana rolling de 30 días."
+    note_text: "Definition: Percentage distribution of bugs created in the last 30 days by severity. Calculation: COUNT of bugs grouped by severity in a rolling 30-day window."
     series_colors: {critical: "#D64550", high: "#F28B30", medium: "#F2C94C", low: "#2D9CDB"}
     row: 8
     col: 8
@@ -208,7 +212,7 @@
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
-    note_text: "DEFINICIÓN: tendencia diaria de bugs entrantes por prioridad (últimos 7 días). CÁLCULO: COUNT bugs por created_date y priority. USO: detectar si la entrada crítica sube más rápido que la capacidad de resolución."
+    note_text: "Definition: Daily trend of incoming bugs by priority (last 7 days). Calculation: COUNT of bugs by created_date and priority. Use: Detect whether critical intake grows faster than resolution capacity."
     series_colors: {Highest: "#D64550", High: "#F28B30", Medium: "#F2C94C", Low: "#2D9CDB", Lowest: "#6FCF97"}
     row: 14
     col: 0
@@ -227,7 +231,7 @@
     sorts: [jira_bug_events_daily.bugs desc]
     listen:
       date_range: jira_bug_events_daily.event_date_date
-    note_text: "DEFINICIÓN: distribución de bugs corregidos en 7 días por prioridad. CÁLCULO: COUNT eventos fixed agrupados por priority_label con ventana 7 días."
+    note_text: "Definition: Distribution of bugs fixed in the last 7 days by priority. Calculation: COUNT of fixed events grouped by priority_label over a 7-day window."
     row: 20
     col: 0
     width: 8
@@ -245,7 +249,7 @@
     sorts: [jira_bug_events_daily.bugs desc]
     listen:
       date_range: jira_bug_events_daily.event_date_date
-    note_text: "DEFINICIÓN: distribución de bugs corregidos en 30 días por prioridad. CÁLCULO: COUNT eventos fixed agrupados por priority_label con ventana 30 días."
+    note_text: "Definition: Distribution of bugs fixed in the last 30 days by priority. Calculation: COUNT of fixed events grouped by priority_label over a 30-day window."
     row: 20
     col: 8
     width: 8
@@ -265,7 +269,7 @@
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
-    note_text: "DEFINICIÓN: backlog activo repartido por POD/equipo. CÁLCULO: COUNT bugs activos (statusCategory != Done) agrupados por team. USO: balancear carga entre pods."
+    note_text: "Definition: Active backlog split by POD/team. Calculation: COUNT of active bugs (statusCategory != Done) grouped by team. Use: Balance workload across pods."
     row: 26
     col: 0
     width: 8
@@ -285,7 +289,7 @@
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
-    note_text: "DEFINICIÓN: backlog activo por prioridad actual. CÁLCULO: COUNT bugs activos agrupados por priority. USO: validar mezcla de criticidad pendiente."
+    note_text: "Definition: Active backlog by current priority. Calculation: COUNT of active bugs grouped by priority. Use: Validate the mix of pending criticality."
     row: 26
     col: 8
     width: 8
@@ -304,7 +308,7 @@
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
-    note_text: "DEFINICIÓN: distribución de bugs por estado Jira actual. CÁLCULO: COUNT bugs agrupados por status. USO: identificar cuellos de botella en flujo QA/dev."
+    note_text: "Definition: Distribution of bugs by current Jira status. Calculation: COUNT of bugs grouped by status. Use: Identify bottlenecks in QA/dev workflow."
     row: 32
     col: 0
     width: 8
@@ -319,7 +323,7 @@
     sorts: [jira_active_bug_count_daily.metric_date_date]
     listen:
       date_range: jira_active_bug_count_daily.metric_date_date
-    note_text: "DEFINICIÓN: evolución diaria del inventario de bugs activos. CÁLCULO: snapshot diario active_bug_count por fecha. USO: ver si backlog converge o diverge."
+    note_text: "Definition: Daily evolution of active bug inventory. Calculation: Daily active_bug_count snapshot by date. Use: See whether backlog is converging or diverging."
     series_colors: {jira_active_bug_count_daily.active_bug_count: "#2F80ED"}
     row: 32
     col: 8
@@ -337,7 +341,7 @@
     sorts: [jira_bug_events_daily.event_date_date]
     listen:
       date_range: jira_bug_events_daily.event_date_date
-    note_text: "DEFINICIÓN: bugs reabiertos por día. CÁLCULO: COUNT eventos changelog con event_type=reopened por fecha. USO: proxy de calidad de fix y escapes funcionales."
+    note_text: "Definition: Reopened bugs per day. Calculation: COUNT of changelog events with event_type=reopened by date. Use: Proxy for fix quality and functional escapes."
     series_colors: {jira_bug_events_daily.bugs: "#EB5757"}
     row: 38
     col: 0
@@ -358,7 +362,7 @@
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
-    note_text: "DEFINICIÓN: bugs activos por fixVersion (hito proxy). CÁLCULO: COUNT bugs activos agrupados por fix_versions. USO: priorización por release/milestone."
+    note_text: "Definition: Active bugs by fixVersion (milestone proxy). Calculation: COUNT of active bugs grouped by fix_versions. Use: Prioritize by release/milestone."
     row: 38
     col: 8
     width: 8
@@ -367,7 +371,7 @@
   - name: header_bugsnag
     type: text
     title_text: "BugSnag"
-    body_text: "Estabilidad en producción: volumen activo y severidad de errores de BugSnag."
+    body_text: "Production stability: active error volume and BugSnag severity mix."
     row: 44
     col: 0
     width: 16
@@ -379,7 +383,7 @@
     model: panda_qa_metrics
     explore: bugsnag_errors_latest
     fields: [bugsnag_errors_latest.active_errors]
-    note_text: "DEFINICIÓN: errores de producción activos no cerrados. CÁLCULO: COUNT errores donde status no está en resolved/closed."
+    note_text: "Definition: Active production errors not yet closed. Calculation: COUNT of errors where status is not in resolved/closed."
     row: 46
     col: 0
     width: 4
@@ -391,7 +395,7 @@
     model: panda_qa_metrics
     explore: bugsnag_errors_latest
     fields: [bugsnag_errors_latest.high_critical_active_errors]
-    note_text: "DEFINICIÓN: subconjunto de errores activos de mayor impacto. CÁLCULO: COUNT errores activos con severity in (critical,error)."
+    note_text: "Definition: Highest-impact subset of active errors. Calculation: COUNT of active errors with severity in (critical, error)."
     row: 46
     col: 4
     width: 4
@@ -403,7 +407,7 @@
     model: panda_qa_metrics
     explore: bugsnag_errors_latest
     fields: [bugsnag_errors_latest.severity, bugsnag_errors_latest.active_errors]
-    note_text: "DEFINICIÓN: composición de errores activos por severidad. CÁLCULO: COUNT active_errors grouped by severity. USO: entender perfil de riesgo actual."
+    note_text: "Definition: Composition of active errors by severity. Calculation: COUNT of active_errors grouped by severity. Use: Understand the current risk profile."
     series_colors: {critical: "#D64550", error: "#F28B30", warning: "#F2C94C", info: "#56CCF2"}
     row: 46
     col: 8
@@ -413,7 +417,7 @@
   - name: header_gamebench
     type: text
     title_text: "GameBench"
-    body_text: "Performance de juego: snapshots actuales y tendencia por plataforma/entorno."
+    body_text: "Gameplay performance: current snapshots and trends by platform/environment."
     row: 52
     col: 0
     width: 16
@@ -431,7 +435,7 @@
     listen:
       env: gamebench_daily_metrics.environment
       platform: gamebench_daily_metrics.platform
-    note_text: "DEFINICIÓN: snapshot de FPS mediana por plataforma en el día más reciente disponible. CÁLCULO: median_fps para metric_date dentro de 1 día."
+    note_text: "Definition: Snapshot of median FPS by platform on the most recent available day. Calculation: median_fps for metric_date within 1 day."
     row: 54
     col: 0
     width: 8
@@ -448,7 +452,7 @@
     listen:
       env: gamebench_daily_metrics.environment
       platform: gamebench_daily_metrics.platform
-    note_text: "DEFINICIÓN: proxy de estabilidad de sesión actual. CÁLCULO: fps_stability_pct en la fecha más reciente. NOTA: se usa como proxy ante ausencia de crash-free sessions en este explore."
+    note_text: "Definition: Current session stability proxy. Calculation: fps_stability_pct on the most recent date. Note: Used as a proxy because crash-free sessions are not available in this explore."
     row: 54
     col: 8
     width: 8
@@ -466,7 +470,7 @@
       date_range: gamebench_daily_metrics.metric_date_date
       env: gamebench_daily_metrics.environment
       platform: gamebench_daily_metrics.platform
-    note_text: "DEFINICIÓN: tendencia de FPS mediana diaria por plataforma. CÁLCULO: median_fps por fecha con pivot platform, gobernado por date_range global."
+    note_text: "Definition: Daily median FPS trend by platform. Calculation: median_fps by date pivoted by platform, governed by the global date_range."
     series_colors: {Android: "#27AE60", iOS: "#2D9CDB"}
     row: 59
     col: 0
@@ -476,7 +480,7 @@
   - name: header_ops
     type: text
     title_text: "Operational QA metrics"
-    body_text: "Métricas operativas QA: calidad del fix, velocidad de resolución, tamaño de build y ejecución de pruebas."
+    body_text: "Operational QA metrics: fix quality, resolution speed, build size, and test execution."
     row: 65
     col: 0
     width: 16
@@ -491,7 +495,7 @@
     sorts: [jira_fix_fail_rate_daily.event_date_date]
     listen:
       date_range: jira_fix_fail_rate_daily.event_date_date
-    note_text: "DEFINICIÓN: fix fail rate diario. CÁLCULO: reopened/fixed por día. INTERPRETACIÓN: cuanto más alto, más fixes regresan por regresión o cobertura insuficiente."
+    note_text: "Definition: Daily fix fail rate. Calculation: reopened/fixed per day. Interpretation: Higher values mean more fixes return due to regressions or insufficient coverage."
     series_colors: {jira_fix_fail_rate_daily.fix_fail_rate: "#EB5757"}
     row: 67
     col: 0
@@ -509,7 +513,7 @@
     sorts: [jira_mttr_claimed_fixed_daily.event_date_date]
     listen:
       date_range: jira_mttr_claimed_fixed_daily.event_date_date
-    note_text: "DEFINICIÓN: MTTR operativo diario en horas. CÁLCULO: promedio(primera transición a Resolved/Closed/Verified - created_at), agregado por fecha de claimed fixed."
+    note_text: "Definition: Daily operational MTTR in hours. Calculation: average(first transition to Resolved/Closed/Verified - created_at), aggregated by claimed fixed date."
     series_colors: {jira_mttr_claimed_fixed_daily.avg_mttr_hours: "#9B51E0"}
     row: 67
     col: 8
@@ -525,7 +529,7 @@
     filters:
       build_size_manual.metric_date_date: "7 days"
     sorts: [build_size_manual.metric_date_date desc, build_size_manual.platform]
-    note_text: "DEFINICIÓN: tamaño de build más reciente por plataforma/entorno. CÁLCULO: snapshot desde tabla manual en ventana de 7 días ordenada por fecha desc."
+    note_text: "Definition: Most recent build size by platform/environment. Calculation: Snapshot from manual table within a 7-day window ordered by descending date."
     row: 73
     col: 0
     width: 8
@@ -541,7 +545,7 @@
     sorts: [build_size_manual.metric_date_date]
     listen:
       date_range: build_size_manual.metric_date_date
-    note_text: "DEFINICIÓN: evolución del tamaño de build en MB por plataforma. CÁLCULO: build_size_mb por fecha con pivot por platform."
+    note_text: "Definition: Build size evolution in MB by platform. Calculation: build_size_mb by date pivoted by platform."
     series_colors: {Android: "#27AE60", iOS: "#2D9CDB"}
     row: 77
     col: 0
@@ -551,7 +555,7 @@
   - name: header_testrail
     type: text
     title_text: "TestRail"
-    body_text: "Salud de ejecución TestRail: throughput diario y señal de calidad del último run/build."
+    body_text: "TestRail execution health: daily throughput and quality signal from the latest run/build."
     row: 73
     col: 8
     width: 8
@@ -568,7 +572,7 @@
     sorts: [testrail_runs_latest.completed_on_date]
     listen:
       date_range: testrail_runs_latest.completed_on_date
-    note_text: "DEFINICIÓN: casos ejecutados por día (excluye untested). CÁLCULO: passed+failed+blocked+retest por completed_on, controlado por date_range global."
+    note_text: "Definition: Executed test cases per day (excludes untested). Calculation: passed+failed+blocked+retest by completed_on, controlled by global date_range."
     series_colors: {testrail_runs_latest.executed_cases: "#2D9CDB"}
     row: 75
     col: 8
@@ -587,7 +591,7 @@
     limit: 1
     listen:
       date_range: testrail_runs_latest.completed_on_date
-    note_text: "DEFINICIÓN: pass rate del último run completado. CÁLCULO: SUM(passed)/SUM(passed+failed+blocked+retest) tomando run más reciente por completed_on y run_id."
+    note_text: "Definition: Pass rate of the latest completed run. Calculation: SUM(passed)/SUM(passed+failed+blocked+retest) using the most recent run by completed_on and run_id."
     row: 79
     col: 8
     width: 4
@@ -603,7 +607,7 @@
     limit: 1
     listen:
       date_range: testrail_bvt_latest.completed_on_date
-    note_text: "DEFINICIÓN: pass rate BVT del último build/run disponible. CÁLCULO: pass_rate calculado en testrail_bvt_latest para el registro más reciente."
+    note_text: "Definition: BVT pass rate for the latest available build/run. Calculation: pass_rate from testrail_bvt_latest for the most recent record."
     row: 79
     col: 12
     width: 4
