@@ -1,5 +1,33 @@
 -- Refreshes qa_metrics.gamebench_daily_metrics using an idempotent upsert.
 -- Intended to run at least daily UTC after ingest-gamebench completes.
+-- Self-heal legacy environments where qa_metrics.gamebench_daily_metrics
+-- may still exist as a VIEW from older setup scripts.
+DROP VIEW IF EXISTS `qa_metrics.gamebench_daily_metrics`;
+
+CREATE TABLE IF NOT EXISTS `qa_metrics.gamebench_daily_metrics` (
+  metric_date DATE,
+  environment STRING,
+  platform STRING,
+  app_package STRING,
+  app_version STRING,
+  device_model STRING,
+  device_manufacturer STRING,
+  os_version STRING,
+  gpu_model STRING,
+  sessions INT64,
+  median_fps FLOAT64,
+  fps_stability_pct FLOAT64,
+  fps_stability_index FLOAT64,
+  cpu_avg_pct FLOAT64,
+  cpu_max_pct FLOAT64,
+  memory_avg_mb FLOAT64,
+  memory_max_mb FLOAT64,
+  current_avg_ma FLOAT64,
+  _updated_at TIMESTAMP
+)
+PARTITION BY metric_date
+CLUSTER BY environment, platform, app_version;
+
 MERGE `qa_metrics.gamebench_daily_metrics` AS target
 USING (
   SELECT
