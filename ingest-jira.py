@@ -47,6 +47,38 @@ JIRA_PROJECT_KEYS = os.environ.get("JIRA_PROJECT_KEYS", "").strip()
 # Custom field ids
 TEAM_FIELD_ID = os.environ.get("JIRA_TEAM_FIELD_ID", "customfield_10001")
 SEVERITY_FIELD_ID = os.environ.get("JIRA_SEVERITY_FIELD_ID", "").strip() or None
+SPRINT_FIELD_ID = os.environ.get("JIRA_SPRINT_FIELD_ID", "customfield_10020")
+
+
+def _jira_search_fields() -> str:
+    """Build the Jira field list for search requests.
+
+    Jira's search endpoint only returns requested fields, so custom field ids
+    must be explicitly included when configured.
+    """
+    fields = [
+        "summary",
+        "project",
+        "issuetype",
+        "status",
+        "priority",
+        "created",
+        "updated",
+        "resolutiondate",
+        "reporter",
+        "assignee",
+        "labels",
+        "components",
+        "fixVersions",
+        "versions",
+        "resolution",
+        TEAM_FIELD_ID,
+        SPRINT_FIELD_ID,
+    ]
+    if SEVERITY_FIELD_ID:
+        fields.append(SEVERITY_FIELD_ID)
+    # Keep deterministic order and avoid duplicates if ids overlap.
+    return ",".join(dict.fromkeys(fields))
 
 
 # ----------------------------
@@ -231,7 +263,7 @@ def _build_issue_record(issue: Dict[str, Any]) -> Dict[str, Any]:
         rec["team"] = team_val
 
     # Sprint: could be list of sprint strings
-    sprint_val = fields.get("customfield_10020") or fields.get("sprint")
+    sprint_val = fields.get(SPRINT_FIELD_ID) or fields.get("sprint")
     if isinstance(sprint_val, list) and sprint_val:
         # store raw list
         rec["sprint"] = json.dumps(sprint_val)
@@ -262,7 +294,7 @@ def _search_issues(project_key: str, since: datetime, until: datetime) -> Iterab
                 "startAt": start_at,
                 "maxResults": max_results,
                 # request only what we need (fields are still heavy but ok)
-                "fields": "summary,project,issuetype,status,priority,created,updated,resolutiondate,reporter,assignee,labels,components,fixVersions,versions,resolution,customfield_10001,customfield_10020",
+                "fields": _jira_search_fields(),
             },
         )
         issues = data.get("issues") or []
