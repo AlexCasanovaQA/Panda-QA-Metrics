@@ -171,6 +171,28 @@
     width: 8
     height: 6
 
+
+  - name: incoming_bugs_created_daily_by_priority
+    title: Incoming bugs created daily (last 7d)
+    type: looker_column
+    model: panda_qa_metrics
+    explore: jira_issues_latest
+    fields: [jira_issues_latest.created_date, jira_issues_latest.priority, jira_issues_latest.issues]
+    pivots: [jira_issues_latest.priority]
+    filters:
+      jira_issues_latest.issue_type: "Bug,Defect"
+      jira_issues_latest.created_date: "7 days"
+    sorts: [jira_issues_latest.created_date]
+    listen:
+      pod: jira_issues_latest.team
+      priority: jira_issues_latest.priority
+      severity: jira_issues_latest.severity
+    note_text: "Jira | Mide bugs creados por día (últimos 7 días), desglosados por prioridad."
+    row: 14
+    col: 0
+    width: 16
+    height: 6
+
   - name: fixed_by_priority_7d
     title: Fixed (last 7d) by Priority
     type: looker_column
@@ -185,7 +207,7 @@
     listen:
       date_range: jira_bug_events_daily.event_date_date
     note_text: "Jira (changelog) | Bugs fixed in last 7 days by priority."
-    row: 14
+    row: 20
     col: 0
     width: 8
     height: 6
@@ -204,7 +226,7 @@
     listen:
       date_range: jira_bug_events_daily.event_date_date
     note_text: "Jira (changelog) | Bugs fixed in last 30 days by priority."
-    row: 14
+    row: 20
     col: 8
     width: 8
     height: 6
@@ -224,7 +246,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
     note_text: "Jira | Current active bugs grouped by POD."
-    row: 20
+    row: 26
     col: 0
     width: 8
     height: 6
@@ -244,7 +266,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
     note_text: "Jira | Current active bugs grouped by priority."
-    row: 20
+    row: 26
     col: 8
     width: 8
     height: 6
@@ -263,7 +285,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
     note_text: "Jira | Current bugs grouped by Jira status."
-    row: 26
+    row: 32
     col: 0
     width: 8
     height: 6
@@ -278,7 +300,7 @@
     listen:
       date_range: jira_active_bug_count_daily.metric_date_date
     note_text: "Jira snapshot | Daily active bug count trend."
-    row: 26
+    row: 32
     col: 8
     width: 8
     height: 6
@@ -295,7 +317,7 @@
     listen:
       date_range: jira_bug_events_daily.event_date_date
     note_text: "Jira (changelog) | Bugs reopened over time."
-    row: 32
+    row: 38
     col: 0
     width: 8
     height: 6
@@ -315,7 +337,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity
     note_text: "Jira | Active bugs grouped by Fix Version as milestone proxy."
-    row: 32
+    row: 38
     col: 8
     width: 8
     height: 6
@@ -324,7 +346,7 @@
     type: text
     title_text: "BugSnag"
     body_text: "Production stability overview."
-    row: 38
+    row: 44
     col: 0
     width: 16
     height: 2
@@ -336,7 +358,7 @@
     explore: bugsnag_errors_latest
     fields: [bugsnag_errors_latest.active_errors]
     note_text: "BugSnag | Errors where status != resolved/closed."
-    row: 40
+    row: 46
     col: 0
     width: 5
     height: 3
@@ -348,7 +370,7 @@
     explore: bugsnag_errors_latest
     fields: [bugsnag_errors_latest.high_critical_active_errors]
     note_text: "BugSnag | Active errors with severity in (critical, error)."
-    row: 40
+    row: 46
     col: 5
     width: 5
     height: 3
@@ -360,7 +382,7 @@
     explore: bugsnag_errors_latest
     fields: [bugsnag_errors_latest.severity, bugsnag_errors_latest.active_errors]
     note_text: "BugSnag | Active errors grouped by severity."
-    row: 40
+    row: 46
     col: 10
     width: 6
     height: 6
@@ -369,7 +391,7 @@
     type: text
     title_text: "GameBench"
     body_text: "Current snapshots + 7d trends (Android vs iOS)."
-    row: 46
+    row: 52
     col: 0
     width: 16
     height: 2
@@ -387,7 +409,7 @@
       env: gamebench_daily_metrics.environment
       platform: gamebench_daily_metrics.platform
     note_text: "GameBench | Current snapshot table using latest available day in the last day, grouped by platform."
-    row: 48
+    row: 54
     col: 0
     width: 8
     height: 4
@@ -404,7 +426,7 @@
       env: gamebench_daily_metrics.environment
       platform: gamebench_daily_metrics.platform
     note_text: "GameBench proxy | Uses fps_stability_pct as current session stability proxy (no crash-free session metric available in gamebench_daily_metrics)."
-    row: 48
+    row: 54
     col: 8
     width: 8
     height: 4
@@ -422,7 +444,7 @@
       env: gamebench_daily_metrics.environment
       platform: gamebench_daily_metrics.platform
     note_text: "GameBench | Daily median FPS (median across sessions), pivoted by platform. Filter-driven by dashboard date_range."
-    row: 52
+    row: 58
     col: 0
     width: 16
     height: 6
@@ -431,7 +453,7 @@
     type: text
     title_text: "Operational QA metrics"
     body_text: "Current snapshots + trends for fix fail, MTTR, build size and TestRail execution/BVT health."
-    row: 58
+    row: 64
     col: 0
     width: 16
     height: 2
@@ -446,7 +468,7 @@
     listen:
       date_range: jira_fix_fail_rate_daily.event_date_date
     note_text: "Jira | Reopened / Fixed ratio by day."
-    row: 60
+    row: 66
     col: 0
     width: 8
     height: 6
@@ -461,7 +483,7 @@
     listen:
       date_range: jira_mttr_fixed_daily.event_date_date
     note_text: "Jira | Average hours from created to fixed for bugs fixed each day."
-    row: 60
+    row: 66
     col: 8
     width: 8
     height: 6
@@ -476,7 +498,7 @@
       build_size_manual.metric_date_date: "7 days"
     sorts: [build_size_manual.metric_date_date desc, build_size_manual.platform]
     note_text: "Manual build metrics | Current snapshot per platform from latest available builds."
-    row: 66
+    row: 72
     col: 0
     width: 8
     height: 4
@@ -492,7 +514,7 @@
     listen:
       date_range: build_size_manual.metric_date_date
     note_text: "Manual build metrics | Daily build size trend by platform."
-    row: 70
+    row: 76
     col: 0
     width: 8
     height: 6
@@ -501,7 +523,7 @@
     type: text
     title_text: "TestRail"
     body_text: "Execution throughput and latest quality signal."
-    row: 66
+    row: 72
     col: 8
     width: 8
     height: 2
@@ -518,7 +540,7 @@
     listen:
       date_range: testrail_runs_latest.completed_on_date
     note_text: "TestRail | Ejecutado = passed + failed + blocked + retest (excluye untested) por día de completed_on. Filter-driven by dashboard date_range."
-    row: 68
+    row: 74
     col: 8
     width: 8
     height: 4
@@ -536,7 +558,7 @@
     listen:
       date_range: testrail_runs_latest.completed_on_date
     note_text: "TestRail | Pass rate = SUM(passed) / SUM(passed + failed + blocked + retest) del último run completado disponible."
-    row: 72
+    row: 78
     col: 8
     width: 4
     height: 3
@@ -552,7 +574,7 @@
     listen:
       date_range: testrail_bvt_latest.completed_on_date
     note_text: "TestRail BVT | Pass rate del último build/run BVT disponible (según pass_rate_calc en testrail_bvt_latest)."
-    row: 72
+    row: 78
     col: 12
     width: 4
     height: 3
