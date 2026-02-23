@@ -255,6 +255,196 @@ UNNEST(JSON_EXTRACT_ARRAY(c.items_json)) AS item
 WHERE JSON_VALUE(item, '$.field') = 'status';
 
 -- -----------------------------
+-- LookML helper objects (explicit definitions)
+-- -----------------------------
+
+CREATE OR REPLACE VIEW `qa_metrics.jira_bug_events_daily` AS
+WITH bug_base AS (
+  SELECT
+    issue_key,
+    DATE(created_at) AS created_date,
+    COALESCE(NULLIF(TRIM(priority), ''), 'Unspecified') AS priority_label,
+    COALESCE(NULLIF(TRIM(severity), ''),
+      CASE
+        WHEN priority IN ('Blocker', 'Critical', 'P0') THEN 'Critical'
+        WHEN priority IN ('High', 'P1') THEN 'High'
+        WHEN priority IN ('Medium', 'P2') THEN 'Medium'
+        WHEN priority IN ('Low', 'P3', 'Minor', 'Trivial') THEN 'Low'
+        ELSE 'Unspecified'
+      END
+    ) AS severity_label,
+    COALESCE(NULLIF(TRIM(team), ''), 'Unassigned') AS pod
+  FROM `qa_metrics.jira_issues_latest`
+  WHERE LOWER(issue_type) = 'bug'
+),
+status_events AS (
+  SELECT
+    sc.issue_key,
+    DATE(sc.changed_at) AS event_date,
+    CASE
+      WHEN sc.to_status = 'Reopened' THEN 'reopened'
+      WHEN sc.to_status IN ('Resolved', 'Closed', 'Verified') THEN 'fixed'
+      ELSE NULL
+    END AS event_type
+  FROM `qa_metrics.jira_status_changes` sc
+),
+created_events AS (
+  SELECT
+    issue_key,
+    created_date AS event_date,
+    'created' AS event_type
+  FROM bug_base
+)
+SELECT
+  e.event_date,
+  e.event_type,
+  b.priority_label,
+  b.severity_label,
+  b.pod,
+  COUNT(DISTINCT e.issue_key) AS bugs_count
+FROM (
+  SELECT * FROM created_events
+  UNION ALL
+  SELECT * FROM status_events WHERE event_type IS NOT NULL
+) e
+JOIN bug_base b USING (issue_key)
+WHERE e.event_date IS NOT NULL
+GROUP BY 1,2,3,4,5;
+
+CREATE OR REPLACE VIEW `qa_metrics.jira_fix_fail_rate_daily` AS
+WITH fixed AS (
+  SELECT
+    DATE(changed_at) AS event_date,
+    COUNT(DISTINCT issue_key) AS fixed_count
+  FROM `qa_metrics.jira_status_changes`
+  WHERE to_status IN ('Resolved', 'Closed', 'Verified')
+  GROUP BY 1
+),
+reopened AS (
+  SELECT
+    DATE(changed_at) AS event_date,
+    COUNT(DISTINCT issue_key) AS reopened_count
+  FROM `qa_metrics.jira_status_changes`
+  WHERE to_status = 'Reopened'
+  GROUP BY 1
+)
+SELECT
+  COALESCE(f.event_date, r.event_date) AS event_date,
+  COALESCE(f.fixed_count, 0) AS fixed_count,
+  COALESCE(r.reopened_count, 0) AS reopened_count
+FROM fixed f
+FULL OUTER JOIN reopened r
+  ON f.event_date = r.event_date;
+
+CREATE OR REPLACE VIEW `qa_metrics.jira_mttr_fixed_daily` AS
+WITH fixed_cohort AS (
+  SELECT
+    sc.issue_key,
+    MIN(sc.changed_at) AS fixed_at
+  FROM `qa_metrics.jira_status_changes` sc
+  WHERE sc.to_status IN ('Resolved', 'Closed', 'Verified')
+  GROUP BY 1
+),
+bugs AS (
+  SELECT
+    issue_key,
+    created_at
+  FROM `qa_metrics.jira_issues_latest`
+  WHERE LOWER(issue_type) = 'bug'
+    AND created_at IS NOT NULL
+)
+SELECT
+  DATE(fc.fixed_at) AS event_date,
+  AVG(TIMESTAMP_DIFF(fc.fixed_at, b.created_at, SECOND) / 3600.0) AS mttr_hours
+FROM fixed_cohort fc
+JOIN bugs b
+  ON b.issue_key = fc.issue_key
+WHERE fc.fixed_at >= b.created_at
+GROUP BY 1;
+
+CREATE OR REPLACE VIEW `qa_metrics.jira_active_bug_count_daily` AS
+WITH bug_lifecycle AS (
+  SELECT
+    ji.issue_key,
+    DATE(ji.created_at) AS created_date,
+    DATE(MIN(sc.changed_at)) AS fixed_date
+  FROM `qa_metrics.jira_issues_latest` ji
+  LEFT JOIN `qa_metrics.jira_status_changes` sc
+    ON sc.issue_key = ji.issue_key
+   AND sc.to_status IN ('Resolved', 'Closed', 'Verified')
+  WHERE LOWER(ji.issue_type) = 'bug'
+    AND ji.created_at IS NOT NULL
+  GROUP BY 1,2
+),
+date_spine AS (
+  SELECT metric_date
+  FROM UNNEST(
+    GENERATE_DATE_ARRAY(
+      (SELECT MIN(created_date) FROM bug_lifecycle),
+      CURRENT_DATE(),
+      INTERVAL 1 DAY
+    )
+  ) AS metric_date
+)
+SELECT
+  d.metric_date,
+  COUNTIF(
+    b.created_date <= d.metric_date
+    AND (b.fixed_date IS NULL OR b.fixed_date > d.metric_date)
+  ) AS active_bug_count
+FROM date_spine d
+CROSS JOIN bug_lifecycle b
+GROUP BY 1;
+
+CREATE OR REPLACE VIEW `qa_metrics.testrail_bvt_latest` AS
+SELECT
+  run_id,
+  name,
+  completed_on,
+  SAFE_DIVIDE(
+    CAST(passed_count AS FLOAT64),
+    NULLIF(CAST(passed_count + failed_count + blocked_count + retest_count AS FLOAT64), 0.0)
+  ) AS pass_rate_calc
+FROM `qa_metrics.testrail_runs_latest`
+WHERE REGEXP_CONTAINS(UPPER(COALESCE(name, '')), r'\bBVT\b')
+  AND completed_on IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS `qa_metrics.build_size_manual` (
+  metric_date DATE,
+  platform STRING,
+  environment STRING,
+  build_version STRING,
+  build_size_mb FLOAT64,
+  _updated_at TIMESTAMP
+)
+PARTITION BY metric_date
+CLUSTER BY platform, environment;
+
+CREATE TABLE IF NOT EXISTS `qa_metrics.gamebench_daily_metrics` (
+  metric_date DATE,
+  environment STRING,
+  platform STRING,
+  app_package STRING,
+  app_version STRING,
+  device_model STRING,
+  device_manufacturer STRING,
+  os_version STRING,
+  gpu_model STRING,
+  sessions INT64,
+  median_fps FLOAT64,
+  fps_stability_pct FLOAT64,
+  fps_stability_index FLOAT64,
+  cpu_avg_pct FLOAT64,
+  cpu_max_pct FLOAT64,
+  memory_avg_mb FLOAT64,
+  memory_max_mb FLOAT64,
+  current_avg_ma FLOAT64,
+  _updated_at TIMESTAMP
+)
+PARTITION BY metric_date
+CLUSTER BY environment, platform, app_version;
+
+-- -----------------------------
 -- KPI Facts View (used by Looker)
 -- -----------------------------
 CREATE OR REPLACE VIEW `qa_metrics.qa_kpi_facts` AS

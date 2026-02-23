@@ -56,6 +56,14 @@ This will create:
   - `kpi_catalog`
 - **Main KPI fact view used by Looker:**
   - `qa_kpi_facts`
+- Additional LookML helper objects used directly by dashboards/views:
+  - `jira_bug_events_daily`
+  - `jira_fix_fail_rate_daily`
+  - `jira_mttr_fixed_daily`
+  - `jira_active_bug_count_daily`
+  - `testrail_bvt_latest`
+  - `build_size_manual` (table)
+  - `gamebench_daily_metrics` (table)
 
 ### Manual KPI inputs
 Some KPIs cannot be derived from Jira/TestRail/Bugsnag without more source data. They are supported via:
@@ -68,6 +76,26 @@ Template inserts:
 **Manual Private KPIs:** R1, R10, R17, R18, R19, R2, R20, R24, R3, R4, R5
 
 ---
+
+## Refresh strategy for helper views/tables (avoid empty dashboard tiles)
+
+Some Looker tiles read from pre-aggregated helper objects. To keep them populated, run a **daily Scheduled Query** (or a materialization job) that executes the relevant statements from `bigquery/setup.sql`:
+
+- `CREATE OR REPLACE VIEW qa_metrics.jira_bug_events_daily`
+- `CREATE OR REPLACE VIEW qa_metrics.jira_fix_fail_rate_daily`
+- `CREATE OR REPLACE VIEW qa_metrics.jira_mttr_fixed_daily`
+- `CREATE OR REPLACE VIEW qa_metrics.jira_active_bug_count_daily`
+- `CREATE OR REPLACE VIEW qa_metrics.testrail_bvt_latest`
+
+Recommended frequency:
+- At least once per day (UTC), **after** Jira/TestRail ingestion finishes.
+- Optional: every 4-6 hours for fresher operational dashboards.
+
+For manual/source-fed tables, ensure an equivalent daily load process exists:
+- `qa_metrics.build_size_manual`
+- `qa_metrics.gamebench_daily_metrics`
+
+If these refreshes are skipped, Looker explores can compile correctly but charts may render with no rows.
 
 ## 3) Field Mapping (per your requirements)
 
