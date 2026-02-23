@@ -29,6 +29,7 @@ DECLARE keep_objects ARRAY<STRING> DEFAULT [
   'testrail_runs_latest',
   'bugsnag_errors_latest',
   'jira_status_changes',
+  'jira_status_category_map',
   'jira_bug_events_daily',
   'jira_fix_fail_rate_daily',
   'jira_mttr_fixed_daily',
@@ -309,6 +310,40 @@ WHERE JSON_VALUE(item, '$.field') = 'status';
 -- LookML helper objects (explicit definitions)
 -- -----------------------------
 
+-- Canonical Jira status mapping used by public QA metrics.
+--
+-- Audit note (dashboard parity):
+--   * done_or_fixed = statuses considered a successful "fixed/closed" transition.
+--       Base set: resolved, closed, verified, done.
+--       Project-specific equivalents included here: fixed, completed, qa approved, ready for release.
+--   * reopened_target = statuses considered active/reopened workflow after a done state.
+--       Set: open, reopened, backlog, to do, in progress, selected for development,
+--            in review, ready for qa, ready for test, qa testing, testing.
+--
+-- Matching is case-insensitive and whitespace-tolerant in downstream views by
+-- normalizing with LOWER(TRIM(status)). Update this mapping in one place if
+-- a Jira project introduces new equivalent statuses.
+CREATE OR REPLACE VIEW `qa_metrics.jira_status_category_map` AS
+SELECT 'resolved' AS normalized_status, 'done_or_fixed' AS status_category UNION ALL
+SELECT 'closed', 'done_or_fixed' UNION ALL
+SELECT 'verified', 'done_or_fixed' UNION ALL
+SELECT 'done', 'done_or_fixed' UNION ALL
+SELECT 'fixed', 'done_or_fixed' UNION ALL
+SELECT 'completed', 'done_or_fixed' UNION ALL
+SELECT 'qa approved', 'done_or_fixed' UNION ALL
+SELECT 'ready for release', 'done_or_fixed' UNION ALL
+SELECT 'open', 'reopened_target' UNION ALL
+SELECT 'reopened', 'reopened_target' UNION ALL
+SELECT 'backlog', 'reopened_target' UNION ALL
+SELECT 'to do', 'reopened_target' UNION ALL
+SELECT 'in progress', 'reopened_target' UNION ALL
+SELECT 'selected for development', 'reopened_target' UNION ALL
+SELECT 'in review', 'reopened_target' UNION ALL
+SELECT 'ready for qa', 'reopened_target' UNION ALL
+SELECT 'ready for test', 'reopened_target' UNION ALL
+SELECT 'qa testing', 'reopened_target' UNION ALL
+SELECT 'testing', 'reopened_target';
+
 CREATE OR REPLACE VIEW `qa_metrics.jira_bug_events_daily` AS
 WITH bug_base AS (
   SELECT
@@ -328,17 +363,24 @@ WITH bug_base AS (
   FROM `qa_metrics.jira_issues_latest`
   WHERE LOWER(TRIM(issue_type)) IN ('bug', 'defect')
 ),
+status_sets AS (
+  SELECT
+    ARRAY_AGG(IF(status_category = 'done_or_fixed', normalized_status, NULL) IGNORE NULLS) AS done_or_fixed_statuses,
+    ARRAY_AGG(IF(status_category = 'reopened_target', normalized_status, NULL) IGNORE NULLS) AS reopened_target_statuses
+  FROM `qa_metrics.jira_status_category_map`
+),
 status_events AS (
   SELECT
     sc.issue_key,
     DATE(sc.changed_at) AS event_date,
     CASE
-      WHEN LOWER(TRIM(COALESCE(sc.from_status, ''))) IN ('resolved', 'closed', 'verified', 'done')
-       AND LOWER(TRIM(COALESCE(sc.to_status, ''))) IN ('open', 'backlog', 'to do', 'in progress', 'reopened', 'ready for qa', 'ready for test', 'qa testing', 'testing', 'in review', 'selected for development') THEN 'reopened'
-      WHEN LOWER(TRIM(COALESCE(sc.to_status, ''))) IN ('resolved', 'closed', 'verified', 'done') THEN 'fixed'
+      WHEN LOWER(TRIM(COALESCE(sc.from_status, ''))) IN UNNEST(ss.done_or_fixed_statuses)
+       AND LOWER(TRIM(COALESCE(sc.to_status, ''))) IN UNNEST(ss.reopened_target_statuses) THEN 'reopened'
+      WHEN LOWER(TRIM(COALESCE(sc.to_status, ''))) IN UNNEST(ss.done_or_fixed_statuses) THEN 'fixed'
       ELSE NULL
     END AS event_type
   FROM `qa_metrics.jira_status_changes` sc
+  CROSS JOIN status_sets ss
 ),
 created_events AS (
   SELECT
@@ -364,12 +406,19 @@ WHERE e.event_date IS NOT NULL
 GROUP BY 1,2,3,4,5;
 
 CREATE OR REPLACE VIEW `qa_metrics.jira_fix_fail_rate_daily` AS
-WITH fixed AS (
+WITH status_sets AS (
+  SELECT
+    ARRAY_AGG(IF(status_category = 'done_or_fixed', normalized_status, NULL) IGNORE NULLS) AS done_or_fixed_statuses,
+    ARRAY_AGG(IF(status_category = 'reopened_target', normalized_status, NULL) IGNORE NULLS) AS reopened_target_statuses
+  FROM `qa_metrics.jira_status_category_map`
+),
+fixed AS (
   SELECT
     DATE(changed_at) AS event_date,
     COUNT(DISTINCT issue_key) AS fixed_count
   FROM `qa_metrics.jira_status_changes`
-  WHERE to_status IN ('Resolved', 'Closed', 'Verified')
+  CROSS JOIN status_sets
+  WHERE LOWER(TRIM(COALESCE(to_status, ''))) IN UNNEST(done_or_fixed_statuses)
   GROUP BY 1
 ),
 reopened AS (
@@ -377,8 +426,9 @@ reopened AS (
     DATE(changed_at) AS event_date,
     COUNT(DISTINCT issue_key) AS reopened_count
   FROM `qa_metrics.jira_status_changes`
-  WHERE LOWER(TRIM(COALESCE(from_status, ''))) IN ('resolved', 'closed', 'verified', 'done')
-    AND LOWER(TRIM(COALESCE(to_status, ''))) IN ('open', 'backlog', 'to do', 'in progress', 'reopened', 'ready for qa', 'ready for test', 'qa testing', 'testing', 'in review', 'selected for development')
+  CROSS JOIN status_sets
+  WHERE LOWER(TRIM(COALESCE(from_status, ''))) IN UNNEST(done_or_fixed_statuses)
+    AND LOWER(TRIM(COALESCE(to_status, ''))) IN UNNEST(reopened_target_statuses)
   GROUP BY 1
 )
 SELECT
@@ -390,12 +440,18 @@ FULL OUTER JOIN reopened r
   ON f.event_date = r.event_date;
 
 CREATE OR REPLACE VIEW `qa_metrics.jira_mttr_fixed_daily` AS
-WITH fixed_cohort AS (
+WITH status_sets AS (
+  SELECT ARRAY_AGG(normalized_status) AS done_or_fixed_statuses
+  FROM `qa_metrics.jira_status_category_map`
+  WHERE status_category = 'done_or_fixed'
+),
+fixed_cohort AS (
   SELECT
     sc.issue_key,
     MIN(sc.changed_at) AS fixed_at
   FROM `qa_metrics.jira_status_changes` sc
-  WHERE sc.to_status IN ('Resolved', 'Closed', 'Verified')
+  CROSS JOIN status_sets
+  WHERE LOWER(TRIM(COALESCE(sc.to_status, ''))) IN UNNEST(done_or_fixed_statuses)
   GROUP BY 1
 ),
 bugs AS (
@@ -416,12 +472,18 @@ WHERE fc.fixed_at >= b.created
 GROUP BY 1;
 
 CREATE OR REPLACE VIEW `qa_metrics.jira_mttr_claimed_fixed_daily` AS
-WITH claimed_fixed_events AS (
+WITH status_sets AS (
+  SELECT ARRAY_AGG(normalized_status) AS done_or_fixed_statuses
+  FROM `qa_metrics.jira_status_category_map`
+  WHERE status_category = 'done_or_fixed'
+),
+claimed_fixed_events AS (
   SELECT
     sc.issue_key,
     MIN(sc.changed_at) AS claimed_fixed_at
   FROM `qa_metrics.jira_status_changes` sc
-  WHERE sc.to_status IN ('Resolved', 'Closed', 'Verified')
+  CROSS JOIN status_sets
+  WHERE LOWER(TRIM(COALESCE(sc.to_status, ''))) IN UNNEST(done_or_fixed_statuses)
   GROUP BY 1
 ),
 bugs AS (
