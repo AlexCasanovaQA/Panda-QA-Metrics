@@ -20,7 +20,7 @@ HTTP body overrides:
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Set, Tuple
 
 import functions_framework
 import requests
@@ -90,12 +90,34 @@ def _ensure_table(bq: bigquery.Client, table_ref: bigquery.TableReference) -> No
         print(f"Created table {table_ref}")
 
 
-def _display_user(u: Dict[str, Any]) -> str:
-    name = (u.get("name") or "").strip()
-    email = (u.get("email") or "").strip()
-    if name and email:
-        return f"{name} ({email})"
-    return name or email or str(u.get("id"))
+def _normalize_project_ids(raw: Any) -> List[str]:
+    """Normalize project id input from env/http into a clean string list."""
+    if raw is None:
+        return []
+
+    values: Iterable[Any]
+    if isinstance(raw, (list, tuple, set)):
+        values = raw
+    else:
+        values = str(raw).split(",")
+
+    return [str(v).strip() for v in values if str(v).strip()]
+
+
+def _to_bool_or_none(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y"}:
+            return True
+        if normalized in {"0", "false", "no", "n", ""}:
+            return False
+    return bool(value)
 
 
 @functions_framework.http
@@ -103,7 +125,7 @@ def ingest_testrail_users(request):
     req = request.get_json(silent=True) or {}
 
     proj_raw = req.get("project_ids") or TESTRAIL_PROJECT_IDS
-    project_ids = [p.strip() for p in str(proj_raw).split(",") if p.strip()]
+    project_ids = _normalize_project_ids(proj_raw)
     if not project_ids:
         return (
             json.dumps({"error": "No project ids provided. Set TESTRAIL_PROJECT_IDS or pass project_ids"}),
@@ -118,20 +140,27 @@ def ingest_testrail_users(request):
     ingested_at = _utc_now_iso()
 
     rows: List[Dict[str, Any]] = []
-    seen: Set[int] = set()
+    seen: Set[Tuple[int, int]] = set()
+    failures: List[str] = []
 
     for pid in project_ids:
         try:
-            users = _get(f"/index.php?/api/v2/get_users/{pid}")
+            pid_int = int(pid)
+        except (TypeError, ValueError):
+            failures.append(f"Invalid project id '{pid}'")
+            continue
+
+        try:
+            users = _get(f"/index.php?/api/v2/get_users/{pid_int}")
         except Exception as e:
-            print(f"Failed get_users/{pid}: {e}")
+            failures.append(f"Failed get_users/{pid_int}: {e}")
             continue
 
         if isinstance(users, dict) and "users" in users:
             users = users["users"]
 
         if not isinstance(users, list):
-            print(f"Unexpected response type for project {pid}: {type(users)}")
+            failures.append(f"Unexpected response type for project {pid_int}: {type(users)}")
             continue
 
         for u in users:
@@ -145,19 +174,32 @@ def ingest_testrail_users(request):
             except Exception:
                 continue
 
+            key = (uid_int, pid_int)
+            if key in seen:
+                continue
+            seen.add(key)
+
             # Keep one row per (user_id, project_id) so we preserve project scoping
             row = {
                 "user_id": uid_int,
                 "name": u.get("name"),
                 "email": u.get("email"),
-                "is_active": bool(u.get("is_active")) if u.get("is_active") is not None else None,
-                "is_admin": bool(u.get("is_admin")) if u.get("is_admin") is not None else None,
+                "is_active": _to_bool_or_none(u.get("is_active")),
+                "is_admin": _to_bool_or_none(u.get("is_admin")),
                 "role_id": int(u["role_id"]) if u.get("role_id") is not None else None,
-                "project_id": int(pid),
+                "project_id": pid_int,
                 "raw_json": json.dumps(u, ensure_ascii=False),
                 "_ingested_at": ingested_at,
             }
             rows.append(row)
+
+    if not rows and failures:
+        print("; ".join(failures))
+        return (
+            json.dumps({"error": "No users ingested", "details": failures[:5]}),
+            502,
+            {"Content-Type": "application/json"},
+        )
 
     if rows:
         errors = bq.insert_rows_json(table_ref, rows)
@@ -175,6 +217,7 @@ def ingest_testrail_users(request):
                 "ok": True,
                 "projects": project_ids,
                 "rows_inserted": len(rows),
+                "warnings": failures[:5],
                 "bq_table": f"{table_ref.project}.{table_ref.dataset_id}.{table_ref.table_id}",
             }
         ),
