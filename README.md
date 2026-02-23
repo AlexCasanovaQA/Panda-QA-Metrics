@@ -108,6 +108,18 @@ Orchestration options:
 
 If these refreshes are skipped, Looker explores can compile correctly but charts may render with no rows.
 
+### Data quality rules (Gamebench dashboard sources)
+Post-ingestion quality checks are enforced in `workflows/qa_metrics_ingestion.yaml` immediately after `gamebench_daily_refresh` to guard against empty/stale data in dashboard source tables.
+
+SLA and validation windows (**UTC**):
+- `qa_metrics.gamebench_sessions_latest` must have `row_count > 0` in the **last 24 hours** (`time_pushed >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)`).
+- `qa_metrics.gamebench_daily_metrics` must have `row_count > 0` in the **last 2 days** (`metric_date >= DATE_SUB(CURRENT_DATE("UTC"), INTERVAL 2 DAY)`).
+
+Workflow behavior on check failure:
+- Returns non-OK workflow output (`status: non_ok`, `dq_status: non_ok`).
+- Emits structured log entry with `dataset`, `table`, `checked_window`, and `row_count` for each check (for Cloud Logging metrics/alerts).
+- Optionally posts an alert webhook when `dq_alert_webhook_url` is supplied in workflow args.
+
 ## 3) Field Mapping (per your requirements)
 
 The system maps Jira fields into KPI dimensions like this:
