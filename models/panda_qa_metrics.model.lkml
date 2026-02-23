@@ -1,7 +1,7 @@
 connection: "qa-panda-metrics-exp"
 
-include: "/scopely_panda/views/qa_metrics/*.view.lkml"
-include: "/scopely_panda/dashboards/qa_metrics/*.dashboard.lookml"
+include: "/views/*.view.lkml"
+include: "/dashboards/*.dashboard.lookml"
 
 # Primary KPI explore
 explore: qa_kpi_facts {
