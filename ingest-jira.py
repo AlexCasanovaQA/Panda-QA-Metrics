@@ -22,12 +22,14 @@ HTTP:
 
 import json
 import os
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 import functions_framework
 import requests
+from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 
 
@@ -116,9 +118,24 @@ def _jira_get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, A
     if not JIRA_BASE_URL:
         raise RuntimeError("Missing JIRA_BASE_URL env var")
     url = JIRA_BASE_URL.rstrip("/") + path
-    r = requests.get(url, headers=_jira_headers(), auth=_jira_auth(), params=params, timeout=60)
-    r.raise_for_status()
-    return r.json()
+
+    max_attempts = 5
+    backoff = 1.0
+    for attempt in range(1, max_attempts + 1):
+        r = requests.get(url, headers=_jira_headers(), auth=_jira_auth(), params=params, timeout=60)
+
+        if r.status_code in (429, 500, 502, 503, 504) and attempt < max_attempts:
+            retry_after = r.headers.get("Retry-After")
+            wait_seconds = float(retry_after) if retry_after and retry_after.isdigit() else backoff
+            print(f"Jira request retryable status={r.status_code}. attempt={attempt}/{max_attempts}, waiting {wait_seconds}s")
+            time.sleep(wait_seconds)
+            backoff *= 2
+            continue
+
+        r.raise_for_status()
+        return r.json()
+
+    raise RuntimeError("Jira request failed after retries")
 
 
 def _extract_user_display(user_obj: Any) -> Optional[str]:
@@ -195,7 +212,7 @@ def _ensure_table(bq: bigquery.Client, table_ref: bigquery.TableReference) -> No
             table.schema = list(table.schema) + to_add
             bq.update_table(table, ["schema"])
             print(f"Added {len(to_add)} columns to {table_ref}")
-    except Exception:
+    except NotFound:
         # Create table
         table = bigquery.Table(table_ref, schema=desired_schema)
         # Partition by ingest time (safe)
@@ -208,19 +225,40 @@ def _parse_jira_ts(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
     # Jira timestamps are ISO8601 with milliseconds and timezone, e.g. 2025-02-01T12:34:56.789+0000
-    # Normalize timezone format
+    # Normalize timezone format for offsets without ":" (e.g. +0000, -0700).
     try:
-        # Insert colon in timezone if needed
-        if value.endswith("+0000"):
-            value = value[:-5] + "+00:00"
-        elif value.endswith("-0000"):
-            value = value[:-5] + "-00:00"
-        # Some Jira returns Z
+        match = re.search(r"([+-]\d{2})(\d{2})$", value)
+        if match:
+            value = f"{value[:-5]}{match.group(1)}:{match.group(2)}"
         if value.endswith("Z"):
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
         return datetime.fromisoformat(value)
     except Exception:
         return None
+
+
+def _extract_team(team_val: Any) -> Optional[str]:
+    if isinstance(team_val, dict):
+        return team_val.get("value") or team_val.get("name")
+    if isinstance(team_val, str):
+        return team_val
+    if isinstance(team_val, list) and team_val:
+        first = team_val[0]
+        if isinstance(first, dict):
+            return first.get("value") or first.get("name")
+        if isinstance(first, str):
+            return first
+    return None
+
+
+def _extract_sprint(sprint_val: Any) -> Optional[str]:
+    if isinstance(sprint_val, list) and sprint_val:
+        return json.dumps(sprint_val, ensure_ascii=False)
+    if isinstance(sprint_val, dict):
+        return sprint_val.get("name") or json.dumps(sprint_val, ensure_ascii=False)
+    if isinstance(sprint_val, str):
+        return sprint_val
+    return None
 
 
 def _build_issue_record(issue: Dict[str, Any]) -> Dict[str, Any]:
@@ -244,31 +282,16 @@ def _build_issue_record(issue: Dict[str, Any]) -> Dict[str, Any]:
         "resolved_at": _iso(_parse_jira_ts(fields.get("resolutiondate"))),
         "reporter": _extract_user_display(fields.get("reporter")),
         "assignee": _extract_user_display(fields.get("assignee")),
-        "team": None,
+        "team": _extract_team(fields.get(TEAM_FIELD_ID)),
         "labels": json.dumps(fields.get("labels") or []),
         "components": json.dumps([c.get("name") for c in (fields.get("components") or []) if isinstance(c, dict)]),
         "fix_versions": json.dumps([v.get("name") for v in (fields.get("fixVersions") or []) if isinstance(v, dict)]),
         "affects_versions": json.dumps([v.get("name") for v in (fields.get("versions") or []) if isinstance(v, dict)]),
-        "sprint": None,
+        "sprint": _extract_sprint(fields.get(SPRINT_FIELD_ID) or fields.get("sprint")),
         "resolution": (fields.get("resolution") or {}).get("name"),
         "raw_json": json.dumps(issue, ensure_ascii=False),
         "_ingested_at": _iso(_utc_now()),
     }
-
-    # Team (POD) custom field
-    team_val = fields.get(TEAM_FIELD_ID)
-    if isinstance(team_val, dict):
-        rec["team"] = team_val.get("value") or team_val.get("name")
-    elif isinstance(team_val, str):
-        rec["team"] = team_val
-
-    # Sprint: could be list of sprint strings
-    sprint_val = fields.get(SPRINT_FIELD_ID) or fields.get("sprint")
-    if isinstance(sprint_val, list) and sprint_val:
-        # store raw list
-        rec["sprint"] = json.dumps(sprint_val)
-    elif isinstance(sprint_val, str):
-        rec["sprint"] = sprint_val
 
     return rec
 
@@ -317,9 +340,18 @@ def ingest_jira(request):
     req_json = request.get_json(silent=True) or {}
 
     lookback_days = int(req_json.get("lookback_days") or DEFAULT_LOOKBACK_DAYS)
+    if lookback_days <= 0:
+        return (
+            json.dumps({"error": "lookback_days must be > 0"}),
+            400,
+            {"Content-Type": "application/json"},
+        )
 
     project_keys_raw = (req_json.get("project_keys") or JIRA_PROJECT_KEYS)
-    project_keys = [p.strip() for p in project_keys_raw.split(",") if p.strip()]
+    if isinstance(project_keys_raw, list):
+        project_keys = [str(p).strip() for p in project_keys_raw if str(p).strip()]
+    else:
+        project_keys = [p.strip() for p in str(project_keys_raw).split(",") if p.strip()]
     if not project_keys:
         return (
             json.dumps({"error": "No Jira projects provided. Set JIRA_PROJECT_KEYS or pass project_keys"}),
@@ -347,7 +379,8 @@ def ingest_jira(request):
 
             # Batch insert
             if len(rows) >= 500:
-                errors = bq.insert_rows_json(table_ref, rows)
+                row_ids = [f"{r['issue_key']}:{r.get('updated_at') or ''}" for r in rows]
+                errors = bq.insert_rows_json(table_ref, rows, row_ids=row_ids)
                 if errors:
                     print("BigQuery insert errors:", errors[:3])
                     return (
@@ -363,7 +396,8 @@ def ingest_jira(request):
         time.sleep(0.25)
 
     if rows:
-        errors = bq.insert_rows_json(table_ref, rows)
+        row_ids = [f"{r['issue_key']}:{r.get('updated_at') or ''}" for r in rows]
+        errors = bq.insert_rows_json(table_ref, rows, row_ids=row_ids)
         if errors:
             print("BigQuery insert errors:", errors[:3])
             return (
