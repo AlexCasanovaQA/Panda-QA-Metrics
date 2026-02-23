@@ -333,8 +333,9 @@ status_events AS (
     sc.issue_key,
     DATE(sc.changed_at) AS event_date,
     CASE
-      WHEN sc.to_status = 'Reopened' THEN 'reopened'
-      WHEN sc.to_status IN ('Resolved', 'Closed', 'Verified') THEN 'fixed'
+      WHEN LOWER(TRIM(COALESCE(sc.from_status, ''))) IN ('resolved', 'closed', 'verified', 'done')
+       AND LOWER(TRIM(COALESCE(sc.to_status, ''))) IN ('open', 'backlog', 'to do', 'in progress', 'reopened', 'ready for qa', 'ready for test', 'qa testing', 'testing', 'in review', 'selected for development') THEN 'reopened'
+      WHEN LOWER(TRIM(COALESCE(sc.to_status, ''))) IN ('resolved', 'closed', 'verified', 'done') THEN 'fixed'
       ELSE NULL
     END AS event_type
   FROM `qa_metrics.jira_status_changes` sc
@@ -376,7 +377,8 @@ reopened AS (
     DATE(changed_at) AS event_date,
     COUNT(DISTINCT issue_key) AS reopened_count
   FROM `qa_metrics.jira_status_changes`
-  WHERE to_status = 'Reopened'
+  WHERE LOWER(TRIM(COALESCE(from_status, ''))) IN ('resolved', 'closed', 'verified', 'done')
+    AND LOWER(TRIM(COALESCE(to_status, ''))) IN ('open', 'backlog', 'to do', 'in progress', 'reopened', 'ready for qa', 'ready for test', 'qa testing', 'testing', 'in review', 'selected for development')
   GROUP BY 1
 )
 SELECT
