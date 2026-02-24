@@ -211,6 +211,68 @@ Example invocation args:
 
 ## 6) Looker (LookML)
 
+### Recommended dashboard flow (filters and KPI sections)
+
+```mermaid
+flowchart TB
+  subgraph Filtros
+    DR[Date Range<br/>default: last 7 days]
+    POD[POD]
+    PRI[Priority]
+    SEV[Severity]
+    BS[BugSnag Project]
+    ENV[GameBench Env]
+    PLAT[GameBench Platform]
+  end
+
+  subgraph Scoreboard_NOW
+    S1[Bugs entered today]
+    S2[Fixes today (Fixed)]
+    S3[QA verification queue now]
+    S4[Awaiting regression now]
+    S5[Active bugs now]
+  end
+
+  subgraph Incoming
+    I1[Entered by Severity (pie)]
+    I2[Entered by Priority (pie)]
+    I3[Entered daily by Priority (bar/line)]
+  end
+
+  subgraph Fixes
+    F1[Fixed by Priority (pie)]
+    F2[Fixed daily by Priority (bar/line)]
+  end
+
+  subgraph Active
+    A1[Active by Priority (pie)]
+    A2[Active by POD (pie)]
+    A3[Bugs by current status (bar)]
+    A4[Active bug count over time (line)]
+    A5[Fix Version proxy milestone (bar)]
+    A6[Reopened over time (line)]
+  end
+
+  subgraph Ops
+    O1[Fix fail rate (line)]
+    O2[MTTR claimed fixed last 7d (line)]
+    O3[Build size snapshot + trend]
+  end
+
+  subgraph ProdPerf
+    P1[Bugsnag KPIs + mix + created daily]
+    P2[GameBench FPS snapshot + stability + trend]
+  end
+
+  subgraph Testing
+    T1[Test cases completed/day]
+    T2[Pass rate latest run]
+    T3[BVT pass rate latest]
+  end
+
+  Filtros --> Scoreboard_NOW --> Incoming --> Fixes --> Active --> Ops --> ProdPerf --> Testing
+```
+
 ### Access control: Public vs Private KPIs
 Privacy is enforced in the model with a Looker **user attribute**:
 
