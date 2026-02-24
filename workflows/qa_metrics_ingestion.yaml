@@ -121,8 +121,8 @@ main:
                           - preflight_status.jira.reason: "missing_project_keys"
                           - preflight_status.jira_changelog.ready: false
                           - preflight_status.jira_changelog.reason: "missing_project_keys"
-                          - errors: ${list.concat(errors, ['{"service":"jira","type":"config_error","code":"missing_project_keys","message":"project_keys_csv is required for Jira ingestion"}'])}
-                          - errors: ${list.concat(errors, ['{"service":"jira_changelog","type":"config_error","code":"missing_project_keys","message":"project_keys_csv is required for Jira changelog ingestion"}'])}
+                          - errors: ${list.concat(errors, ["{\"service\":\"jira\",\"type\":\"config_error\",\"code\":\"missing_project_keys\",\"message\":\"project_keys_csv is required for Jira ingestion\"}"])}
+                          - errors: ${list.concat(errors, ["{\"service\":\"jira_changelog\",\"type\":\"config_error\",\"code\":\"missing_project_keys\",\"message\":\"project_keys_csv is required for Jira changelog ingestion\"}"])}
           - preflight_testrail_flags:
               switch:
                 - condition: ${include_testrail_results and (text.to_lower("" + testrail_enabled) != "true" or text.to_lower("" + testrail_configured) != "true")}
@@ -135,9 +135,9 @@ main:
                           - preflight_status.testrail_users.reason: "testrail_not_configured"
                           - preflight_status.testrail_results.ready: false
                           - preflight_status.testrail_results.reason: "testrail_not_configured"
-                          - errors: ${list.concat(errors, ['{"service":"testrail","type":"config_error","code":"testrail_not_configured","message":"TestRail disabled or not configured via args/env markers"}'])}
-                          - errors: ${list.concat(errors, ['{"service":"testrail_users","type":"config_error","code":"testrail_not_configured","message":"TestRail disabled or not configured via args/env markers"}'])}
-                          - errors: ${list.concat(errors, ['{"service":"testrail_results","type":"config_error","code":"testrail_not_configured","message":"TestRail disabled or not configured via args/env markers"}'])}
+                          - errors: ${list.concat(errors, ["{\"service\":\"testrail\",\"type\":\"config_error\",\"code\":\"testrail_not_configured\",\"message\":\"TestRail disabled or not configured via args/env markers\"}"])}
+                          - errors: ${list.concat(errors, ["{\"service\":\"testrail_users\",\"type\":\"config_error\",\"code\":\"testrail_not_configured\",\"message\":\"TestRail disabled or not configured via args/env markers\"}"])}
+                          - errors: ${list.concat(errors, ["{\"service\":\"testrail_results\",\"type\":\"config_error\",\"code\":\"testrail_not_configured\",\"message\":\"TestRail disabled or not configured via args/env markers\"}"])}
           - preflight_bugsnag_flags:
               switch:
                 - condition: ${text.to_lower("" + bugsnag_enabled) != "true" or text.to_lower("" + bugsnag_configured) != "true"}
@@ -146,7 +146,7 @@ main:
                         assign:
                           - preflight_status.bugsnag.ready: false
                           - preflight_status.bugsnag.reason: "bugsnag_not_configured"
-                          - errors: ${list.concat(errors, ['{"service":"bugsnag","type":"config_error","code":"bugsnag_not_configured","message":"Bugsnag disabled or not configured via args/env markers"}'])}
+                          - errors: ${list.concat(errors, ["{\"service\":\"bugsnag\",\"type\":\"config_error\",\"code\":\"bugsnag_not_configured\",\"message\":\"Bugsnag disabled or not configured via args/env markers\"}"])}
           - preflight_gamebench_smoke_check:
               try:
                 steps:
@@ -168,7 +168,7 @@ main:
                                   - preflight_status.gamebench.ready: false
                                   - preflight_status.gamebench.reason: "gamebench_not_ready"
                                   - gamebench_available: false
-                                  - errors: ${list.concat(errors, ['{"service":"gamebench","type":"preflight_error","code":"gamebench_not_ready","message":"Gamebench health endpoint returned not ready"}'])}
+                                  - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"type\":\"preflight_error\",\"code\":\"gamebench_not_ready\",\"message\":\"Gamebench health endpoint returned not ready\"}"])}
               except:
                 as: e
                 steps:
@@ -177,7 +177,7 @@ main:
                         - preflight_status.gamebench.ready: false
                         - preflight_status.gamebench.reason: "gamebench_health_check_failed"
                         - gamebench_available: false
-                        - errors: ${list.concat(errors, ['{"service":"gamebench","type":"preflight_error","code":"gamebench_health_check_failed","message":"Failed to call Gamebench health endpoint"}'])}
+                        - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"type\":\"preflight_error\",\"code\":\"gamebench_health_check_failed\",\"message\":\"Failed to call Gamebench health endpoint\"}"])}
 
     # --------------------------
     # PARALLEL INGESTION BRANCHES
@@ -477,7 +477,7 @@ main:
                                                     - preflight_status.gamebench.ready: false
                                                     - preflight_status.gamebench.reason: "gamebench_not_deployed"
                                                     - status: "non_ok"
-                                                    - errors: ${list.concat(errors, ['{"service":"gamebench","branch":"android","code":"gamebench_not_deployed","message":"Placeholder revision served by ingest-gamebench"}'])}
+                                                    - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"branch\":\"android\",\"code\":\"gamebench_not_deployed\",\"message\":\"Placeholder revision served by ingest-gamebench\"}"])}
                                 except:
                                   as: e
                                   steps:
@@ -528,7 +528,7 @@ main:
                                                     - preflight_status.gamebench.ready: false
                                                     - preflight_status.gamebench.reason: "gamebench_not_deployed"
                                                     - status: "non_ok"
-                                                    - errors: ${list.concat(errors, ['{"service":"gamebench","branch":"ios","code":"gamebench_not_deployed","message":"Placeholder revision served by ingest-gamebench"}'])}
+                                                    - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"branch\":\"ios\",\"code\":\"gamebench_not_deployed\",\"message\":\"Placeholder revision served by ingest-gamebench\"}"])}
                                 except:
                                   as: e
                                   steps:
