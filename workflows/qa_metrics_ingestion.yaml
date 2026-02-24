@@ -79,435 +79,462 @@ main:
           text: '${"qa_metrics_ingestion project keys: " + payload_changelog.project_keys}'
 
     # --------------------------
-    # JIRA ISSUES
+    # PARALLEL INGESTION BRANCHES
     # --------------------------
-    - jira_try:
-        try:
-          steps:
-            - jira_call:
-                call: http.post
-                args:
-                  url: ${jira_url}
-                  timeout: 1800
-                  auth:
-                    type: OIDC
-                    audience: ${jira_url}
-                  body: ${payload_jira}
-                result: jira_resp
-            - jira_store:
-                assign:
-                  - results.jira: ${jira_resp.body}
-        except:
-          as: e
-          steps:
-            - jira_err:
-                assign:
-                  - errors: ${list.concat(errors, ["jira - " + text.decode(json.encode(e))])}
+    - ingest_branches_parallel:
+        parallel:
+          shared: [results, errors, status, dq_status]
+          branches:
+            - branch_a_jira:
+                steps:
+                  - branch_a_start:
+                      assign:
+                        - branch_a_started_at: ${sys.now()}
+                  - jira_try:
+                      try:
+                        steps:
+                          - jira_call:
+                              call: http.post
+                              args:
+                                url: ${jira_url}
+                                timeout: 600
+                                auth:
+                                  type: OIDC
+                                  audience: ${jira_url}
+                                body: ${payload_jira}
+                              result: jira_resp
+                          - jira_store:
+                              assign:
+                                - results.jira: ${jira_resp.body}
+                      except:
+                        as: e
+                        steps:
+                          - jira_err:
+                              assign:
+                                - errors: ${list.concat(errors, ["jira - " + text.decode(json.encode(e))])}
+                  - jira_changelog_try:
+                      try:
+                        steps:
+                          - jira_changelog_call:
+                              call: http.post
+                              args:
+                                url: ${jira_changelog_url}
+                                timeout: 600
+                                auth:
+                                  type: OIDC
+                                  audience: ${jira_changelog_url}
+                                body: ${payload_changelog}
+                              result: jcl_resp
+                          - jira_changelog_store:
+                              assign:
+                                - results.jira_changelog: ${jcl_resp.body}
+                      except:
+                        as: e
+                        steps:
+                          - jcl_err:
+                              assign:
+                                - errors: ${list.concat(errors, ["jira_changelog - " + text.decode(json.encode(e))])}
+                  - branch_a_log_elapsed:
+                      call: sys.log
+                      args:
+                        severity: "INFO"
+                        data:
+                          event: "branch_elapsed"
+                          branch: "branch_a_jira"
+                          started_at: ${branch_a_started_at}
+                          ended_at: ${sys.now()}
 
-    # --------------------------
-    # JIRA CHANGELOG
-    # --------------------------
-    - jira_changelog_try:
-        try:
-          steps:
-            - jira_changelog_call:
-                call: http.post
-                args:
-                  url: ${jira_changelog_url}
-                  timeout: 1800
-                  auth:
-                    type: OIDC
-                    audience: ${jira_changelog_url}
-                  body: ${payload_changelog}
-                result: jcl_resp
-            - jira_changelog_store:
-                assign:
-                  - results.jira_changelog: ${jcl_resp.body}
-        except:
-          as: e
-          steps:
-            - jcl_err:
-                assign:
-                  - errors: ${list.concat(errors, ["jira_changelog - " + text.decode(json.encode(e))])}
+            - branch_b_testrail:
+                steps:
+                  - branch_b_start:
+                      assign:
+                        - branch_b_started_at: ${sys.now()}
+                  - testrail_try:
+                      try:
+                        steps:
+                          - testrail_call:
+                              call: http.post
+                              args:
+                                url: ${testrail_url}
+                                timeout: 300
+                                auth:
+                                  type: OIDC
+                                  audience: ${testrail_url}
+                                body: ${payload_testrail}
+                              result: tr_resp
+                          - testrail_store:
+                              assign:
+                                - results.testrail: ${tr_resp.body}
+                      except:
+                        as: e
+                        steps:
+                          - tr_err:
+                              assign:
+                                - errors: ${list.concat(errors, ["testrail - " + text.decode(json.encode(e))])}
+                  - testrail_users_try:
+                      try:
+                        steps:
+                          - testrail_users_call:
+                              call: http.post
+                              args:
+                                url: ${testrail_users_url}
+                                timeout: 180
+                                auth:
+                                  type: OIDC
+                                  audience: ${testrail_users_url}
+                                body: {}
+                              result: tru_resp
+                          - testrail_users_store:
+                              assign:
+                                - results.testrail_users: ${tru_resp.body}
+                      except:
+                        as: e
+                        steps:
+                          - tru_err:
+                              assign:
+                                - errors: ${list.concat(errors, ["testrail_users - " + text.decode(json.encode(e))])}
+                  - testrail_results_try:
+                      try:
+                        steps:
+                          - testrail_results_call:
+                              call: http.post
+                              args:
+                                url: ${testrail_results_url}
+                                timeout: 1200
+                                auth:
+                                  type: OIDC
+                                  audience: ${testrail_results_url}
+                                body: ${payload_testrail_results}
+                              result: trr_resp
+                          - testrail_results_store:
+                              assign:
+                                - results.testrail_results: ${trr_resp.body}
+                      except:
+                        as: e
+                        steps:
+                          - trr_err:
+                              assign:
+                                - errors: ${list.concat(errors, ["testrail_results - " + text.decode(json.encode(e))])}
+                  - branch_b_log_elapsed:
+                      call: sys.log
+                      args:
+                        severity: "INFO"
+                        data:
+                          event: "branch_elapsed"
+                          branch: "branch_b_testrail"
+                          started_at: ${branch_b_started_at}
+                          ended_at: ${sys.now()}
 
-    # --------------------------
-    # TESTRAIL RUNS
-    # --------------------------
-    - testrail_try:
-        try:
-          steps:
-            - testrail_call:
-                call: http.post
-                args:
-                  url: ${testrail_url}
-                  timeout: 1800
-                  auth:
-                    type: OIDC
-                    audience: ${testrail_url}
-                  body: ${payload_testrail}
-                result: tr_resp
-            - testrail_store:
-                assign:
-                  - results.testrail: ${tr_resp.body}
-        except:
-          as: e
-          steps:
-            - tr_err:
-                assign:
-                  - errors: ${list.concat(errors, ["testrail - " + text.decode(json.encode(e))])}
+            - branch_c_bugsnag:
+                steps:
+                  - branch_c_start:
+                      assign:
+                        - branch_c_started_at: ${sys.now()}
+                  - bugsnag_try:
+                      try:
+                        steps:
+                          - bugsnag_call:
+                              call: http.post
+                              args:
+                                url: ${bugsnag_url}
+                                timeout: 600
+                                auth:
+                                  type: OIDC
+                                  audience: ${bugsnag_url}
+                                body: ${payload_bugsnag}
+                              result: bs_resp
+                          - bugsnag_store:
+                              assign:
+                                - results.bugsnag: ${bs_resp.body}
+                      except:
+                        as: e
+                        steps:
+                          - bs_err:
+                              assign:
+                                - errors: ${list.concat(errors, ["bugsnag - " + text.decode(json.encode(e))])}
+                  - branch_c_log_elapsed:
+                      call: sys.log
+                      args:
+                        severity: "INFO"
+                        data:
+                          event: "branch_elapsed"
+                          branch: "branch_c_bugsnag"
+                          started_at: ${branch_c_started_at}
+                          ended_at: ${sys.now()}
 
-    # --------------------------
-    # TESTRAIL USERS
-    # --------------------------
-    - testrail_users_try:
-        try:
-          steps:
-            - testrail_users_call:
-                call: http.post
-                args:
-                  url: ${testrail_users_url}
-                  timeout: 1800
-                  auth:
-                    type: OIDC
-                    audience: ${testrail_users_url}
-                  body: {}
-                result: tru_resp
-            - testrail_users_store:
-                assign:
-                  - results.testrail_users: ${tru_resp.body}
-        except:
-          as: e
-          steps:
-            - tru_err:
-                assign:
-                  - errors: ${list.concat(errors, ["testrail_users - " + text.decode(json.encode(e))])}
+            - branch_d_gamebench:
+                steps:
+                  - branch_d_start:
+                      assign:
+                        - branch_d_started_at: ${sys.now()}
+                  - gamebench_android_try:
+                      try:
+                        steps:
+                          - gb_android_call:
+                              call: http.post
+                              args:
+                                url: ${gamebench_url}
+                                timeout: 600
+                                auth:
+                                  type: OIDC
+                                  audience: ${gamebench_url}
+                                body: ${payload_gamebench_android}
+                              result: gb_a_resp
+                          - gb_android_store:
+                              assign:
+                                - results.gamebench_android: ${gb_a_resp.body}
+                          - gb_android_validate:
+                              switch:
+                                - condition: ${text.match_regex(default(map.get(gb_a_resp.headers, "Content-Type"), ""), ".*text/html.*")}
+                                  steps:
+                                    - gb_android_placeholder_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, ["gamebench_android - placeholder_revision_served"])}
+                                          - status: "non_ok"
+                      except:
+                        as: e
+                        steps:
+                          - gb_android_err:
+                              assign:
+                                - errors: ${list.concat(errors, ["gamebench_android - " + text.decode(json.encode(e))])}
+                  - gamebench_ios_try:
+                      try:
+                        steps:
+                          - gb_ios_call:
+                              call: http.post
+                              args:
+                                url: ${gamebench_url}
+                                timeout: 600
+                                auth:
+                                  type: OIDC
+                                  audience: ${gamebench_url}
+                                body: ${payload_gamebench_ios}
+                              result: gb_i_resp
+                          - gb_ios_store:
+                              assign:
+                                - results.gamebench_ios: ${gb_i_resp.body}
+                          - gb_ios_validate:
+                              switch:
+                                - condition: ${text.match_regex(default(map.get(gb_i_resp.headers, "Content-Type"), ""), ".*text/html.*")}
+                                  steps:
+                                    - gb_ios_placeholder_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, ["gamebench_ios - placeholder_revision_served"])}
+                                          - status: "non_ok"
+                      except:
+                        as: e
+                        steps:
+                          - gb_ios_err:
+                              assign:
+                                - errors: ${list.concat(errors, ["gamebench_ios - " + text.decode(json.encode(e))])}
+                  - gamebench_daily_refresh_try:
+                      try:
+                        steps:
+                          - gamebench_daily_refresh_job:
+                              call: googleapis.bigquery.v2.jobs.insert
+                              args:
+                                projectId: ${project_id}
+                                body:
+                                  configuration:
+                                    query:
+                                      useLegacySql: false
+                                      query: |
+                                        MERGE `qa_metrics.gamebench_daily_metrics` AS target
+                                        USING (
+                                          SELECT
+                                            DATE(time_pushed) AS metric_date,
+                                            COALESCE(environment, 'unknown') AS environment,
+                                            COALESCE(platform, 'unknown') AS platform,
+                                            COALESCE(app_package, 'unknown') AS app_package,
+                                            COALESCE(app_version, 'unknown') AS app_version,
+                                            COALESCE(device_model, 'unknown') AS device_model,
+                                            COALESCE(device_manufacturer, 'unknown') AS device_manufacturer,
+                                            COALESCE(os_version, 'unknown') AS os_version,
+                                            COALESCE(gpu_model, 'unknown') AS gpu_model,
+                                            COUNT(*) AS sessions,
+                                            AVG(median_fps) AS median_fps,
+                                            AVG(fps_stability_pct) AS fps_stability_pct,
+                                            AVG(fps_stability_index) AS fps_stability_index,
+                                            AVG(cpu_avg_pct) AS cpu_avg_pct,
+                                            MAX(cpu_max_pct) AS cpu_max_pct,
+                                            AVG(memory_avg_mb) AS memory_avg_mb,
+                                            MAX(memory_max_mb) AS memory_max_mb,
+                                            AVG(current_avg_ma) AS current_avg_ma,
+                                            CURRENT_TIMESTAMP() AS _updated_at
+                                          FROM `qa_metrics.gamebench_sessions_latest`
+                                          WHERE time_pushed IS NOT NULL
+                                          GROUP BY
+                                            metric_date,
+                                            environment,
+                                            platform,
+                                            app_package,
+                                            app_version,
+                                            device_model,
+                                            device_manufacturer,
+                                            os_version,
+                                            gpu_model
+                                        ) AS source
+                                        ON target.metric_date = source.metric_date
+                                          AND target.environment = source.environment
+                                          AND target.platform = source.platform
+                                          AND target.app_package = source.app_package
+                                          AND target.app_version = source.app_version
+                                          AND target.device_model = source.device_model
+                                          AND target.device_manufacturer = source.device_manufacturer
+                                          AND target.os_version = source.os_version
+                                          AND target.gpu_model = source.gpu_model
+                                        WHEN MATCHED THEN
+                                          UPDATE SET
+                                            sessions = source.sessions,
+                                            median_fps = source.median_fps,
+                                            fps_stability_pct = source.fps_stability_pct,
+                                            fps_stability_index = source.fps_stability_index,
+                                            cpu_avg_pct = source.cpu_avg_pct,
+                                            cpu_max_pct = source.cpu_max_pct,
+                                            memory_avg_mb = source.memory_avg_mb,
+                                            memory_max_mb = source.memory_max_mb,
+                                            current_avg_ma = source.current_avg_ma,
+                                            _updated_at = source._updated_at
+                                        WHEN NOT MATCHED THEN
+                                          INSERT (
+                                            metric_date,
+                                            environment,
+                                            platform,
+                                            app_package,
+                                            app_version,
+                                            device_model,
+                                            device_manufacturer,
+                                            os_version,
+                                            gpu_model,
+                                            sessions,
+                                            median_fps,
+                                            fps_stability_pct,
+                                            fps_stability_index,
+                                            cpu_avg_pct,
+                                            cpu_max_pct,
+                                            memory_avg_mb,
+                                            memory_max_mb,
+                                            current_avg_ma,
+                                            _updated_at
+                                          )
+                                          VALUES (
+                                            source.metric_date,
+                                            source.environment,
+                                            source.platform,
+                                            source.app_package,
+                                            source.app_version,
+                                            source.device_model,
+                                            source.device_manufacturer,
+                                            source.os_version,
+                                            source.gpu_model,
+                                            source.sessions,
+                                            source.median_fps,
+                                            source.fps_stability_pct,
+                                            source.fps_stability_index,
+                                            source.cpu_avg_pct,
+                                            source.cpu_max_pct,
+                                            source.memory_avg_mb,
+                                            source.memory_max_mb,
+                                            source.current_avg_ma,
+                                            source._updated_at
+                                          )
+                              result: gb_daily_refresh_resp
+                          - gamebench_daily_refresh_store:
+                              assign:
+                                - results.gamebench_daily_refresh: ${gb_daily_refresh_resp.jobReference.jobId}
+                      except:
+                        as: e
+                        steps:
+                          - gb_daily_refresh_err:
+                              assign:
+                                - errors: ${list.concat(errors, ["gamebench_daily_refresh - " + text.decode(json.encode(e))])}
+                  - gamebench_data_quality_check_try:
+                      try:
+                        steps:
+                          - gamebench_data_quality_query:
+                              call: googleapis.bigquery.v2.jobs.query
+                              args:
+                                projectId: ${project_id}
+                                body:
+                                  useLegacySql: false
+                                  query: |
+                                    SELECT
+                                      (SELECT COUNT(*)
+                                       FROM `qa_metrics.gamebench_sessions_latest`
+                                       WHERE time_pushed >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)) AS sessions_recent_row_count,
+                                      (SELECT COUNT(*)
+                                       FROM `qa_metrics.gamebench_daily_metrics`
+                                       WHERE metric_date >= DATE_SUB(CURRENT_DATE("UTC"), INTERVAL 2 DAY)) AS daily_recent_row_count
+                              result: gb_dq_resp
 
-    # --------------------------
-    # TESTRAIL RESULTS
-    # --------------------------
-    - testrail_results_try:
-        try:
-          steps:
-            - testrail_results_call:
-                call: http.post
-                args:
-                  url: ${testrail_results_url}
-                  timeout: 1800
-                  auth:
-                    type: OIDC
-                    audience: ${testrail_results_url}
-                  body: ${payload_testrail_results}
-                result: trr_resp
-            - testrail_results_store:
-                assign:
-                  - results.testrail_results: ${trr_resp.body}
-        except:
-          as: e
-          steps:
-            - trr_err:
-                assign:
-                  - errors: ${list.concat(errors, ["testrail_results - " + text.decode(json.encode(e))])}
+                          - gamebench_data_quality_parse:
+                              assign:
+                                - gb_dq_rows: ${default(map.get(gb_dq_resp, "rows"), [])}
+                                - gb_dq_fields: ${if(len(gb_dq_rows) > 0, default(map.get(gb_dq_rows[0], "f"), []), [])}
+                                - gb_dq_sessions_count: ${if(len(gb_dq_fields) > 0, int(default(map.get(gb_dq_fields[0], "v"), "0")), 0)}
+                                - gb_dq_daily_count: ${if(len(gb_dq_fields) > 1, int(default(map.get(gb_dq_fields[1], "v"), "0")), 0)}
+                                - gb_dq_is_ok: ${gb_dq_sessions_count > 0 and gb_dq_daily_count > 0}
+                                - results.gamebench_data_quality:
+                                    checks:
+                                      - dataset: "qa_metrics"
+                                        table: "gamebench_sessions_latest"
+                                        checked_window: "last_24h_utc"
+                                        row_count: ${gb_dq_sessions_count}
+                                      - dataset: "qa_metrics"
+                                        table: "gamebench_daily_metrics"
+                                        checked_window: "last_2d_utc"
+                                        row_count: ${gb_dq_daily_count}
+                                    status: ${if(gb_dq_is_ok, "ok", "non_ok")}
 
-    # --------------------------
-    # BUGSNAG
-    # --------------------------
-    - bugsnag_try:
-        try:
-          steps:
-            - bugsnag_call:
-                call: http.post
-                args:
-                  url: ${bugsnag_url}
-                  timeout: 1800
-                  auth:
-                    type: OIDC
-                    audience: ${bugsnag_url}
-                  body: ${payload_bugsnag}
-                result: bs_resp
-            - bugsnag_store:
-                assign:
-                  - results.bugsnag: ${bs_resp.body}
-        except:
-          as: e
-          steps:
-            - bs_err:
-                assign:
-                  - errors: ${list.concat(errors, ["bugsnag - " + text.decode(json.encode(e))])}
+                          - gamebench_data_quality_log_info:
+                              call: sys.log
+                              args:
+                                severity: ${if(gb_dq_is_ok, "INFO", "ERROR")}
+                                data:
+                                  event: "gamebench_data_quality_check"
+                                  status: ${if(gb_dq_is_ok, "ok", "non_ok")}
+                                  checks: ${results.gamebench_data_quality.checks}
 
-    # --------------------------
-    # GAMEBENCH (Android)
-    # --------------------------
-    - gamebench_android_try:
-        try:
-          steps:
-            - gb_android_call:
-                call: http.post
-                args:
-                  url: ${gamebench_url}
-                  timeout: 1800
-                  auth:
-                    type: OIDC
-                    audience: ${gamebench_url}
-                  body: ${payload_gamebench_android}
-                result: gb_a_resp
-            - gb_android_store:
-                assign:
-                  - results.gamebench_android: ${gb_a_resp.body}
-            - gb_android_validate:
-                switch:
-                  - condition: ${text.match_regex(default(map.get(gb_a_resp.headers, "Content-Type"), ""), ".*text/html.*")}
-                    steps:
-                      - gb_android_placeholder_err:
-                          assign:
-                            - errors: ${list.concat(errors, ["gamebench_android - placeholder_revision_served"]) }
-                            - status: "non_ok"
-        except:
-          as: e
-          steps:
-            - gb_android_err:
-                assign:
-                  - errors: ${list.concat(errors, ["gamebench_android - " + text.decode(json.encode(e))])}
+                          - gamebench_data_quality_set_non_ok:
+                              switch:
+                                - condition: ${not gb_dq_is_ok}
+                                  steps:
+                                    - gamebench_data_quality_mark_status:
+                                        assign:
+                                          - dq_status: "non_ok"
+                                          - status: "non_ok"
+                                          - errors: ${list.concat(errors, ["gamebench_data_quality - empty_or_stale_source_data"])}
 
-    # --------------------------
-    # GAMEBENCH (iOS)
-    # --------------------------
-    - gamebench_ios_try:
-        try:
-          steps:
-            - gb_ios_call:
-                call: http.post
-                args:
-                  url: ${gamebench_url}
-                  timeout: 1800
-                  auth:
-                    type: OIDC
-                    audience: ${gamebench_url}
-                  body: ${payload_gamebench_ios}
-                result: gb_i_resp
-            - gb_ios_store:
-                assign:
-                  - results.gamebench_ios: ${gb_i_resp.body}
-            - gb_ios_validate:
-                switch:
-                  - condition: ${text.match_regex(default(map.get(gb_i_resp.headers, "Content-Type"), ""), ".*text/html.*")}
-                    steps:
-                      - gb_ios_placeholder_err:
-                          assign:
-                            - errors: ${list.concat(errors, ["gamebench_ios - placeholder_revision_served"]) }
-                            - status: "non_ok"
-        except:
-          as: e
-          steps:
-            - gb_ios_err:
-                assign:
-                  - errors: ${list.concat(errors, ["gamebench_ios - " + text.decode(json.encode(e))])}
-
-    # --------------------------
-    # GAMEBENCH DAILY AGGREGATES (BigQuery MERGE)
-    # --------------------------
-    - gamebench_daily_refresh_try:
-        try:
-          steps:
-            - gamebench_daily_refresh_job:
-                call: googleapis.bigquery.v2.jobs.insert
-                args:
-                  projectId: ${project_id}
-                  body:
-                    configuration:
-                      query:
-                        useLegacySql: false
-                        query: |
-                          MERGE `qa_metrics.gamebench_daily_metrics` AS target
-                          USING (
-                            SELECT
-                              DATE(time_pushed) AS metric_date,
-                              COALESCE(environment, 'unknown') AS environment,
-                              COALESCE(platform, 'unknown') AS platform,
-                              COALESCE(app_package, 'unknown') AS app_package,
-                              COALESCE(app_version, 'unknown') AS app_version,
-                              COALESCE(device_model, 'unknown') AS device_model,
-                              COALESCE(device_manufacturer, 'unknown') AS device_manufacturer,
-                              COALESCE(os_version, 'unknown') AS os_version,
-                              COALESCE(gpu_model, 'unknown') AS gpu_model,
-                              COUNT(*) AS sessions,
-                              AVG(median_fps) AS median_fps,
-                              AVG(fps_stability_pct) AS fps_stability_pct,
-                              AVG(fps_stability_index) AS fps_stability_index,
-                              AVG(cpu_avg_pct) AS cpu_avg_pct,
-                              MAX(cpu_max_pct) AS cpu_max_pct,
-                              AVG(memory_avg_mb) AS memory_avg_mb,
-                              MAX(memory_max_mb) AS memory_max_mb,
-                              AVG(current_avg_ma) AS current_avg_ma,
-                              CURRENT_TIMESTAMP() AS _updated_at
-                            FROM `qa_metrics.gamebench_sessions_latest`
-                            WHERE time_pushed IS NOT NULL
-                            GROUP BY
-                              metric_date,
-                              environment,
-                              platform,
-                              app_package,
-                              app_version,
-                              device_model,
-                              device_manufacturer,
-                              os_version,
-                              gpu_model
-                          ) AS source
-                          ON target.metric_date = source.metric_date
-                            AND target.environment = source.environment
-                            AND target.platform = source.platform
-                            AND target.app_package = source.app_package
-                            AND target.app_version = source.app_version
-                            AND target.device_model = source.device_model
-                            AND target.device_manufacturer = source.device_manufacturer
-                            AND target.os_version = source.os_version
-                            AND target.gpu_model = source.gpu_model
-                          WHEN MATCHED THEN
-                            UPDATE SET
-                              sessions = source.sessions,
-                              median_fps = source.median_fps,
-                              fps_stability_pct = source.fps_stability_pct,
-                              fps_stability_index = source.fps_stability_index,
-                              cpu_avg_pct = source.cpu_avg_pct,
-                              cpu_max_pct = source.cpu_max_pct,
-                              memory_avg_mb = source.memory_avg_mb,
-                              memory_max_mb = source.memory_max_mb,
-                              current_avg_ma = source.current_avg_ma,
-                              _updated_at = source._updated_at
-                          WHEN NOT MATCHED THEN
-                            INSERT (
-                              metric_date,
-                              environment,
-                              platform,
-                              app_package,
-                              app_version,
-                              device_model,
-                              device_manufacturer,
-                              os_version,
-                              gpu_model,
-                              sessions,
-                              median_fps,
-                              fps_stability_pct,
-                              fps_stability_index,
-                              cpu_avg_pct,
-                              cpu_max_pct,
-                              memory_avg_mb,
-                              memory_max_mb,
-                              current_avg_ma,
-                              _updated_at
-                            )
-                            VALUES (
-                              source.metric_date,
-                              source.environment,
-                              source.platform,
-                              source.app_package,
-                              source.app_version,
-                              source.device_model,
-                              source.device_manufacturer,
-                              source.os_version,
-                              source.gpu_model,
-                              source.sessions,
-                              source.median_fps,
-                              source.fps_stability_pct,
-                              source.fps_stability_index,
-                              source.cpu_avg_pct,
-                              source.cpu_max_pct,
-                              source.memory_avg_mb,
-                              source.memory_max_mb,
-                              source.current_avg_ma,
-                              source._updated_at
-                            )
-                result: gb_daily_refresh_resp
-            - gamebench_daily_refresh_store:
-                assign:
-                  - results.gamebench_daily_refresh: ${gb_daily_refresh_resp.jobReference.jobId}
-        except:
-          as: e
-          steps:
-            - gb_daily_refresh_err:
-                assign:
-                  - errors: ${list.concat(errors, ["gamebench_daily_refresh - " + text.decode(json.encode(e))])}
-
-    # --------------------------
-    # GAMEBENCH DATA QUALITY CHECK (POST-INGESTION)
-    # --------------------------
-    - gamebench_data_quality_check_try:
-        try:
-          steps:
-            - gamebench_data_quality_query:
-                call: googleapis.bigquery.v2.jobs.query
-                args:
-                  projectId: ${project_id}
-                  body:
-                    useLegacySql: false
-                    query: |
-                      SELECT
-                        (SELECT COUNT(*)
-                         FROM `qa_metrics.gamebench_sessions_latest`
-                         WHERE time_pushed >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)) AS sessions_recent_row_count,
-                        (SELECT COUNT(*)
-                         FROM `qa_metrics.gamebench_daily_metrics`
-                         WHERE metric_date >= DATE_SUB(CURRENT_DATE("UTC"), INTERVAL 2 DAY)) AS daily_recent_row_count
-                result: gb_dq_resp
-
-            - gamebench_data_quality_parse:
-                assign:
-                  - gb_dq_rows: ${default(map.get(gb_dq_resp, "rows"), [])}
-                  - gb_dq_fields: ${if(len(gb_dq_rows) > 0, default(map.get(gb_dq_rows[0], "f"), []), [])}
-                  - gb_dq_sessions_count: ${if(len(gb_dq_fields) > 0, int(default(map.get(gb_dq_fields[0], "v"), "0")), 0)}
-                  - gb_dq_daily_count: ${if(len(gb_dq_fields) > 1, int(default(map.get(gb_dq_fields[1], "v"), "0")), 0)}
-                  - gb_dq_is_ok: ${gb_dq_sessions_count > 0 and gb_dq_daily_count > 0}
-                  - results.gamebench_data_quality:
-                      checks:
-                        - dataset: "qa_metrics"
-                          table: "gamebench_sessions_latest"
-                          checked_window: "last_24h_utc"
-                          row_count: ${gb_dq_sessions_count}
-                        - dataset: "qa_metrics"
-                          table: "gamebench_daily_metrics"
-                          checked_window: "last_2d_utc"
-                          row_count: ${gb_dq_daily_count}
-                      status: ${if(gb_dq_is_ok, "ok", "non_ok")}
-
-            - gamebench_data_quality_log_info:
-                call: sys.log
-                args:
-                  severity: ${if(gb_dq_is_ok, "INFO", "ERROR")}
-                  data:
-                    event: "gamebench_data_quality_check"
-                    status: ${if(gb_dq_is_ok, "ok", "non_ok")}
-                    checks: ${results.gamebench_data_quality.checks}
-
-            - gamebench_data_quality_set_non_ok:
-                switch:
-                  - condition: ${not gb_dq_is_ok}
-                    steps:
-                      - gamebench_data_quality_mark_status:
-                          assign:
-                            - dq_status: "non_ok"
-                            - status: "non_ok"
-                            - errors: ${list.concat(errors, ["gamebench_data_quality - empty_or_stale_source_data"])}
-
-            - gamebench_data_quality_alert_webhook:
-                switch:
-                  - condition: ${not gb_dq_is_ok and dq_alert_webhook_url != ""}
-                    steps:
-                      - gamebench_data_quality_webhook_call:
-                          call: http.post
-                          args:
-                            url: ${dq_alert_webhook_url}
-                            timeout: 30
-                            body:
-                              event: "gamebench_data_quality_alert"
-                              status: "non_ok"
-                              checks: ${results.gamebench_data_quality.checks}
-        except:
-          as: e
-          steps:
-            - gb_dq_err:
-                assign:
-                  - dq_status: "non_ok"
-                  - status: "non_ok"
-                  - errors: ${list.concat(errors, ["gamebench_data_quality - " + text.decode(json.encode(e))])}
+                          - gamebench_data_quality_alert_webhook:
+                              switch:
+                                - condition: ${not gb_dq_is_ok and dq_alert_webhook_url != ""}
+                                  steps:
+                                    - gamebench_data_quality_webhook_call:
+                                        call: http.post
+                                        args:
+                                          url: ${dq_alert_webhook_url}
+                                          timeout: 30
+                                          body:
+                                            event: "gamebench_data_quality_alert"
+                                            status: "non_ok"
+                                            checks: ${results.gamebench_data_quality.checks}
+                      except:
+                        as: e
+                        steps:
+                          - gb_dq_err:
+                              assign:
+                                - dq_status: "non_ok"
+                                - status: "non_ok"
+                                - errors: ${list.concat(errors, ["gamebench_data_quality - " + text.decode(json.encode(e))])}
+                  - branch_d_log_elapsed:
+                      call: sys.log
+                      args:
+                        severity: "INFO"
+                        data:
+                          event: "branch_elapsed"
+                          branch: "branch_d_gamebench"
+                          started_at: ${branch_d_started_at}
+                          ended_at: ${sys.now()}
 
     # --------------------------
     # FINAL STATUS
