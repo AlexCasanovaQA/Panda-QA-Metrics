@@ -246,7 +246,30 @@
     note_text: "Definition: Distribution of bugs fixed by priority for the selected Date Range. Calculation: COUNT of fixed events grouped by priority_label where event_date is controlled by the dashboard Date Range filter."
     row: 23
     col: 0
-    width: 24
+    width: 12
+    height: 6
+
+  - name: fixed_daily_by_priority
+    title: Bugs fixed daily by Priority
+    type: looker_column
+    model: panda_qa_metrics
+    explore: jira_bug_events_daily
+    fields: [jira_bug_events_daily.event_date_date, jira_bug_events_daily.priority_label, jira_bug_events_daily.bugs]
+    pivots: [jira_bug_events_daily.priority_label]
+    filters:
+      jira_bug_events_daily.event_type: "fixed"
+    sorts: [jira_bug_events_daily.event_date_date]
+    listen:
+      date_range: jira_bug_events_daily.event_date_date
+      pod: jira_bug_events_daily.pod
+      priority: jira_bug_events_daily.priority_label
+      severity: jira_bug_events_daily.severity_label
+    note_display: hover
+    note_text: "Definition: Daily trend of fixed bugs by priority for the selected Date Range. Calculation: COUNT of event_type=fixed by event_date and priority_label. Use: Compare fix throughput by priority over time."
+    stacking: normal
+    row: 23
+    col: 12
+    width: 12
     height: 6
 
   - name: active_bugs_by_pod
