@@ -7,7 +7,9 @@ main:
           - request_args: ${default(args, request_args)}
           - days: ${default(map.get(request_args, "days"), 7)}
           - lookback_days: ${default(map.get(request_args, "lookback_days"), 90)}
-          - project_keys_csv: ${default(map.get(request_args, "project_keys_csv"), default(map.get(request_args, "project_keys"), default(map.get(request_args, "jira_project_keys_csv"), default(map.get(request_args, "jira_project_keys"), default(map.get(request_args, "project_key"), default(sys.get_env("JIRA_PROJECT_KEYS_CSV"), default(sys.get_env("JIRA_PROJECT_KEYS"), default(sys.get_env("JIRA_PROJECT_KEY"), default(sys.get_env("QA_METRICS_PROJECT_KEYS"), default(sys.get_env("QA_METRICS_PROJECT_KEY"), ""))))))))))}
+          - project_keys_from_args: ${default(map.get(request_args, "project_keys_csv"), default(map.get(request_args, "project_keys"), default(map.get(request_args, "jira_project_keys_csv"), default(map.get(request_args, "jira_project_keys"), map.get(request_args, "project_key")))))}
+          - project_keys_from_env: ${default(sys.get_env("JIRA_PROJECT_KEYS_CSV"), default(sys.get_env("JIRA_PROJECT_KEYS"), default(sys.get_env("JIRA_PROJECT_KEY"), default(sys.get_env("QA_METRICS_PROJECT_KEYS"), sys.get_env("QA_METRICS_PROJECT_KEY")))))}
+          - project_keys_csv: ${default(project_keys_from_args, default(project_keys_from_env, ""))}
           - project_keys_list: []
           - raw_project_keys_list: []
 
