@@ -22,10 +22,10 @@ sm = secretmanager.SecretManagerServiceClient()
 
 # Config
 OVERLAP_DAYS = int(os.environ.get("OVERLAP_DAYS", "14"))
-HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "30"))
+HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "600"))
 MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "6"))
 BASE_BACKOFF = float(os.environ.get("BASE_BACKOFF_SECONDS", "1.0"))
-MAX_BACKOFF = float(os.environ.get("MAX_BACKOFF_SECONDS", "30.0"))
+MAX_BACKOFF = float(os.environ.get("MAX_BACKOFF_SECONDS", "45.0"))
 
 # ----------------- Secrets -----------------
 def get_secret(name: str) -> str:
