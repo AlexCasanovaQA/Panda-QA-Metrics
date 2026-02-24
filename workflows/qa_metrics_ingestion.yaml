@@ -967,6 +967,67 @@ main:
                                     service: "gamebench_data_quality"
                                     event: "skipped_gamebench_unavailable"
                                     code: ${preflight_status.gamebench.reason}
+                  - build_size_data_quality_try:
+                      try:
+                        steps:
+                          - build_size_data_quality_query:
+                              call: googleapis.bigquery.v2.jobs.query
+                              args:
+                                projectId: ${project_id}
+                                body:
+                                  useLegacySql: false
+                                  query: |
+                                    SELECT COUNT(*) AS build_size_rows_30d
+                                    FROM `qa_metrics.build_size_manual`
+                                    WHERE metric_date >= DATE_SUB(CURRENT_DATE("UTC"), INTERVAL 30 DAY)
+                              result: build_size_dq_resp
+
+                          - build_size_data_quality_parse:
+                              assign:
+                                - build_size_dq_rows: ${default(map.get(build_size_dq_resp, "rows"), [])}
+                                - build_size_dq_fields: ${if(len(build_size_dq_rows) > 0, default(map.get(build_size_dq_rows[0], "f"), []), [])}
+                                - build_size_dq_count: ${if(len(build_size_dq_fields) > 0, int(default(map.get(build_size_dq_fields[0], "v"), "0")), 0)}
+                                - results.build_size_data_quality:
+                                    checks:
+                                      - dataset: "qa_metrics"
+                                        table: "build_size_manual"
+                                        checked_window: "last_30d_utc"
+                                        row_count: ${build_size_dq_count}
+                                    status: ${if(build_size_dq_count > 0, "ok", "warning")}
+
+                          - build_size_data_quality_log:
+                              call: sys.log
+                              args:
+                                severity: ${if(build_size_dq_count > 0, "INFO", "WARNING")}
+                                data:
+                                  event: "build_size_data_quality_check"
+                                  status: ${if(build_size_dq_count > 0, "ok", "warning")}
+                                  checks: ${results.build_size_data_quality.checks}
+
+                          - build_size_data_quality_alert_webhook:
+                              switch:
+                                - condition: ${build_size_dq_count == 0 and dq_alert_webhook_url != ""}
+                                  steps:
+                                    - build_size_data_quality_webhook_call:
+                                        call: http.post
+                                        args:
+                                          url: ${dq_alert_webhook_url}
+                                          timeout: 30
+                                          body:
+                                            event: "build_size_data_quality_alert"
+                                            status: "warning"
+                                            checks: ${results.build_size_data_quality.checks}
+                      except:
+                        as: e
+                        steps:
+                          - build_size_dq_err_log:
+                              call: sys.log
+                              args:
+                                severity: "WARNING"
+                                data:
+                                  event: "build_size_data_quality_check_error"
+                                  error: ${text.decode(json.encode(e))}
+
                   - branch_d_log_elapsed:
                       call: sys.log
                       args:

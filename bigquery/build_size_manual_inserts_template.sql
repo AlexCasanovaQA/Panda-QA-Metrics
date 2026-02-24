@@ -13,6 +13,11 @@
 -- Recommended cadence:
 --   - Insert/update at least one row per platform/environment each week.
 --   - Keep metric_date in UTC.
+--
+-- Minimal operational runbook:
+--   1) Replace the sample values with real build data.
+--   2) Insert at least 2-4 real rows (for example 2 weeks x 2 platforms).
+--   3) Validate load freshness/volume with the check at the bottom.
 
 INSERT INTO `qa_metrics.build_size_manual`
   (metric_date, platform, environment, build_version, build_size_mb)
@@ -37,3 +42,11 @@ VALUES
 --   (metric_date, platform, environment, build_version, build_size_mb)
 -- VALUES
 --   (s.metric_date, s.platform, s.environment, s.build_version, s.build_size_mb);
+
+-- Post-load validation (expect >= 2 rows in the last 30 days during bootstrap):
+-- SELECT
+--   COUNT(*) AS rows_last_30d,
+--   MIN(metric_date) AS min_metric_date,
+--   MAX(metric_date) AS max_metric_date
+-- FROM `qa_metrics.build_size_manual`
+-- WHERE metric_date >= DATE_SUB(CURRENT_DATE("UTC"), INTERVAL 30 DAY);
