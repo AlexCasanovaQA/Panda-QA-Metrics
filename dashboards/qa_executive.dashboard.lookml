@@ -367,7 +367,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Bugs by current Jira status. Includes statuses such as open/claimed fixed/fixed/reopened based on current state labels. Calculation: COUNT of bug/defect issues grouped by current status."
+    note_text: "Definition: Bugs by current Jira status (snapshot view). Source: jira_issues_latest current state labels from Jira. Calculation: COUNT of bug/defect issues grouped by current status."
     row: 36
     col: 0
     width: 12
@@ -383,7 +383,7 @@
     listen:
       date_range: jira_active_bug_count_daily.metric_date_date
     note_display: hover
-    note_text: "Definition (UTC): Active bug count over time. Active = bugs not yet in done state as-of each day. Calculation: daily active_bug_count snapshot."
+    note_text: "Definition (UTC): Active bug count over time. Source: jira_active_bug_count_daily. Active = created on/before day and not yet fixed by earliest transition to Resolved/Closed/Verified. Calculation: daily active_bug_count snapshot."
     series_colors: {jira_active_bug_count_daily.active_bug_count: "#2F80ED"}
     row: 36
     col: 12
