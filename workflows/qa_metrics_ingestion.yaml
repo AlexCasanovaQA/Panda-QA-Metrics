@@ -394,6 +394,7 @@ main:
                                   - jira_attempt: 1
                                   - jira_max_attempts: 3
                                   - jira_backoff_seconds: 1
+                                  - jira_backoff_cap_seconds: 16
                                   - jira_endpoint_path: ${default(text.replace_all_regex(text.replace_all_regex(jira_url, "^https?://[^/]+", ""), "\\?.*$", ""), "/")}
                                   - jira_request_context:
                                       endpoint_path: ${if(jira_endpoint_path == "", "/", jira_endpoint_path)}
@@ -440,10 +441,21 @@ main:
                                 except:
                                   as: e
                                   steps:
+                                    - jira_retry_error_classification:
+                                        assign:
+                                          - jira_error_code: ${int(default(map.get(e, "code"), 0))}
+                                          - jira_error_text: ${text.to_lower(text.decode(json.encode(e)))}
+                                          - jira_is_5xx: ${jira_error_code >= 500 and jira_error_code < 600}
+                                          - jira_is_timeout: ${text.match_regex(jira_error_text, ".*timeout.*") or text.match_regex(jira_error_text, ".*deadline.*")}
+                                          - jira_is_transient_transport_outage: ${jira_is_5xx or jira_is_timeout}
                                     - jira_retry_eval:
                                         switch:
-                                          - condition: ${int(default(map.get(e, "code"), 0)) >= 500 and int(default(map.get(e, "code"), 0)) < 600 and jira_attempt < jira_max_attempts}
+                                          - condition: ${jira_is_transient_transport_outage and jira_attempt < jira_max_attempts}
                                             steps:
+                                              - jira_retry_backoff_with_jitter:
+                                                  assign:
+                                                    - jira_backoff_jitter_seconds: ${math.floor(math.random() * 1000) / 1000}
+                                                    - jira_backoff_sleep_seconds: ${if(jira_backoff_seconds + jira_backoff_jitter_seconds > jira_backoff_cap_seconds, jira_backoff_cap_seconds, jira_backoff_seconds + jira_backoff_jitter_seconds)}
                                               - jira_retry_log:
                                                   call: sys.log
                                                   args:
@@ -455,17 +467,21 @@ main:
                                                       next_attempt: ${jira_attempt + 1}
                                                       max_attempts: ${jira_max_attempts}
                                                       backoff_seconds: ${jira_backoff_seconds}
-                                                      response_code: ${int(default(map.get(e, "code"), 0))}
+                                                      jitter_seconds: ${jira_backoff_jitter_seconds}
+                                                      sleep_seconds: ${jira_backoff_sleep_seconds}
+                                                      response_code: ${jira_error_code}
+                                                      transient_transport_outage: ${jira_is_transient_transport_outage}
+                                                      outage_classification: ${if(jira_is_5xx, "transient_transport_outage_5xx", if(jira_is_timeout, "transient_transport_outage_timeout", "non_transient"))}
                                                       request_context: ${jira_request_context}
                                                       detail: ${text.decode(json.encode(e))}
                                               - jira_retry_sleep:
                                                   call: sys.sleep
                                                   args:
-                                                    seconds: ${jira_backoff_seconds}
+                                                    seconds: ${jira_backoff_sleep_seconds}
                                               - jira_retry_increment:
                                                   assign:
                                                     - jira_attempt: ${jira_attempt + 1}
-                                                    - jira_backoff_seconds: ${jira_backoff_seconds * 2}
+                                                    - jira_backoff_seconds: ${if(jira_backoff_seconds * 2 > jira_backoff_cap_seconds, jira_backoff_cap_seconds, jira_backoff_seconds * 2)}
                                               - jira_retry_continue:
                                                   next: jira_attempt_log
                                     - jira_final_error_payload:
@@ -473,12 +489,9 @@ main:
                                           - jira_error_payload:
                                               service: "jira"
                                               type: "ingestion_error"
-                                              code: "jira_call_failed"
-                                              message: "Failed to ingest Jira metrics after retries"
+                                              code: ${if(jira_is_5xx, "jira_call_failed_transport_transient_5xx", if(jira_is_timeout, "jira_call_failed_transport_timeout", "jira_call_failed"))}
                                               retries_attempted: ${jira_attempt}
-                                              max_attempts: ${jira_max_attempts}
                                               request_context: ${jira_request_context}
-                                              detail: ${e}
                                     - jira_final_error_log:
                                         call: sys.log
                                         args:
@@ -510,27 +523,43 @@ main:
                       switch:
                         - condition: ${preflight_status.jira_changelog.ready}
                           steps:
+                            - jira_changelog_retry_context_init:
+                                assign:
+                                  - jira_changelog_attempt: 1
+                                  - jira_changelog_max_attempts: 5
+                                  - jira_changelog_backoff_seconds: 2
+                                  - jira_changelog_backoff_cap_seconds: 30
+                                  - jira_changelog_endpoint_path: ${default(text.replace_all_regex(text.replace_all_regex(jira_changelog_url, "^https?://[^/]+", ""), "\\?.*$", ""), "/")}
+                                  - jira_changelog_request_context:
+                                      endpoint_path: ${if(jira_changelog_endpoint_path == "", "/", jira_changelog_endpoint_path)}
+                                      query_window:
+                                        lookback_days: ${lookback_days}
+                                      project_filters_csv: ${payload_changelog.project_keys}
+                                      request_id: ${request_id}
+                                      correlation_id: ${correlation_id}
+                            - jira_changelog_attempt_log:
+                                call: sys.log
+                                args:
+                                  severity: "INFO"
+                                  data:
+                                    service: "jira_changelog"
+                                    event: "ingestion_attempt"
+                                    attempt: ${jira_changelog_attempt}
+                                    max_attempts: ${jira_changelog_max_attempts}
+                                    request_context: ${jira_changelog_request_context}
                             - jira_changelog_call_try:
                                 try:
                                   steps:
                                     - jira_changelog_call:
-                                        try:
-                                          call: http.post
-                                          args:
-                                            url: ${jira_changelog_url}
-                                            timeout: 600
-                                            auth:
-                                              type: OIDC
-                                              audience: ${jira_changelog_url}
-                                            body: ${payload_changelog}
-                                          result: jcl_resp
-                                        retry:
-                                          predicate: ${http.default_retry_predicate}
-                                          max_retries: 4
-                                          backoff:
-                                            initial_delay: 2
-                                            max_delay: 30
-                                            multiplier: 2
+                                        call: http.post
+                                        args:
+                                          url: ${jira_changelog_url}
+                                          timeout: 600
+                                          auth:
+                                            type: OIDC
+                                            audience: ${jira_changelog_url}
+                                          body: ${payload_changelog}
+                                        result: jcl_resp
                                     - jira_changelog_store:
                                         assign:
                                           - results.jira_changelog: ${jcl_resp.body}
@@ -547,20 +576,85 @@ main:
                                                 since: ${if(jcl_resp.body != null, map.get(jcl_resp.body, "since"), null)}
                                                 until: ${if(jcl_resp.body != null, map.get(jcl_resp.body, "until"), null)}
                                                 rows_inserted: ${if(jcl_resp.body != null, map.get(jcl_resp.body, "rows_inserted"), null)}
+                                    - jira_changelog_success_log:
+                                        call: sys.log
+                                        args:
+                                          severity: "INFO"
+                                          data:
+                                            service: "jira_changelog"
+                                            event: "ingestion_success"
+                                            attempt: ${jira_changelog_attempt}
+                                            request_context: ${jira_changelog_request_context}
                                 except:
                                   as: e
                                   steps:
-                                    - jcl_err:
+                                    - jira_changelog_retry_error_classification:
                                         assign:
+                                          - jira_changelog_error_code: ${int(default(map.get(e, "code"), 0))}
+                                          - jira_changelog_error_text: ${text.to_lower(text.decode(json.encode(e)))}
+                                          - jira_changelog_is_5xx: ${jira_changelog_error_code >= 500 and jira_changelog_error_code < 600}
+                                          - jira_changelog_is_timeout: ${text.match_regex(jira_changelog_error_text, ".*timeout.*") or text.match_regex(jira_changelog_error_text, ".*deadline.*")}
+                                          - jira_changelog_is_transient_transport_outage: ${jira_changelog_is_5xx or jira_changelog_is_timeout}
+                                    - jira_changelog_retry_eval:
+                                        switch:
+                                          - condition: ${jira_changelog_is_transient_transport_outage and jira_changelog_attempt < jira_changelog_max_attempts}
+                                            steps:
+                                              - jira_changelog_retry_backoff_with_jitter:
+                                                  assign:
+                                                    - jira_changelog_backoff_jitter_seconds: ${math.floor(math.random() * 1000) / 1000}
+                                                    - jira_changelog_backoff_sleep_seconds: ${if(jira_changelog_backoff_seconds + jira_changelog_backoff_jitter_seconds > jira_changelog_backoff_cap_seconds, jira_changelog_backoff_cap_seconds, jira_changelog_backoff_seconds + jira_changelog_backoff_jitter_seconds)}
+                                              - jira_changelog_retry_log:
+                                                  call: sys.log
+                                                  args:
+                                                    severity: "WARNING"
+                                                    data:
+                                                      service: "jira_changelog"
+                                                      event: "ingestion_retry_scheduled"
+                                                      attempt: ${jira_changelog_attempt}
+                                                      next_attempt: ${jira_changelog_attempt + 1}
+                                                      max_attempts: ${jira_changelog_max_attempts}
+                                                      backoff_seconds: ${jira_changelog_backoff_seconds}
+                                                      jitter_seconds: ${jira_changelog_backoff_jitter_seconds}
+                                                      sleep_seconds: ${jira_changelog_backoff_sleep_seconds}
+                                                      response_code: ${jira_changelog_error_code}
+                                                      transient_transport_outage: ${jira_changelog_is_transient_transport_outage}
+                                                      outage_classification: ${if(jira_changelog_is_5xx, "transient_transport_outage_5xx", if(jira_changelog_is_timeout, "transient_transport_outage_timeout", "non_transient"))}
+                                                      request_context: ${jira_changelog_request_context}
+                                                      detail: ${text.decode(json.encode(e))}
+                                              - jira_changelog_retry_sleep:
+                                                  call: sys.sleep
+                                                  args:
+                                                    seconds: ${jira_changelog_backoff_sleep_seconds}
+                                              - jira_changelog_retry_increment:
+                                                  assign:
+                                                    - jira_changelog_attempt: ${jira_changelog_attempt + 1}
+                                                    - jira_changelog_backoff_seconds: ${if(jira_changelog_backoff_seconds * 2 > jira_changelog_backoff_cap_seconds, jira_changelog_backoff_cap_seconds, jira_changelog_backoff_seconds * 2)}
+                                              - jira_changelog_retry_continue:
+                                                  next: jira_changelog_attempt_log
+                                    - jira_changelog_final_error_payload:
+                                        assign:
+                                          - jira_changelog_error_payload:
+                                              service: "jira_changelog"
+                                              type: "ingestion_error"
+                                              code: ${if(jira_changelog_is_5xx, "jira_changelog_call_failed_transport_transient_5xx", if(jira_changelog_is_timeout, "jira_changelog_call_failed_transport_timeout", "jira_changelog_call_failed_transport"))}
+                                              retries_attempted: ${jira_changelog_attempt}
+                                              request_context: ${jira_changelog_request_context}
                                           - results.jira_changelog_ingestion_state:
                                               outcome: "failed"
                                               failure_class: "transport_failure"
-                                              reason: "jira_changelog_call_failed_transport"
+                                              reason: ${if(jira_changelog_is_5xx, "jira_changelog_call_failed_transport_transient_5xx", if(jira_changelog_is_timeout, "jira_changelog_call_failed_transport_timeout", "jira_changelog_call_failed_transport"))}
                                               metadata:
                                                 requested_lookback_days: ${lookback_days}
                                                 project_keys_csv: ${payload_changelog.project_keys}
                                                 error: ${text.decode(json.encode(e))}
-                                          - errors: ${list.concat(errors, ["{\"service\":\"jira_changelog\",\"type\":\"ingestion_error\",\"code\":\"jira_changelog_call_failed\",\"message\":\"Failed to ingest Jira changelog metrics\",\"classification\":\"transport_failure\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                    - jira_changelog_final_error_log:
+                                        call: sys.log
+                                        args:
+                                          severity: "ERROR"
+                                          data: ${jira_changelog_error_payload}
+                                    - jcl_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, [text.decode(json.encode(jira_changelog_error_payload))])}
                         - condition: ${not preflight_status.jira_changelog.ready}
                           steps:
                             - jira_changelog_skipped_log:
@@ -660,7 +754,7 @@ main:
                                           - errors: ${list.concat(errors, ["{\"service\":\"jira_status_transitions_data_quality\",\"type\":\"data_quality_error\",\"code\":\"jira_status_transitions_data_quality_failed\",\"message\":\"Failed to ingest Jira status transitions data quality metrics\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
                         - condition: ${true}
                           steps:
-                            - jira_status_transitions_data_quality_mark_skipped:
+                            - jira_status_transitions_data_quality_prepare_fallback:
                                 assign:
                                   - jira_changelog_result_missing: ${results.jira_changelog == null}
                                   - jira_changelog_ingestion_state_missing: ${results.jira_changelog_ingestion_state == null}
@@ -670,72 +764,143 @@ main:
                                   - jira_changelog_ok_not_ok: ${results.jira_changelog != null and map.get(results.jira_changelog, "ok") != null and not default(map.get(results.jira_changelog, "ok"), false)}
                                   - jira_changelog_status_not_ok: ${results.jira_changelog != null and map.get(results.jira_changelog, "status") != null and text.to_lower("" + map.get(results.jira_changelog, "status")) != "ok"}
                                   - jira_status_transitions_data_quality_skip_reason: "jira_changelog_ingestion_not_successful"
-                            - jira_status_transitions_data_quality_set_skip_reason_preflight:
+                            - jira_status_transitions_data_quality_set_fallback_reason:
                                 switch:
                                   - condition: ${not preflight_status.jira_changelog.ready}
                                     steps:
-                                      - jira_status_transitions_data_quality_assign_skip_reason_preflight:
+                                      - jira_status_transitions_data_quality_assign_fallback_reason_preflight:
                                           assign:
                                             - jira_status_transitions_data_quality_skip_reason: ${"jira_changelog_preflight_not_ready:" + preflight_status.jira_changelog.reason}
                                   - condition: ${jira_changelog_transport_failure}
                                     steps:
-                                      - jira_status_transitions_data_quality_assign_skip_reason_transport:
+                                      - jira_status_transitions_data_quality_assign_fallback_reason_transport:
                                           assign:
                                             - jira_status_transitions_data_quality_skip_reason: "jira_changelog_dependency_transport_failure"
                                   - condition: ${jira_changelog_parse_failure}
                                     steps:
-                                      - jira_status_transitions_data_quality_assign_skip_reason_parse:
+                                      - jira_status_transitions_data_quality_assign_fallback_reason_parse:
                                           assign:
                                             - jira_status_transitions_data_quality_skip_reason: "jira_changelog_dependency_parse_failure"
                                   - condition: ${jira_changelog_ingestion_state_missing}
                                     steps:
-                                      - jira_status_transitions_data_quality_assign_skip_reason_state_missing:
+                                      - jira_status_transitions_data_quality_assign_fallback_reason_state_missing:
                                           assign:
                                             - jira_status_transitions_data_quality_skip_reason: "jira_changelog_ingestion_state_missing"
                                   - condition: ${jira_changelog_result_missing}
                                     steps:
-                                      - jira_status_transitions_data_quality_assign_skip_reason_result_missing:
+                                      - jira_status_transitions_data_quality_assign_fallback_reason_result_missing:
                                           assign:
                                             - jira_status_transitions_data_quality_skip_reason: "jira_changelog_result_missing"
                                   - condition: ${jira_changelog_ok_not_ok}
                                     steps:
-                                      - jira_status_transitions_data_quality_assign_skip_reason_result_not_ok:
+                                      - jira_status_transitions_data_quality_assign_fallback_reason_result_not_ok:
                                           assign:
                                             - jira_status_transitions_data_quality_skip_reason: "jira_changelog_result_not_ok"
                                   - condition: ${jira_changelog_status_not_ok}
                                     steps:
-                                      - jira_status_transitions_data_quality_assign_skip_reason_status_not_ok:
+                                      - jira_status_transitions_data_quality_assign_fallback_reason_status_not_ok:
                                           assign:
                                             - jira_status_transitions_data_quality_skip_reason: "jira_changelog_status_not_ok"
-                            - jira_status_transitions_data_quality_store_skipped_result:
-                                assign:
-                                  - results.jira_status_transitions_data_quality:
-                                      status: "skipped"
-                                      skip_reason: ${jira_status_transitions_data_quality_skip_reason}
-                                      dependency:
-                                        service: "jira_changelog"
-                                        failure_class: ${if(results.jira_changelog_ingestion_state != null, map.get(results.jira_changelog_ingestion_state, "failure_class"), null)}
-                                        reason: ${if(results.jira_changelog_ingestion_state != null, map.get(results.jira_changelog_ingestion_state, "reason"), null)}
-                                        metadata:
-                                          requested_lookback_days: ${if(results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "metadata") != null and map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "requested_lookback_days") != null, map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "requested_lookback_days"), lookback_days)}
-                                          project_keys_csv: ${if(results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "metadata") != null and map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "project_keys_csv") != null, map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "project_keys_csv"), payload_changelog.project_keys)}
-                                          since: ${if(results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "metadata") != null, map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "since"), null)}
-                                          until: ${if(results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "metadata") != null, map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "until"), null)}
-                                      checks: []
-                            - jira_status_transitions_data_quality_skipped_log:
-                                call: sys.log
-                                args:
-                                  severity: "WARNING"
-                                  data:
-                                    service: "jira_status_transitions_data_quality"
-                                    event: "skipped_by_upstream_ingestion"
-                                    dq_executed: false
-                                    dq_skipped_due_to_upstream_ingestion: true
-                                    skip_reason: ${jira_status_transitions_data_quality_skip_reason}
-                                    preflight: ${preflight_status.jira_changelog}
-                                    jira_changelog_result_present: ${results.jira_changelog != null}
-                                    jira_changelog_ok_field: ${if(results.jira_changelog != null, map.get(results.jira_changelog, "ok"), null)}
-                                    jira_changelog_status_field: ${if(results.jira_changelog != null, map.get(results.jira_changelog, "status"), null)}
+                            - jira_status_transitions_data_quality_fallback_try:
+                                try:
+                                  steps:
+                                    - jira_status_transitions_data_quality_fallback_query:
+                                        call: googleapis.bigquery.v2.jobs.query
+                                        args:
+                                          projectId: ${project_id}
+                                          body:
+                                            useLegacySql: false
+                                            query: |
+                                              WITH last_known_good AS (
+                                                SELECT MAX(history_created) AS fallback_until
+                                                FROM `qa_metrics.jira_changelog_v2`
+                                              )
+                                              SELECT
+                                                fallback_until,
+                                                TIMESTAMP_SUB(fallback_until, INTERVAL 7 DAY) AS fallback_since,
+                                                (SELECT COUNT(*)
+                                                 FROM `qa_metrics.jira_changelog_v2`
+                                                 WHERE history_created BETWEEN TIMESTAMP_SUB(fallback_until, INTERVAL 7 DAY) AND fallback_until) AS changelog_rows_7d,
+                                                (SELECT COUNT(*)
+                                                 FROM `qa_metrics.jira_status_changes`
+                                                 WHERE changed_at BETWEEN TIMESTAMP_SUB(fallback_until, INTERVAL 7 DAY) AND fallback_until) AS status_changes_7d
+                                              FROM last_known_good
+                                        result: jira_dq_fallback_resp
+                                    - jira_status_transitions_data_quality_fallback_parse:
+                                        assign:
+                                          - jira_dq_fallback_rows: ${default(map.get(jira_dq_fallback_resp, "rows"), [])}
+                                          - jira_dq_fallback_fields: ${if(len(jira_dq_fallback_rows) > 0, default(map.get(jira_dq_fallback_rows[0], "f"), []), [])}
+                                          - jira_dq_fallback_until: ${if(len(jira_dq_fallback_fields) > 0, map.get(jira_dq_fallback_fields[0], "v"), null)}
+                                          - jira_dq_fallback_since: ${if(len(jira_dq_fallback_fields) > 1, map.get(jira_dq_fallback_fields[1], "v"), null)}
+                                          - jira_dq_fallback_changelog_rows_7d: ${if(len(jira_dq_fallback_fields) > 2, int(default(map.get(jira_dq_fallback_fields[2], "v"), "0")), 0)}
+                                          - jira_dq_fallback_status_changes_7d: ${if(len(jira_dq_fallback_fields) > 3, int(default(map.get(jira_dq_fallback_fields[3], "v"), "0")), 0)}
+                                          - jira_dq_fallback_is_ok: ${jira_dq_fallback_until != null and jira_dq_fallback_status_changes_7d > 0}
+                                          - results.jira_status_transitions_data_quality:
+                                              status: ${if(jira_dq_fallback_is_ok, "fallback_ok", "fallback_non_ok")}
+                                              fallback_mode: true
+                                              fallback_reason: ${jira_status_transitions_data_quality_skip_reason}
+                                              checked_window:
+                                                since: ${jira_dq_fallback_since}
+                                                until: ${jira_dq_fallback_until}
+                                              dependency:
+                                                service: "jira_changelog"
+                                                failure_class: ${if(results.jira_changelog_ingestion_state != null, map.get(results.jira_changelog_ingestion_state, "failure_class"), null)}
+                                                reason: ${if(results.jira_changelog_ingestion_state != null, map.get(results.jira_changelog_ingestion_state, "reason"), null)}
+                                              checks:
+                                                - dataset: "qa_metrics"
+                                                  table: "jira_changelog_v2"
+                                                  checked_window: "last_known_good_7d_utc"
+                                                  row_count: ${jira_dq_fallback_changelog_rows_7d}
+                                                - dataset: "qa_metrics"
+                                                  table: "jira_status_changes"
+                                                  checked_window: "last_known_good_7d_utc"
+                                                  row_count: ${jira_dq_fallback_status_changes_7d}
+                                    - jira_status_transitions_data_quality_fallback_set_non_ok:
+                                        switch:
+                                          - condition: ${not jira_dq_fallback_is_ok}
+                                            steps:
+                                              - jira_status_transitions_data_quality_fallback_mark_status:
+                                                  assign:
+                                                    - dq_status: "non_ok"
+                                                    - errors: ${list.concat(errors, ["jira_status_transitions_data_quality_fallback - last_known_good_status_changes_7d_is_zero_or_missing"])}
+                                    - jira_status_transitions_data_quality_fallback_log:
+                                        call: sys.log
+                                        args:
+                                          severity: ${if(jira_dq_fallback_is_ok, "WARNING", "ERROR")}
+                                          data:
+                                            service: "jira_status_transitions_data_quality"
+                                            event: "fallback_last_known_good_window"
+                                            dq_executed: true
+                                            dq_fallback_mode: true
+                                            fallback_reason: ${jira_status_transitions_data_quality_skip_reason}
+                                            status: ${results.jira_status_transitions_data_quality.status}
+                                            checked_window: ${results.jira_status_transitions_data_quality.checked_window}
+                                            checks: ${results.jira_status_transitions_data_quality.checks}
+                                except:
+                                  as: e
+                                  steps:
+                                    - jira_status_transitions_data_quality_store_skipped_result:
+                                        assign:
+                                          - results.jira_status_transitions_data_quality:
+                                              status: "skipped"
+                                              skip_reason: ${jira_status_transitions_data_quality_skip_reason}
+                                              dependency:
+                                                service: "jira_changelog"
+                                                failure_class: ${if(results.jira_changelog_ingestion_state != null, map.get(results.jira_changelog_ingestion_state, "failure_class"), null)}
+                                                reason: ${if(results.jira_changelog_ingestion_state != null, map.get(results.jira_changelog_ingestion_state, "reason"), null)}
+                                              checks: []
+                                    - jira_status_transitions_data_quality_skipped_log:
+                                        call: sys.log
+                                        args:
+                                          severity: "WARNING"
+                                          data:
+                                            service: "jira_status_transitions_data_quality"
+                                            event: "fallback_last_known_good_failed"
+                                            dq_executed: false
+                                            dq_skipped_due_to_upstream_ingestion: true
+                                            skip_reason: ${jira_status_transitions_data_quality_skip_reason}
+                                            preflight: ${preflight_status.jira_changelog}
+                                            detail: ${text.decode(json.encode(e))}
                   - branch_a_log_elapsed:
                       call: sys.log
                       args:
