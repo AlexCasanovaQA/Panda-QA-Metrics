@@ -113,7 +113,7 @@ main:
                     steps:
                       - trim_project_key:
                           assign:
-                            - project_key_trimmed: ${text.trim(project_key)}
+                            - project_key_trimmed: ${text.replace_all_regex(text.replace_all_regex(project_key, "^\\s+", ""), "\\s+$", "")}
                       - append_project_key:
                           switch:
                             - condition: ${project_key_trimmed != ""}
