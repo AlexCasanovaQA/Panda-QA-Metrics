@@ -112,13 +112,13 @@
     fields: [jira_issues_latest.issues]
     filters:
       jira_issues_latest.issue_type: "Bug,Defect"
-      jira_issues_latest.status_category: "-Done"
+      jira_issues_latest.status_category: "To Do,In Progress"
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Active bugs now (current backlog snapshot). Active = bug/defect issues in jira_issues_latest with status_category != Done. Calculation: COUNT(issue_key)."
+    note_text: "Definition: Active bugs now (current backlog snapshot). Active = bug/defect issues in jira_issues_latest with status_category in (To Do, In Progress). Calculation: COUNT(issue_key)."
     row: 2
     col: 10
     width: 4
@@ -312,7 +312,7 @@
     fields: [jira_issues_latest.team, jira_issues_latest.issues]
     filters:
       jira_issues_latest.issue_type: "Bug,Defect"
-      jira_issues_latest.status_category: "-Done"
+      jira_issues_latest.status_category: "To Do,In Progress"
     sorts: [jira_issues_latest.issues desc]
     limit: 5
     listen:
@@ -320,7 +320,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Active bugs by POD (current backlog snapshot). Active = bug/defect issues in jira_issues_latest with status_category != Done. Calculation: COUNT(issue_key) grouped by team (Top 5 shown; remainder in Other)."
+    note_text: "Definition: Active bugs by POD (current backlog snapshot). Active = bug/defect issues in jira_issues_latest with status_category in (To Do, In Progress). Calculation: COUNT(issue_key) grouped by team (Top 5 shown; remainder in Other)."
     limit_displayed_rows: true
     show_others: true
     show_value_labels: true
@@ -338,14 +338,14 @@
     fields: [jira_issues_latest.priority, jira_issues_latest.issues]
     filters:
       jira_issues_latest.issue_type: "Bug,Defect"
-      jira_issues_latest.status_category: "-Done"
+      jira_issues_latest.status_category: "To Do,In Progress"
     sorts: [jira_issues_latest.issues desc]
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Active bugs by priority (current backlog snapshot). Active = bug/defect issues in jira_issues_latest with status_category != Done. Calculation: COUNT(issue_key) grouped by priority."
+    note_text: "Definition: Active bugs by priority (current backlog snapshot). Active = bug/defect issues in jira_issues_latest with status_category in (To Do, In Progress). Calculation: COUNT(issue_key) grouped by priority."
     show_value_labels: true
     label_type: labPer
     row: 30
@@ -420,14 +420,14 @@
     fields: [jira_issues_latest.fix_versions, jira_issues_latest.issues]
     filters:
       jira_issues_latest.issue_type: "Bug,Defect"
-      jira_issues_latest.status_category: "-Done"
+      jira_issues_latest.status_category: "To Do,In Progress"
     sorts: [jira_issues_latest.issues desc]
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Active bugs by milestone proxy (fixVersion). Active = current bug backlog with statusCategory != Done. Calculation: COUNT of active bug/defect issues grouped by fix_versions."
+    note_text: "Definition: Active bugs by milestone proxy (fixVersion). Active = current bug backlog with status_category in (To Do, In Progress). Calculation: COUNT of active bug/defect issues grouped by fix_versions."
     row: 93
     col: 12
     width: 12
