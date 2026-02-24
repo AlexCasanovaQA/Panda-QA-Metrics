@@ -339,6 +339,7 @@ main:
                                   - testrail_results_iteration: 0
                                   - testrail_results_continuation_token: ${default(payload_testrail_results.continuation_token, null)}
                                   - testrail_results_responses: []
+                                  - testrail_results_should_continue: true
                             - testrail_results_call_try:
                                 try:
                                   steps:
@@ -348,6 +349,13 @@ main:
                                           range: ${[0, testrail_results_max_iterations]}
                                           steps:
                                             - testrail_results_call:
+                                                switch:
+                                                  - condition: ${not testrail_results_should_continue}
+                                                    next: testrail_results_iteration_end
+                                                  - condition: ${testrail_results_should_continue}
+                                                    next: testrail_results_call_exec
+
+                                            - testrail_results_call_exec:
                                                 call: http.post
                                                 args:
                                                   url: ${testrail_results_url}
@@ -370,7 +378,11 @@ main:
                                             - testrail_results_maybe_stop:
                                                 switch:
                                                   - condition: ${testrail_results_continuation_token == null}
-                                                    next: testrail_results_done
+                                                    assign:
+                                                      - testrail_results_should_continue: false
+
+                                            - testrail_results_iteration_end:
+                                                assign: []
                                     - testrail_results_done:
                                         assign:
                                           - results.testrail_results:
