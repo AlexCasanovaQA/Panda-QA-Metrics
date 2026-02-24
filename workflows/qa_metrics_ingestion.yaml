@@ -25,6 +25,10 @@ main:
           - dq_alert_webhook_url: ${default(map.get(request_args, "dq_alert_webhook_url"), "")}
           - request_id: ${default(map.get(request_args, "request_id"), default(map.get(request_args, "requestId"), default(map.get(request_args, "x_request_id"), default(map.get(request_args, "x-request-id"), ""))))}
           - correlation_id: ${default(map.get(request_args, "correlation_id"), default(map.get(request_args, "correlationId"), default(map.get(request_args, "x_correlation_id"), default(map.get(request_args, "x-correlation-id"), request_id))))}
+          - base_request_context:
+              workflow: "qa_metrics_ingestion"
+              request_id: ${request_id}
+              correlation_id: ${correlation_id}
 
           - results:
               jira: null
@@ -43,6 +47,14 @@ main:
           - errors: []
           - status: "ok"
           - dq_status: "ok"
+          - error_rollups:
+              total: 0
+              by_classification:
+                configuration: 0
+                transport_failure: 0
+                data_quality: 0
+                availability: 0
+                validation: 0
           - preflight_status:
               jira:
                 ready: true
@@ -148,8 +160,8 @@ main:
                         assign:
                           - status: "non_ok"
                           - dq_status: "non_ok"
-                          - errors: ${list.concat(errors, ["{\"service\":\"jira\",\"type\":\"config_error\",\"code\":\"missing_project_keys\",\"message\":\"project_keys_csv or project_keys is required for Jira ingestion\"}"])}
-                          - errors: ${list.concat(errors, ["{\"service\":\"jira_changelog\",\"type\":\"config_error\",\"code\":\"missing_project_keys\",\"message\":\"project_keys_csv or project_keys is required for Jira changelog ingestion\"}"])}
+                          - errors: ${list.concat(errors, [{"service":"jira","type":"config_error","code":"missing_project_keys","message":"project_keys_csv or project_keys is required for Jira ingestion","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
+                          - errors: ${list.concat(errors, [{"service":"jira_changelog","type":"config_error","code":"missing_project_keys","message":"project_keys_csv or project_keys is required for Jira changelog ingestion","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                     - return_early:
                         return:
                           status: ${status}
@@ -167,7 +179,7 @@ main:
                                 - preflight_status.jira.ready: false
                                 - preflight_status.jira.reason: "missing_service_url"
                                 - dq_status: "non_ok"
-                                - errors: ${list.concat(errors, ["{\"service\":\"jira\",\"type\":\"config_error\",\"code\":\"missing_service_url\",\"message\":\"Missing required Jira service URL\"}"])}
+                                - errors: ${list.concat(errors, [{"service":"jira","type":"config_error","code":"missing_service_url","message":"Missing required Jira service URL","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                 - preflight_jira_changelog_url:
                     switch:
                       - condition: ${jira_changelog_url == null or jira_changelog_url == ""}
@@ -177,7 +189,7 @@ main:
                                 - preflight_status.jira_changelog.ready: false
                                 - preflight_status.jira_changelog.reason: "missing_service_url"
                                 - dq_status: "non_ok"
-                                - errors: ${list.concat(errors, ["{\"service\":\"jira_changelog\",\"type\":\"config_error\",\"code\":\"missing_service_url\",\"message\":\"Missing required Jira changelog service URL\"}"])}
+                                - errors: ${list.concat(errors, [{"service":"jira_changelog","type":"config_error","code":"missing_service_url","message":"Missing required Jira changelog service URL","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                 - preflight_testrail_url:
                     switch:
                       - condition: ${testrail_url == null or testrail_url == ""}
@@ -187,7 +199,7 @@ main:
                                 - preflight_status.testrail.ready: false
                                 - preflight_status.testrail.reason: "missing_service_url"
                                 - dq_status: "non_ok"
-                                - errors: ${list.concat(errors, ["{\"service\":\"testrail\",\"type\":\"config_error\",\"code\":\"missing_service_url\",\"message\":\"Missing required TestRail service URL\"}"])}
+                                - errors: ${list.concat(errors, [{"service":"testrail","type":"config_error","code":"missing_service_url","message":"Missing required TestRail service URL","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                 - preflight_testrail_users_url:
                     switch:
                       - condition: ${testrail_users_url == null or testrail_users_url == ""}
@@ -197,7 +209,7 @@ main:
                                 - preflight_status.testrail_users.ready: false
                                 - preflight_status.testrail_users.reason: "missing_service_url"
                                 - dq_status: "non_ok"
-                                - errors: ${list.concat(errors, ["{\"service\":\"testrail_users\",\"type\":\"config_error\",\"code\":\"missing_service_url\",\"message\":\"Missing required TestRail users service URL\"}"])}
+                                - errors: ${list.concat(errors, [{"service":"testrail_users","type":"config_error","code":"missing_service_url","message":"Missing required TestRail users service URL","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                 - preflight_testrail_results_url:
                     switch:
                       - condition: ${testrail_results_url == null or testrail_results_url == ""}
@@ -207,7 +219,7 @@ main:
                                 - preflight_status.testrail_results.ready: false
                                 - preflight_status.testrail_results.reason: "missing_service_url"
                                 - dq_status: "non_ok"
-                                - errors: ${list.concat(errors, ["{\"service\":\"testrail_results\",\"type\":\"config_error\",\"code\":\"missing_service_url\",\"message\":\"Missing required TestRail results service URL\"}"])}
+                                - errors: ${list.concat(errors, [{"service":"testrail_results","type":"config_error","code":"missing_service_url","message":"Missing required TestRail results service URL","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                 - preflight_bugsnag_url:
                     switch:
                       - condition: ${bugsnag_url == null or bugsnag_url == ""}
@@ -217,7 +229,7 @@ main:
                                 - preflight_status.bugsnag.ready: false
                                 - preflight_status.bugsnag.reason: "missing_service_url"
                                 - dq_status: "non_ok"
-                                - errors: ${list.concat(errors, ["{\"service\":\"bugsnag\",\"type\":\"config_error\",\"code\":\"missing_service_url\",\"message\":\"Missing required Bugsnag service URL\"}"])}
+                                - errors: ${list.concat(errors, [{"service":"bugsnag","type":"config_error","code":"missing_service_url","message":"Missing required Bugsnag service URL","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                 - preflight_gamebench_url:
                     switch:
                       - condition: ${gamebench_url == null or gamebench_url == ""}
@@ -228,7 +240,7 @@ main:
                                 - preflight_status.gamebench.reason: "missing_gamebench_url"
                                 - gamebench_available: false
                                 - dq_status: "non_ok"
-                                - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"type\":\"config_error\",\"code\":\"missing_gamebench_url\",\"message\":\"Missing required Gamebench service URL\"}"])}
+                                - errors: ${list.concat(errors, [{"service":"gamebench","type":"config_error","code":"missing_gamebench_url","message":"Missing required Gamebench service URL","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                 - preflight_gamebench_api_base_url:
                     switch:
                       - condition: ${gamebench_api_base_url == null or gamebench_api_base_url == ""}
@@ -239,7 +251,7 @@ main:
                                 - preflight_status.gamebench.reason: "missing_gamebench_api_base_url"
                                 - gamebench_available: false
                                 - dq_status: "non_ok"
-                                - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"type\":\"config_error\",\"code\":\"missing_gamebench_api_base_url\",\"message\":\"Missing required Gamebench API base URL\"}"])}
+                                - errors: ${list.concat(errors, [{"service":"gamebench","type":"config_error","code":"missing_gamebench_api_base_url","message":"Missing required Gamebench API base URL","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
           - preflight_testrail_flags:
               switch:
                 - condition: ${include_testrail_results and (text.to_lower("" + testrail_enabled) != "true" or text.to_lower("" + testrail_configured) != "true")}
@@ -252,9 +264,9 @@ main:
                           - preflight_status.testrail_users.reason: "testrail_not_configured"
                           - preflight_status.testrail_results.ready: false
                           - preflight_status.testrail_results.reason: "testrail_not_configured"
-                          - errors: ${list.concat(errors, ["{\"service\":\"testrail\",\"type\":\"config_error\",\"code\":\"testrail_not_configured\",\"message\":\"TestRail disabled or not configured via args/env markers\"}"])}
-                          - errors: ${list.concat(errors, ["{\"service\":\"testrail_users\",\"type\":\"config_error\",\"code\":\"testrail_not_configured\",\"message\":\"TestRail disabled or not configured via args/env markers\"}"])}
-                          - errors: ${list.concat(errors, ["{\"service\":\"testrail_results\",\"type\":\"config_error\",\"code\":\"testrail_not_configured\",\"message\":\"TestRail disabled or not configured via args/env markers\"}"])}
+                          - errors: ${list.concat(errors, [{"service":"testrail","type":"config_error","code":"testrail_not_configured","message":"TestRail disabled or not configured via args/env markers","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
+                          - errors: ${list.concat(errors, [{"service":"testrail_users","type":"config_error","code":"testrail_not_configured","message":"TestRail disabled or not configured via args/env markers","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
+                          - errors: ${list.concat(errors, [{"service":"testrail_results","type":"config_error","code":"testrail_not_configured","message":"TestRail disabled or not configured via args/env markers","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
           - preflight_bugsnag_flags:
               switch:
                 - condition: ${text.to_lower("" + bugsnag_enabled) != "true" or text.to_lower("" + bugsnag_configured) != "true"}
@@ -263,7 +275,7 @@ main:
                         assign:
                           - preflight_status.bugsnag.ready: false
                           - preflight_status.bugsnag.reason: "bugsnag_not_configured"
-                          - errors: ${list.concat(errors, ["{\"service\":\"bugsnag\",\"type\":\"config_error\",\"code\":\"bugsnag_not_configured\",\"message\":\"Bugsnag disabled or not configured via args/env markers\"}"])}
+                          - errors: ${list.concat(errors, [{"service":"bugsnag","type":"config_error","code":"bugsnag_not_configured","message":"Bugsnag disabled or not configured via args/env markers","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
           - preflight_gamebench_smoke_check:
               switch:
                 - condition: ${preflight_status.gamebench.ready}
@@ -284,7 +296,7 @@ main:
                                     - preflight_status.gamebench.reason: "missing_gamebench_api_base_url"
                                     - gamebench_available: false
                                     - dq_status: "non_ok"
-                                    - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"type\":\"config_error\",\"code\":\"missing_gamebench_api_base_url\",\"message\":\"Gamebench API base URL is missing or invalid\"}"])}
+                                    - errors: ${list.concat(errors, [{"service":"gamebench","type":"config_error","code":"missing_gamebench_api_base_url","message":"Gamebench API base URL is missing or invalid","classification":"configuration","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                     - preflight_gamebench_smoke_try:
                         switch:
                           - condition: ${preflight_status.gamebench.ready}
@@ -316,7 +328,7 @@ main:
                                                       - preflight_status.gamebench.ready: false
                                                       - preflight_status.gamebench.reason: "gamebench_unexpected_status"
                                                       - gamebench_available: false
-                                                      - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"type\":\"preflight_error\",\"code\":\"gamebench_unexpected_status\",\"message\":\"Gamebench preflight probe returned unexpected status\"}"])}
+                                                      - errors: ${list.concat(errors, [{"service":"gamebench","type":"preflight_error","code":"gamebench_unexpected_status","message":"Gamebench preflight probe returned unexpected status","classification":"availability","detail":null,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                                             - condition: ${gb_smoke_resp.code != 200 and not require_gamebench_healthz}
                                               steps:
                                                 - gamebench_smoke_bad_status_warning_log:
@@ -330,7 +342,7 @@ main:
                                                         message: "Gamebench preflight probe returned unexpected status; continuing because require_gamebench_healthz=false"
                                                 - gamebench_smoke_bad_status_warning_store:
                                                     assign:
-                                                      - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"event\":\"health_check_failed\",\"type\":\"warning\",\"code\":\"gamebench_unexpected_status\",\"message\":\"Gamebench preflight probe returned unexpected status\"}"])}
+                                                      - errors: ${list.concat(errors, [{"service":"gamebench","type":"warning","code":"gamebench_unexpected_status","message":"Gamebench preflight probe returned unexpected status","classification":"availability","detail":{"event":"health_check_failed"},"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                                   except:
                                     as: e
                                     steps:
@@ -350,7 +362,7 @@ main:
                                                       - preflight_status.gamebench.ready: false
                                                       - preflight_status.gamebench.reason: "gamebench_health_check_failed"
                                                       - gamebench_available: false
-                                                      - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"type\":\"preflight_error\",\"code\":\"gamebench_health_check_failed\",\"message\":\"Failed to call Gamebench health endpoint\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                                      - errors: ${list.concat(errors, [{"service":"gamebench","type":"preflight_error","code":"gamebench_health_check_failed","message":"Failed to call Gamebench health endpoint","classification":"availability","detail":e,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                                             - condition: ${not require_gamebench_healthz}
                                               steps:
                                                 - gamebench_smoke_err_warning_log:
@@ -365,7 +377,7 @@ main:
                                                         detail: ${text.decode(json.encode(e))}
                                                 - gamebench_smoke_err_warning_store:
                                                     assign:
-                                                      - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"event\":\"health_check_failed\",\"type\":\"warning\",\"code\":\"gamebench_health_check_failed\",\"message\":\"Failed to call Gamebench health endpoint\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                                      - errors: ${list.concat(errors, [{"service":"gamebench","type":"warning","code":"gamebench_health_check_failed","message":"Failed to call Gamebench health endpoint","classification":"availability","detail":{"event":"health_check_failed","cause":e},"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
 
     - log_effective_project_keys:
         call: sys.log
@@ -475,10 +487,12 @@ main:
                                               type: "ingestion_error"
                                               code: "jira_call_failed"
                                               message: "Failed to ingest Jira metrics after retries"
-                                              retries_attempted: ${jira_attempt}
                                               max_attempts: ${jira_max_attempts}
-                                              request_context: ${jira_request_context}
+                                              classification: "transport_failure"
                                               detail: ${e}
+                                              retries_attempted: ${jira_attempt}
+                                              request_context: ${jira_request_context}
+                                              timestamp: ${sys.now()}
                                     - jira_final_error_log:
                                         call: sys.log
                                         args:
@@ -486,7 +500,7 @@ main:
                                           data: ${jira_error_payload}
                                     - jira_err:
                                         assign:
-                                          - errors: ${list.concat(errors, [text.decode(json.encode(jira_error_payload))])}
+                                          - errors: ${list.concat(errors, [jira_error_payload])}
                         - condition: ${not preflight_status.jira.ready}
                           steps:
                             - jira_skipped_log:
@@ -560,7 +574,7 @@ main:
                                                 requested_lookback_days: ${lookback_days}
                                                 project_keys_csv: ${payload_changelog.project_keys}
                                                 error: ${text.decode(json.encode(e))}
-                                          - errors: ${list.concat(errors, ["{\"service\":\"jira_changelog\",\"type\":\"ingestion_error\",\"code\":\"jira_changelog_call_failed\",\"message\":\"Failed to ingest Jira changelog metrics\",\"classification\":\"transport_failure\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, [{"service":"jira_changelog","type":"ingestion_error","code":"jira_changelog_call_failed","message":"Failed to ingest Jira changelog metrics","classification":"transport_failure","detail":e,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                         - condition: ${not preflight_status.jira_changelog.ready}
                           steps:
                             - jira_changelog_skipped_log:
@@ -637,7 +651,7 @@ main:
                                               - jira_status_transitions_data_quality_mark_status:
                                                   assign:
                                                     - dq_status: "non_ok"
-                                                    - errors: ${list.concat(errors, ["jira_status_transitions_data_quality - status_changes_7d_is_zero"])}
+                                                    - errors: '${list.concat(errors, [{"service":"jira_status_transitions_data_quality","type":"data_quality_error","code":"status_changes_7d_is_zero","message":"Jira status transitions data quality check failed: status_changes_7d is zero","classification":"data_quality","detail":results.jira_status_transitions_data_quality.checks,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}'
                                     - jira_status_transitions_data_quality_alert_webhook:
                                         switch:
                                           - condition: ${not jira_dq_is_ok and dq_alert_webhook_url != ""}
@@ -651,13 +665,16 @@ main:
                                                       event: "jira_status_transitions_data_quality_alert"
                                                       status: "non_ok"
                                                       checks: ${results.jira_status_transitions_data_quality.checks}
+                                                      classification: "data_quality"
+                                                      service: "jira_status_transitions_data_quality"
+                                                      code: "status_changes_7d_is_zero"
                                 except:
                                   as: e
                                   steps:
                                     - jira_status_transitions_data_quality_error:
                                         assign:
                                           - dq_status: "non_ok"
-                                          - errors: ${list.concat(errors, ["{\"service\":\"jira_status_transitions_data_quality\",\"type\":\"data_quality_error\",\"code\":\"jira_status_transitions_data_quality_failed\",\"message\":\"Failed to ingest Jira status transitions data quality metrics\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, [{"service":"jira_status_transitions_data_quality","type":"data_quality_error","code":"jira_status_transitions_data_quality_failed","message":"Failed to ingest Jira status transitions data quality metrics","classification":"data_quality","detail":e,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                         - condition: ${true}
                           steps:
                             - jira_status_transitions_data_quality_mark_skipped:
@@ -776,7 +793,7 @@ main:
                                   steps:
                                     - tr_err:
                                         assign:
-                                          - errors: ${list.concat(errors, ["{\"service\":\"testrail\",\"type\":\"ingestion_error\",\"code\":\"testrail_call_failed\",\"message\":\"Failed to ingest TestRail metrics\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, [{"service":"testrail","type":"ingestion_error","code":"testrail_call_failed","message":"Failed to ingest TestRail metrics","classification":"transport_failure","detail":e,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                         - condition: ${not preflight_status.testrail.ready}
                           steps:
                             - testrail_skipped_log:
@@ -812,7 +829,7 @@ main:
                                   steps:
                                     - tru_err:
                                         assign:
-                                          - errors: ${list.concat(errors, ["{\"service\":\"testrail_users\",\"type\":\"ingestion_error\",\"code\":\"testrail_users_call_failed\",\"message\":\"Failed to ingest TestRail users\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, [{"service":"testrail_users","type":"ingestion_error","code":"testrail_users_call_failed","message":"Failed to ingest TestRail users","classification":"transport_failure","detail":e,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                         - condition: ${not preflight_status.testrail_users.ready}
                           steps:
                             - testrail_users_skipped_log:
@@ -891,7 +908,7 @@ main:
                                   steps:
                                     - trr_err:
                                         assign:
-                                          - errors: ${list.concat(errors, ["{\"service\":\"testrail_results\",\"type\":\"ingestion_error\",\"code\":\"testrail_results_call_failed\",\"message\":\"Failed to ingest TestRail results\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, [{"service":"testrail_results","type":"ingestion_error","code":"testrail_results_call_failed","message":"Failed to ingest TestRail results","classification":"transport_failure","detail":e,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                         - condition: ${include_testrail_results and not preflight_status.testrail_results.ready}
                           steps:
                             - testrail_results_skipped_log:
@@ -942,7 +959,7 @@ main:
                                   steps:
                                     - bs_err:
                                         assign:
-                                          - errors: ${list.concat(errors, ["{\"service\":\"bugsnag\",\"type\":\"ingestion_error\",\"code\":\"bugsnag_call_failed\",\"message\":\"Failed to ingest Bugsnag metrics\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, [{"service":"bugsnag","type":"ingestion_error","code":"bugsnag_call_failed","message":"Failed to ingest Bugsnag metrics","classification":"transport_failure","detail":e,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                         - condition: ${not preflight_status.bugsnag.ready}
                           steps:
                             - bugsnag_skipped_log:
@@ -1002,13 +1019,13 @@ main:
                                                     - preflight_status.gamebench.ready: false
                                                     - preflight_status.gamebench.reason: "gamebench_not_deployed"
                                                     - status: "non_ok"
-                                                    - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"branch\":\"android\",\"code\":\"gamebench_not_deployed\",\"message\":\"Placeholder revision served by ingest-gamebench\"}"])}
+                                                    - errors: ${list.concat(errors, [{"service":"gamebench","type":"ingestion_warning","code":"gamebench_not_deployed","message":"Placeholder revision served by ingest-gamebench","classification":"availability","detail":{"branch":"android"},"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                                 except:
                                   as: e
                                   steps:
                                     - gb_android_err:
                                         assign:
-                                          - errors: ${list.concat(errors, ["{\"service\":\"gamebench_android\",\"type\":\"ingestion_error\",\"code\":\"gamebench_android_call_failed\",\"message\":\"Failed to ingest Gamebench Android metrics\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, [{"service":"gamebench_android","type":"ingestion_error","code":"gamebench_android_call_failed","message":"Failed to ingest Gamebench Android metrics","classification":"transport_failure","detail":e,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                         - condition: ${not (preflight_status.gamebench.ready and gamebench_available)}
                           steps:
                             - gamebench_android_skipped_log:
@@ -1054,13 +1071,13 @@ main:
                                                     - preflight_status.gamebench.ready: false
                                                     - preflight_status.gamebench.reason: "gamebench_not_deployed"
                                                     - status: "non_ok"
-                                                    - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"branch\":\"ios\",\"code\":\"gamebench_not_deployed\",\"message\":\"Placeholder revision served by ingest-gamebench\"}"])}
+                                                    - errors: ${list.concat(errors, [{"service":"gamebench","type":"ingestion_warning","code":"gamebench_not_deployed","message":"Placeholder revision served by ingest-gamebench","classification":"availability","detail":{"branch":"ios"},"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                                 except:
                                   as: e
                                   steps:
                                     - gb_ios_err:
                                         assign:
-                                          - errors: ${list.concat(errors, ["{\"service\":\"gamebench_ios\",\"type\":\"ingestion_error\",\"code\":\"gamebench_ios_call_failed\",\"message\":\"Failed to ingest Gamebench iOS metrics\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, [{"service":"gamebench_ios","type":"ingestion_error","code":"gamebench_ios_call_failed","message":"Failed to ingest Gamebench iOS metrics","classification":"transport_failure","detail":e,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                         - condition: ${not (preflight_status.gamebench.ready and gamebench_available)}
                           steps:
                             - gamebench_ios_skipped_log:
@@ -1232,7 +1249,7 @@ main:
                                   steps:
                                     - gb_daily_refresh_err:
                                         assign:
-                                          - errors: ${list.concat(errors, ["{\"service\":\"gamebench_daily_refresh\",\"type\":\"ingestion_error\",\"code\":\"gamebench_daily_refresh_call_failed\",\"message\":\"Failed to run Gamebench daily refresh\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, [{"service":"gamebench_daily_refresh","type":"ingestion_error","code":"gamebench_daily_refresh_call_failed","message":"Failed to run Gamebench daily refresh","classification":"transport_failure","detail":e,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                         - condition: ${not (preflight_status.gamebench.ready and gamebench_available)}
                           steps:
                             - gamebench_daily_refresh_skipped_log:
@@ -1302,7 +1319,7 @@ main:
                                                   assign:
                                                     - dq_status: "non_ok"
                                                     - status: "non_ok"
-                                                    - errors: ${list.concat(errors, ["gamebench_data_quality - empty_or_stale_source_data"])}
+                                                    - errors: '${list.concat(errors, [{"service":"gamebench_data_quality","type":"data_quality_error","code":"empty_or_stale_source_data","message":"Gamebench data quality check failed: source data is empty or stale","classification":"data_quality","detail":results.gamebench_data_quality.checks,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}'
 
                                     - gamebench_data_quality_alert_webhook:
                                         switch:
@@ -1317,6 +1334,9 @@ main:
                                                       event: "gamebench_data_quality_alert"
                                                       status: "non_ok"
                                                       checks: ${results.gamebench_data_quality.checks}
+                                                      classification: "data_quality"
+                                                      service: "gamebench_data_quality"
+                                                      code: "empty_or_stale_source_data"
                                 except:
                                   as: e
                                   steps:
@@ -1324,7 +1344,7 @@ main:
                                         assign:
                                           - dq_status: "non_ok"
                                           - status: "non_ok"
-                                          - errors: ${list.concat(errors, ["{\"service\":\"gamebench_data_quality\",\"type\":\"data_quality_error\",\"code\":\"gamebench_data_quality_call_failed\",\"message\":\"Failed to compute Gamebench data quality metrics\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, [{"service":"gamebench_data_quality","type":"data_quality_error","code":"gamebench_data_quality_call_failed","message":"Failed to compute Gamebench data quality metrics","classification":"data_quality","detail":e,"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
                         - condition: ${not (preflight_status.gamebench.ready and gamebench_available)}
                           steps:
                             - gamebench_data_quality_skipped_log:
@@ -1406,6 +1426,84 @@ main:
                           started_at: ${branch_d_started_at}
                           ended_at: ${sys.now()}
 
+    - validate_error_contract:
+        steps:
+          - validate_error_contract_init:
+              assign:
+                - validated_errors: []
+                - malformed_errors: []
+          - validate_error_contract_loop:
+              for:
+                value: err
+                in: ${errors}
+                steps:
+                  - validate_error_contract_check:
+                      switch:
+                        - condition: ${map.get(err, "service") != null and map.get(err, "type") != null and map.get(err, "code") != null and map.get(err, "message") != null and map.get(err, "classification") != null and map.get(err, "retries_attempted") != null and map.get(err, "request_context") != null and map.get(err, "timestamp") != null}
+                          steps:
+                            - validate_error_contract_accept:
+                                assign:
+                                  - validated_errors: ${list.concat(validated_errors, [err])}
+                        - condition: ${true}
+                          steps:
+                            - validate_error_contract_reject:
+                                assign:
+                                  - malformed_errors: ${list.concat(malformed_errors, [err])}
+          - validate_error_contract_finalize:
+              assign:
+                - errors: ${validated_errors}
+          - validate_error_contract_reject_malformed:
+              switch:
+                - condition: ${len(malformed_errors) > 0}
+                  steps:
+                    - validate_error_contract_mark_non_ok:
+                        assign:
+                          - status: "non_ok"
+                          - dq_status: "non_ok"
+                          - errors: ${list.concat(errors, [{"service":"workflow","type":"validation_error","code":"malformed_error_contract","message":"Rejected malformed error objects before response assembly","classification":"validation","detail":{"malformed_error_count":len(malformed_errors),"samples":malformed_errors},"retries_attempted":0,"request_context":base_request_context,"timestamp":sys.now()}])}
+
+    - build_error_rollups:
+        steps:
+          - build_error_rollups_init:
+              assign:
+                - err_configuration: 0
+                - err_transport_failure: 0
+                - err_data_quality: 0
+                - err_availability: 0
+                - err_validation: 0
+          - build_error_rollups_loop:
+              for:
+                value: err
+                in: ${errors}
+                steps:
+                  - build_error_rollups_switch:
+                      switch:
+                        - condition: ${map.get(err, "classification") == "configuration"}
+                          assign:
+                            - err_configuration: ${err_configuration + 1}
+                        - condition: ${map.get(err, "classification") == "transport_failure"}
+                          assign:
+                            - err_transport_failure: ${err_transport_failure + 1}
+                        - condition: ${map.get(err, "classification") == "data_quality"}
+                          assign:
+                            - err_data_quality: ${err_data_quality + 1}
+                        - condition: ${map.get(err, "classification") == "availability"}
+                          assign:
+                            - err_availability: ${err_availability + 1}
+                        - condition: ${map.get(err, "classification") == "validation"}
+                          assign:
+                            - err_validation: ${err_validation + 1}
+          - build_error_rollups_finalize:
+              assign:
+                - error_rollups:
+                    total: ${len(errors)}
+                    by_classification:
+                      configuration: ${err_configuration}
+                      transport_failure: ${err_transport_failure}
+                      data_quality: ${err_data_quality}
+                      availability: ${err_availability}
+                      validation: ${err_validation}
+
     # --------------------------
     # FINAL STATUS
     # --------------------------
@@ -1422,3 +1520,4 @@ main:
           results: ${results}
           preflight_status: ${preflight_status}
           errors: ${errors}
+          error_rollups: ${error_rollups}
