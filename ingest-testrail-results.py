@@ -29,7 +29,11 @@ MAX_RUNS_PER_INVOCATION = int(os.environ.get("MAX_RUNS_PER_INVOCATION", "25"))
 OVERLAP_DAYS = int(os.environ.get("OVERLAP_DAYS", "1"))
 MAX_RESULT_PAGES_PER_RUN = int(os.environ.get("MAX_RESULT_PAGES_PER_RUN", "5"))
 
-HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "30"))
+RUNS_PAGE_SIZE = int(os.environ.get("TESTRAIL_RUNS_PAGE_SIZE", "100"))
+RESULTS_PAGE_SIZE = int(os.environ.get("TESTRAIL_RESULTS_PAGE_SIZE", "100"))
+
+CONNECT_TIMEOUT_SECONDS = float(os.environ.get("HTTP_CONNECT_TIMEOUT_SECONDS", "5"))
+READ_TIMEOUT_SECONDS = float(os.environ.get("HTTP_READ_TIMEOUT_SECONDS", "30"))
 MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "6"))
 BASE_BACKOFF = float(os.environ.get("BASE_BACKOFF_SECONDS", "1.0"))
 MAX_BACKOFF = float(os.environ.get("MAX_BACKOFF_SECONDS", "30.0"))
@@ -193,11 +197,32 @@ def upsert_project_state(
     bq.query(sql, job_config=job_config).result()
 
 # ----------------- HTTP -----------------
-def request_with_retries(method: str, url: str, *, auth: Tuple[str, str]) -> requests.Response:
+def _is_transient_request_error(exc: requests.RequestException) -> bool:
+    if isinstance(exc, (requests.ConnectTimeout, requests.ReadTimeout, requests.ConnectionError)):
+        return True
+    resp = getattr(exc, "response", None)
+    return bool(resp is not None and resp.status_code in (429, 500, 502, 503, 504))
+
+
+def request_with_retries(method: str, url: str, *, auth: Tuple[str, str], trace: Dict[str, Any]) -> requests.Response:
     last_exc: Optional[Exception] = None
     for attempt in range(MAX_RETRIES):
+        request_started = time.monotonic()
         try:
-            r = requests.request(method, url, auth=auth, timeout=HTTP_TIMEOUT)
+            r = requests.request(
+                method,
+                url,
+                auth=auth,
+                timeout=(CONNECT_TIMEOUT_SECONDS, READ_TIMEOUT_SECONDS),
+            )
+            latency_ms = round((time.monotonic() - request_started) * 1000, 2)
+            print(json.dumps({
+                "event": "testrail_http_request",
+                "trace": trace,
+                "attempt": attempt + 1,
+                "status_code": r.status_code,
+                "latency_ms": latency_ms,
+            }))
             if r.status_code in (429, 500, 502, 503, 504):
                 backoff = min(MAX_BACKOFF, BASE_BACKOFF * (2 ** attempt))
                 jitter = random.uniform(0, 0.25 * backoff)
@@ -207,35 +232,61 @@ def request_with_retries(method: str, url: str, *, auth: Tuple[str, str]) -> req
             return r
         except requests.RequestException as e:
             last_exc = e
+            latency_ms = round((time.monotonic() - request_started) * 1000, 2)
+            print(json.dumps({
+                "event": "testrail_http_error",
+                "trace": trace,
+                "attempt": attempt + 1,
+                "latency_ms": latency_ms,
+                "error": str(e),
+                "transient": _is_transient_request_error(e),
+            }))
+            if not _is_transient_request_error(e):
+                raise
             backoff = min(MAX_BACKOFF, BASE_BACKOFF * (2 ** attempt))
             jitter = random.uniform(0, 0.25 * backoff)
             time.sleep(backoff + jitter)
     raise RuntimeError(f"HTTP failed after retries: {last_exc}")
 
 
-def _iter_paginated(path: str, *, auth: Tuple[str, str], start_offset: int = 0, max_pages: Optional[int] = None) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+def _iter_paginated(
+    path: str,
+    *,
+    auth: Tuple[str, str],
+    start_offset: int = 0,
+    max_pages: Optional[int] = None,
+    page_size: int,
+    trace_context: Optional[Dict[str, Any]] = None,
+) -> Tuple[List[Dict[str, Any]], Optional[int], int]:
     """Collect paginated TestRail v2 API responses.
 
     Supports both legacy list responses and the object style with
     {_links, offset, limit, size, <entity_plural>}.
     """
     base = testrail_base_url()
-    page_size = int(os.environ.get("TESTRAIL_PAGE_SIZE", "250"))
     offset = max(0, int(start_offset or 0))
     aggregated: List[Dict[str, Any]] = []
     pages = 0
 
     while True:
         url = f"{base}/{path}&limit={page_size}&offset={offset}"
-        resp = request_with_retries("GET", url, auth=auth)
+        trace = {
+            "path": path,
+            "offset": offset,
+            "page_size": page_size,
+        }
+        if trace_context:
+            trace.update(trace_context)
+        resp = request_with_retries("GET", url, auth=auth, trace=trace)
         data = resp.json()
+        pages += 1
 
         if isinstance(data, dict) and data.get("error"):
             raise RuntimeError(f"TestRail API error on {path}: {data.get('error')}")
 
         if isinstance(data, list):
             aggregated.extend(item for item in data if isinstance(item, dict))
-            return aggregated, None
+            return aggregated, None, pages
 
         if not isinstance(data, dict):
             raise RuntimeError(
@@ -260,41 +311,56 @@ def _iter_paginated(path: str, *, auth: Tuple[str, str], start_offset: int = 0, 
         next_link = links.get("next") if isinstance(links, dict) else None
 
         if next_link:
-            pages += 1
             if max_pages is not None and pages >= max_pages:
-                return aggregated, current_offset + (limit or page_size)
+                return aggregated, current_offset + (limit or page_size), pages
             offset = current_offset + (limit or page_size)
             continue
 
         if isinstance(size, int) and isinstance(current_offset, int):
             if current_offset + (limit or page_size) >= size:
                 break
-            pages += 1
             if max_pages is not None and pages >= max_pages:
-                return aggregated, current_offset + (limit or page_size)
+                return aggregated, current_offset + (limit or page_size), pages
             offset = current_offset + (limit or page_size)
             continue
 
         if len(entity_list) < page_size:
             break
-        pages += 1
         if max_pages is not None and pages >= max_pages:
-            return aggregated, offset + page_size
+            return aggregated, offset + page_size, pages
         offset += page_size
 
-    return aggregated, None
+    return aggregated, None, pages
 
 # ----------------- Fetch -----------------
 def fetch_runs(project_id: int, since_ts: datetime) -> List[Dict[str, Any]]:
     updated_after = int(since_ts.timestamp())
     path = f"get_runs/{project_id}&updated_after={updated_after}&include_all=1"
-    runs, _ = _iter_paginated(path, auth=testrail_auth())
+    runs, _, pages = _iter_paginated(
+        path,
+        auth=testrail_auth(),
+        page_size=RUNS_PAGE_SIZE,
+        trace_context={"endpoint": "get_runs", "project_id": project_id},
+    )
+    print(json.dumps({"event": "testrail_runs_pages", "project_id": project_id, "pages": pages, "since": updated_after}))
     return [r for r in runs if isinstance(r, dict)]
 
 
-def fetch_results_for_run(run_id: int, *, start_offset: int = 0, max_pages: Optional[int] = None) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+def fetch_results_for_run(
+    run_id: int,
+    *,
+    start_offset: int = 0,
+    max_pages: Optional[int] = None,
+) -> Tuple[List[Dict[str, Any]], Optional[int], int]:
     path = f"get_results_for_run/{run_id}"
-    return _iter_paginated(path, auth=testrail_auth(), start_offset=start_offset, max_pages=max_pages)
+    return _iter_paginated(
+        path,
+        auth=testrail_auth(),
+        start_offset=start_offset,
+        max_pages=max_pages,
+        page_size=RESULTS_PAGE_SIZE,
+        trace_context={"endpoint": "get_results_for_run", "run_id": run_id},
+    )
 
 
 def _safe_int(value: Any) -> Optional[int]:
@@ -373,11 +439,21 @@ def hello_http(request):
                 if continuation_token and _safe_int(continuation_token.get("project_id")) == pid and _safe_int(continuation_token.get("run_id")) == run_id:
                     start_offset = int(continuation_token.get("results_offset") or 0)
 
-                results, next_offset = fetch_results_for_run(
+                run_started = time.monotonic()
+                results, next_offset, result_pages = fetch_results_for_run(
                     run_id,
                     start_offset=start_offset,
                     max_pages=MAX_RESULT_PAGES_PER_RUN,
                 )
+                print(json.dumps({
+                    "event": "testrail_run_results_fetch",
+                    "project_id": pid,
+                    "run_id": run_id,
+                    "pages": result_pages,
+                    "results_count": len(results),
+                    "latency_ms": round((time.monotonic() - run_started) * 1000, 2),
+                    "next_offset": next_offset,
+                }))
 
                 for res in results:
                     created_on = res.get("created_on")
