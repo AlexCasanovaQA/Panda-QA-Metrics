@@ -83,6 +83,7 @@ main:
               days: ${default(map.get(request_args, "testrail_results_days"), 1)}
               recovery_mode: ${default(map.get(request_args, "testrail_results_recovery_mode"), false)}
               continuation_token: ${default(map.get(request_args, "testrail_results_continuation_token"), null)}
+          - testrail_results_max_iterations: ${default(map.get(request_args, "testrail_results_max_iterations"), 5)}
 
           - payload_bugsnag:
               days: ${days}
@@ -333,22 +334,53 @@ main:
                       switch:
                         - condition: ${include_testrail_results and preflight_status.testrail_results.ready}
                           steps:
+                            - testrail_results_loop_init:
+                                assign:
+                                  - testrail_results_iteration: 0
+                                  - testrail_results_continuation_token: ${default(payload_testrail_results.continuation_token, null)}
+                                  - testrail_results_responses: []
                             - testrail_results_call_try:
                                 try:
                                   steps:
-                                    - testrail_results_call:
-                                        call: http.post
-                                        args:
-                                          url: ${testrail_results_url}
-                                          timeout: 1200
-                                          auth:
-                                            type: OIDC
-                                            audience: ${testrail_results_url}
-                                          body: ${payload_testrail_results}
-                                        result: trr_resp
+                                    - testrail_results_loop:
+                                        for:
+                                          value: testrail_results_iteration_index
+                                          range: ${[0, testrail_results_max_iterations]}
+                                        steps:
+                                          - testrail_results_call:
+                                              call: http.post
+                                              args:
+                                                url: ${testrail_results_url}
+                                                timeout: 1200
+                                                auth:
+                                                  type: OIDC
+                                                  audience: ${testrail_results_url}
+                                                body:
+                                                  days: ${payload_testrail_results.days}
+                                                  recovery_mode: ${payload_testrail_results.recovery_mode}
+                                                  continuation_token: ${testrail_results_continuation_token}
+                                              result: trr_resp
+
+                                          - testrail_results_store_iteration:
+                                              assign:
+                                                - testrail_results_responses: ${list.concat(testrail_results_responses, [trr_resp.body])}
+                                                - testrail_results_continuation_token: ${default(map.get(trr_resp.body, "continuation_token"), null)}
+                                                - testrail_results_iteration: ${testrail_results_iteration_index + 1}
+
+                                          - testrail_results_maybe_stop:
+                                              switch:
+                                                - condition: ${testrail_results_continuation_token == null}
+                                                  next: testrail_results_done
+                                    - testrail_results_done:
+                                        assign:
+                                          - results.testrail_results:
+                                              status: "OK"
+                                              iterations: ${testrail_results_iteration}
+                                              continuation_token: ${testrail_results_continuation_token}
+                                              responses: ${testrail_results_responses}
                                     - testrail_results_store:
                                         assign:
-                                          - results.testrail_results: ${trr_resp.body}
+                                          - results.testrail_results.max_iterations: ${testrail_results_max_iterations}
                                 except:
                                   as: e
                                   steps:

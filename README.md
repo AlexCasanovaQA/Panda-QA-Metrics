@@ -171,12 +171,12 @@ functions-framework --target=hello_http --source=ingest-jira.py --port=8080
 ## 5) Workflow Orchestrator
 
 The existing orchestrator workflow is included:
-- `workflows/qa_metrics_ingestion.yaml` (full ingestion, excludes TestRail results by default)
-- `workflows/qa_metrics_testrail_results.yaml` (TestRail results incremental runner with continuation token support)
+- `workflows/qa_metrics_ingestion.yaml` (full ingestion; optional TestRail results incremental loop with continuation token support when `include_testrail_results: true`)
 
-Use separate schedules:
-- Run `qa_metrics_ingestion` at a lower frequency for broad ingestion jobs.
-- Run `qa_metrics_testrail_results` more frequently with smaller windows (`days: 1`) so execution metrics stay fresh and do not block dashboard-critical Jira/BugSnag refreshes.
+Use a single schedule for `qa_metrics_ingestion` and tune TestRail freshness with:
+- `include_testrail_results: true`
+- `testrail_results_days: 1`
+- `testrail_results_max_iterations: 5`
 
 ---
 
