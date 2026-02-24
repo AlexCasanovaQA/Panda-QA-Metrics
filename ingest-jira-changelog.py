@@ -3,7 +3,7 @@
 Key improvements:
 - Processes most recently updated issues first (ORDER BY updated DESC) so partial runs still capture newest data.
 - Supports incremental ingestion by looking at the latest `history_created` in BigQuery and using an overlap window.
-- Streams page-by-page instead of collecting all issue keys first.
+- Uses Jira changelog bulk fetch endpoint to ingest status transitions for many issues per call.
 
 Env vars:
 - JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN
@@ -45,6 +45,8 @@ JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN")
 JIRA_PROJECT_KEYS = os.environ.get("JIRA_PROJECT_KEYS", "").strip()
 
 JIRA_CALLS = 0
+JIRA_CHANGELOG_BULK_ISSUE_BATCH = 1000
+JIRA_CHANGELOG_BULK_PAGE_SIZE = 1000
 
 
 def _error_response(error_type: str, code: str, message: str, status_code: int, details: Any = None):
@@ -99,6 +101,35 @@ def _jira_get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, A
         attempt += 1
         JIRA_CALLS += 1
         r = requests.get(url, headers=_jira_headers(), auth=_jira_auth(), params=params, timeout=60)
+        if r.status_code != 429:
+            r.raise_for_status()
+            return r.json()
+
+        if attempt >= max_attempts:
+            r.raise_for_status()
+
+        retry_after = r.headers.get("Retry-After")
+        if retry_after and retry_after.isdigit():
+            sleep_s = max(1, int(retry_after))
+        else:
+            sleep_s = min(16, 2 ** (attempt - 1))
+        print(f"Jira rate-limited on {path}; sleeping {sleep_s}s before retry {attempt + 1}/{max_attempts}")
+        time.sleep(sleep_s)
+
+
+def _jira_post(path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not JIRA_BASE_URL:
+        raise RuntimeError("Missing JIRA_BASE_URL env var")
+    url = JIRA_BASE_URL.rstrip("/") + path
+    max_attempts = 5
+    attempt = 0
+
+    global JIRA_CALLS
+
+    while True:
+        attempt += 1
+        JIRA_CALLS += 1
+        r = requests.post(url, headers=_jira_headers(), auth=_jira_auth(), json=payload, timeout=60)
         if r.status_code != 429:
             r.raise_for_status()
             return r.json()
@@ -249,26 +280,49 @@ def _search_issue_keys(
     return keys, total
 
 
-def _fetch_changelog(issue_key: str) -> List[Dict[str, Any]]:
-    """Fetch full changelog for a single issue (handles pagination)."""
-    start_at = 0
-    max_results = 100
-    histories: List[Dict[str, Any]] = []
+def _extract_bulkfetch_issue_histories(entry: Dict[str, Any]) -> Tuple[Optional[str], List[Dict[str, Any]]]:
+    issue_key = entry.get("issueKey") or entry.get("issue_key")
+    histories = (
+        entry.get("changeHistories")
+        or entry.get("histories")
+        or entry.get("values")
+        or []
+    )
+    if not isinstance(histories, list):
+        histories = []
+    return issue_key, [h for h in histories if isinstance(h, dict)]
+
+
+def _fetch_changelog_bulk(issue_keys: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+    """Fetch changelog for many issues using Jira bulkfetch endpoint, filtered to status field."""
+    issue_histories: Dict[str, List[Dict[str, Any]]] = {k: [] for k in issue_keys}
+    next_page_token: Optional[str] = None
 
     while True:
-        data = _jira_get(
-            f"/rest/api/3/issue/{issue_key}/changelog",
-            params={"startAt": start_at, "maxResults": max_results},
-        )
-        hs = data.get("values") or []
-        histories.extend(hs)
-        start_at += len(hs)
-        total = data.get("total")
-        if total is None or start_at >= total or not hs:
+        payload: Dict[str, Any] = {
+            "issueIdsOrKeys": issue_keys,
+            "fieldIds": ["status"],
+            "maxResults": JIRA_CHANGELOG_BULK_PAGE_SIZE,
+        }
+        if next_page_token:
+            payload["nextPageToken"] = next_page_token
+
+        data = _jira_post("/rest/api/3/changelog/bulkfetch", payload=payload)
+        issue_change_logs = data.get("issueChangeLogs") or []
+
+        for entry in issue_change_logs:
+            if not isinstance(entry, dict):
+                continue
+            issue_key, histories = _extract_bulkfetch_issue_histories(entry)
+            if not issue_key:
+                continue
+            issue_histories.setdefault(issue_key, []).extend(histories)
+
+        next_page_token = data.get("nextPageToken")
+        if not next_page_token:
             break
 
-
-    return histories
+    return issue_histories
 
 
 def _history_to_rows(issue_key: str, project_key: str, history: Dict[str, Any], ingested_at: datetime) -> Dict[str, Any]:
@@ -351,6 +405,7 @@ def ingest_jira_changelog(request):
 
             page_histories: Dict[str, List[Dict[str, Any]]] = {}
             page_history_ids: Dict[str, List[str]] = {}
+            keys_to_fetch: List[str] = []
 
             for issue_key, updated_ts in keys:
                 issue_count += 1
@@ -364,17 +419,23 @@ def ingest_jira_changelog(request):
                     ):
                         skipped_unchanged += 1
                         continue
-                try:
-                    histories = _fetch_changelog(issue_key)
-                except Exception as e:
-                    print(f"Failed to fetch changelog for {issue_key}: {e}")
-                    continue
-
-                page_histories[issue_key] = histories
-                page_history_ids[issue_key] = [str(h.get("id")) for h in histories if h.get("id") is not None]
+                keys_to_fetch.append(issue_key)
                 prev_updated = processed_issue_keys.get(issue_key)
                 if prev_updated is None or (updated_ts and updated_ts > prev_updated):
                     processed_issue_keys[issue_key] = updated_ts
+
+            for i in range(0, len(keys_to_fetch), JIRA_CHANGELOG_BULK_ISSUE_BATCH):
+                chunk = keys_to_fetch[i : i + JIRA_CHANGELOG_BULK_ISSUE_BATCH]
+                try:
+                    chunk_histories = _fetch_changelog_bulk(chunk)
+                except Exception as e:
+                    print(f"Failed bulk changelog fetch for project {project_key} ({len(chunk)} issues): {e}")
+                    continue
+
+                for issue_key in chunk:
+                    histories = chunk_histories.get(issue_key, [])
+                    page_histories[issue_key] = histories
+                    page_history_ids[issue_key] = [str(h.get("id")) for h in histories if h.get("id") is not None]
 
             existing_by_issue = _get_existing_history_ids_batch(bq, table_ref, page_history_ids)
 
