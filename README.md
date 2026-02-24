@@ -19,7 +19,9 @@ Create these secrets in the same GCP project where BigQuery lives (names must ma
 - `JIRA_BASE_URL` **or** `JIRA_SITE` (e.g. `https://yourcompany.atlassian.net`)
 - `JIRA_EMAIL` **or** `JIRA_USER` (email)
 - `JIRA_API_TOKEN`
-- `JIRA_SEVERITY_FIELD_ID` (**strongly recommended**, e.g. `customfield_12345`) to avoid fragile autodetection
+- `JIRA_SEVERITY_FIELD_ID` (**required for production**, e.g. `customfield_12345`)
+  - In non-production, autodetection is still attempted, but a strong warning is logged and ingest exports severity-null counters.
+  - In production (`ENVIRONMENT`/`APP_ENV`/`DEPLOY_ENV` = `prod` or `production`), missing this variable fails fast.
 
 ### TestRail
 - `TESTRAIL_BASE_URL` (e.g. `https://testrail.yourcompany.com`)
