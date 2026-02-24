@@ -162,50 +162,27 @@
     width: 24
     height: 2
 
-  - name: entered_by_severity_7d
-    title: Entered (7d) by Severity
+  - name: entered_by_severity
+    title: Bugs entered by Severity
     type: looker_pie
     model: panda_qa_metrics
     explore: jira_issues_latest
     fields: [jira_issues_latest.severity_normalized, jira_issues_latest.issues]
     filters:
       jira_issues_latest.issue_type: "Bug,Defect"
-      jira_issues_latest.created_date: "7 days"
     listen:
+      date_range: jira_issues_latest.created_date
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Percentage distribution of bugs created over the last 7 days by severity. Calculation: COUNT of bugs grouped by severity where created_date is in the last 7 days."
+    note_text: "Definition: Percentage distribution of bugs created by severity for the selected Date Range. Calculation: COUNT of bugs grouped by severity where created_date is controlled by the dashboard Date Range filter."
     show_value_labels: true
     label_type: labPer
     series_colors: {"(S0) Blocker": "#D64550", "(S1) Critical": "#F28B30", "(S2) Major": "#F2C94C", "(S3) Minor": "#2D9CDB", "(S4) Trivial": "#6FCF97", "(unknown)": "#BDBDBD"}
     row: 11
     col: 0
-    width: 12
-    height: 6
-
-  - name: entered_by_severity_30d
-    title: Entered (30d) by Severity
-    type: looker_pie
-    model: panda_qa_metrics
-    explore: jira_issues_latest
-    fields: [jira_issues_latest.severity_normalized, jira_issues_latest.issues]
-    filters:
-      jira_issues_latest.issue_type: "Bug,Defect"
-      jira_issues_latest.created_date: "30 days"
-    listen:
-      pod: jira_issues_latest.team
-      priority: jira_issues_latest.priority
-      severity: jira_issues_latest.severity_normalized
-    note_display: hover
-    note_text: "Definition: Percentage distribution of bugs created over the last 30 days by severity. Calculation: COUNT of bugs grouped by severity where created_date is in the last 30 days."
-    show_value_labels: true
-    label_type: labPer
-    series_colors: {"(S0) Blocker": "#D64550", "(S1) Critical": "#F28B30", "(S2) Major": "#F2C94C", "(S3) Minor": "#2D9CDB", "(S4) Trivial": "#6FCF97", "(unknown)": "#BDBDBD"}
-    row: 11
-    col: 12
-    width: 12
+    width: 24
     height: 6
 
 
@@ -232,38 +209,22 @@
     width: 24
     height: 6
 
-  - name: fixed_by_priority_7d
-    title: Fixed (7d) by Priority
+  - name: fixed_by_priority
+    title: Bugs fixed by Priority
     type: looker_pie
     model: panda_qa_metrics
     explore: jira_bug_events_daily
     fields: [jira_bug_events_daily.priority_label, jira_bug_events_daily.bugs]
     filters:
       jira_bug_events_daily.event_type: "fixed"
-      jira_bug_events_daily.event_date_date: "7 days"
     sorts: [jira_bug_events_daily.bugs desc]
+    listen:
+      date_range: jira_bug_events_daily.event_date_date
     note_display: hover
-    note_text: "Definition: Distribution of bugs fixed over the last 7 days by priority. Calculation: COUNT of fixed events grouped by priority_label where event_date is in the last 7 days."
+    note_text: "Definition: Distribution of bugs fixed by priority for the selected Date Range. Calculation: COUNT of fixed events grouped by priority_label where event_date is controlled by the dashboard Date Range filter."
     row: 23
     col: 0
-    width: 12
-    height: 6
-
-  - name: fixed_by_priority_30d
-    title: Fixed (30d) by Priority
-    type: looker_pie
-    model: panda_qa_metrics
-    explore: jira_bug_events_daily
-    fields: [jira_bug_events_daily.priority_label, jira_bug_events_daily.bugs]
-    filters:
-      jira_bug_events_daily.event_type: "fixed"
-      jira_bug_events_daily.event_date_date: "30 days"
-    sorts: [jira_bug_events_daily.bugs desc]
-    note_display: hover
-    note_text: "Definition: Distribution of bugs fixed over the last 30 days by priority. Calculation: COUNT of fixed events grouped by priority_label where event_date is in the last 30 days."
-    row: 23
-    col: 12
-    width: 12
+    width: 24
     height: 6
 
   - name: active_bugs_by_pod
