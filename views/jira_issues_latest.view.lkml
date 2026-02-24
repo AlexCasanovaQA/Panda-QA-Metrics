@@ -21,6 +21,18 @@ view: jira_issues_latest {
       END ;;
     description: "Normalized QA verification state based on Jira status patterns to avoid project-specific hardcoded status lists in dashboards."
   }
+  dimension: regression_state {
+    type: string
+    sql:
+      CASE
+        WHEN REGEXP_CONTAINS(
+          LOWER(COALESCE(${TABLE}.status, '')),
+          r'(ready\\s*for\\s*regression|awaiting\\s*regression|in\\s*regression|retest)'
+        ) THEN 'Regression'
+        ELSE 'Other'
+      END ;;
+    description: "Normalized regression testing state based on Jira status patterns to avoid project-specific hardcoded status lists in dashboards."
+  }
   dimension: status_category { type: string sql: ${TABLE}.status_category ;; }
   dimension: priority { type: string sql: ${TABLE}.priority ;; }
   dimension: severity { type: string sql: ${TABLE}.severity ;; }

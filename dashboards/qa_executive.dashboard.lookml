@@ -152,13 +152,13 @@
     fields: [jira_issues_latest.issues]
     filters:
       jira_issues_latest.issue_type: "Bug,Defect"
-      jira_issues_latest.status: "Ready for Regression,In Regression"
+      jira_issues_latest.regression_state: "Regression"
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Bugs waiting for or currently in regression. Calculation: COUNT with status in (Ready for Regression, In Regression). Use: Evaluate ongoing regression testing load."
+    note_text: "Definition: Bugs waiting for or currently in regression. Calculation: COUNT with regression_state='Regression' (normalizes states such as Ready for Regression, Awaiting Regression, In Regression, Retest). Use: Evaluate ongoing regression testing load."
     row: 2
     col: 20
     width: 4
