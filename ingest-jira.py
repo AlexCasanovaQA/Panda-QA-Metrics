@@ -9,6 +9,7 @@ Env vars:
 - JIRA_EMAIL / JIRA_API_TOKEN
 - JIRA_PROJECT_KEYS (comma-separated, e.g. "PC,PANDA")
 - JIRA_SEVERITY_FIELD_ID (optional, e.g. "customfield_12345")
+- ENVIRONMENT / APP_ENV / DEPLOY_ENV (optional; if set to production, severity field id becomes required)
 - LOOKBACK_DAYS (optional, default 30)
 
 BQ env vars:
@@ -160,6 +161,16 @@ def _extract_user_display(user_obj: Any) -> Optional[str]:
         return None
     # Jira Cloud: displayName
     return user_obj.get("displayName") or user_obj.get("name") or user_obj.get("emailAddress")
+
+
+def _is_production_env() -> bool:
+    env_name = (
+        os.environ.get("ENVIRONMENT")
+        or os.environ.get("APP_ENV")
+        or os.environ.get("DEPLOY_ENV")
+        or ""
+    ).strip().lower()
+    return env_name in {"prod", "production"}
 
 
 def _extract_severity(fields: Dict[str, Any]) -> Optional[str]:
@@ -441,12 +452,32 @@ def ingest_jira(request):
     global RESOLVED_SEVERITY_FIELD_ID
     RESOLVED_SEVERITY_FIELD_ID = _resolve_severity_field_id()
 
+    if _is_production_env() and not SEVERITY_FIELD_ID:
+        print(
+            "ERROR: Production environment detected but JIRA_SEVERITY_FIELD_ID is not set. "
+            "Set an explicit field id to avoid fragile severity autodetection."
+        )
+        return _error_response(
+            "config_error",
+            "missing_required_severity_field_id",
+            "JIRA_SEVERITY_FIELD_ID is required in production environments",
+            400,
+        )
+
+    if not SEVERITY_FIELD_ID:
+        print(
+            "WARNING: JIRA_SEVERITY_FIELD_ID is not set; severity extraction relies on autodetection/fallbacks "
+            "and may degrade reporting quality."
+        )
+
     bq = bigquery.Client(project=_get_project_id())
     table_ref = bq.dataset(BQ_DATASET_ID).table(BQ_TABLE_ID)
     _ensure_table(bq, table_ref)
 
     rows: List[Dict[str, Any]] = []
     inserted = 0
+    processed_issues = 0
+    severity_null_issues = 0
 
     for project_key in project_keys:
         print(f"Ingesting Jira issues for {project_key} from {since} to {until} (lookback {lookback_days}d)")
@@ -454,6 +485,11 @@ def ingest_jira(request):
             rec = _build_issue_record(issue)
             if not rec.get("issue_key"):
                 continue
+
+            processed_issues += 1
+            if not rec.get("severity"):
+                severity_null_issues += 1
+
             rows.append(rec)
 
             # Batch insert
@@ -478,6 +514,13 @@ def ingest_jira(request):
             return _error_response("runtime_error", "bigquery_insert_failed", "BigQuery insert failed", 500, errors[:3])
         inserted += len(rows)
 
+    severity_null_pct = (severity_null_issues / processed_issues * 100.0) if processed_issues else 0.0
+    print(
+        "Severity completeness: "
+        f"{processed_issues - severity_null_issues}/{processed_issues} with value, "
+        f"{severity_null_issues} null ({severity_null_pct:.2f}%)."
+    )
+
     return (
         json.dumps(
             {
@@ -485,6 +528,10 @@ def ingest_jira(request):
                 "projects": project_keys,
                 "lookback_days": lookback_days,
                 "inserted_rows": inserted,
+                "processed_issues": processed_issues,
+                "severity_null_issues": severity_null_issues,
+                "severity_null_pct": round(severity_null_pct, 2),
+                "severity_field_source": "explicit" if SEVERITY_FIELD_ID else ("auto-detected" if RESOLVED_SEVERITY_FIELD_ID else "fallback"),
                 "bq_table": f"{table_ref.project}.{table_ref.dataset_id}.{table_ref.table_id}",
             }
         ),
