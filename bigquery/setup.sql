@@ -315,10 +315,11 @@ WHERE JSON_VALUE(item, '$.field') = 'status';
 -- Audit note (dashboard parity):
 --   * done_or_fixed = statuses considered a successful "fixed/closed" transition.
 --       Base set: resolved, closed, verified, done.
---       Project-specific equivalents included here: fixed, completed, qa approved, ready for release.
+--       Project-specific equivalents included here: fixed, completed, qa approved,
+--       qa verified, ready for deploy, ready for release, released, in cert.
 --   * reopened_target = statuses considered active/reopened workflow after a done state.
 --       Set: open, reopened, backlog, to do, in progress, selected for development,
---            in review, ready for qa, ready for test, qa testing, testing.
+--            in review, ready for qa, ready for test, qa testing, testing, in qa.
 --
 -- Matching is case-insensitive and whitespace-tolerant in downstream views by
 -- normalizing with LOWER(TRIM(status)). Update this mapping in one place if
@@ -331,7 +332,11 @@ SELECT 'done', 'done_or_fixed' UNION ALL
 SELECT 'fixed', 'done_or_fixed' UNION ALL
 SELECT 'completed', 'done_or_fixed' UNION ALL
 SELECT 'qa approved', 'done_or_fixed' UNION ALL
+SELECT 'qa verified', 'done_or_fixed' UNION ALL
+SELECT 'ready for deploy', 'done_or_fixed' UNION ALL
 SELECT 'ready for release', 'done_or_fixed' UNION ALL
+SELECT 'released', 'done_or_fixed' UNION ALL
+SELECT 'in cert', 'done_or_fixed' UNION ALL
 SELECT 'open', 'reopened_target' UNION ALL
 SELECT 'reopened', 'reopened_target' UNION ALL
 SELECT 'backlog', 'reopened_target' UNION ALL
@@ -342,6 +347,7 @@ SELECT 'in review', 'reopened_target' UNION ALL
 SELECT 'ready for qa', 'reopened_target' UNION ALL
 SELECT 'ready for test', 'reopened_target' UNION ALL
 SELECT 'qa testing', 'reopened_target' UNION ALL
+SELECT 'in qa', 'reopened_target' UNION ALL
 SELECT 'testing', 'reopened_target';
 
 CREATE OR REPLACE VIEW `qa_metrics.jira_bug_events_daily` AS
@@ -505,15 +511,21 @@ WHERE cfe.claimed_fixed_at >= b.created
 GROUP BY 1;
 
 CREATE OR REPLACE VIEW `qa_metrics.jira_active_bug_count_daily` AS
-WITH bug_lifecycle AS (
+WITH status_sets AS (
+  SELECT ARRAY_AGG(normalized_status) AS done_or_fixed_statuses
+  FROM `qa_metrics.jira_status_category_map`
+  WHERE status_category = 'done_or_fixed'
+),
+bug_lifecycle AS (
   SELECT
     ji.issue_key,
     DATE(ji.created) AS created_date,
     DATE(MIN(sc.changed_at)) AS fixed_date
   FROM `qa_metrics.jira_issues_latest` ji
+  CROSS JOIN status_sets ss
   LEFT JOIN `qa_metrics.jira_status_changes` sc
     ON sc.issue_key = ji.issue_key
-   AND sc.to_status IN ('Resolved', 'Closed', 'Verified')
+   AND LOWER(TRIM(COALESCE(sc.to_status, ''))) IN UNNEST(ss.done_or_fixed_statuses)
   WHERE LOWER(TRIM(ji.issue_type)) IN ('bug', 'defect')
     AND ji.created IS NOT NULL
   GROUP BY 1,2
