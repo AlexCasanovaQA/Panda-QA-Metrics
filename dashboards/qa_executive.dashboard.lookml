@@ -182,7 +182,29 @@
     series_colors: {"(S0) Blocker": "#D64550", "(S1) Critical": "#F28B30", "(S2) Major": "#F2C94C", "(S3) Minor": "#2D9CDB", "(S4) Trivial": "#6FCF97", "(unknown)": "#BDBDBD"}
     row: 11
     col: 0
-    width: 24
+    width: 12
+    height: 6
+
+  - name: entered_by_priority
+    title: Bugs entered by Priority
+    type: looker_pie
+    model: panda_qa_metrics
+    explore: jira_issues_latest
+    fields: [jira_issues_latest.priority, jira_issues_latest.issues]
+    filters:
+      jira_issues_latest.issue_type: "Bug,Defect"
+    listen:
+      date_range: jira_issues_latest.created_date
+      pod: jira_issues_latest.team
+      priority: jira_issues_latest.priority
+      severity: jira_issues_latest.severity_normalized
+    note_display: hover
+    note_text: "Definition: Entered = created_date in Date Range. Shows the percentage distribution of bugs created by priority for the selected Date Range."
+    show_value_labels: true
+    label_type: labPer
+    row: 11
+    col: 12
+    width: 12
     height: 6
 
 
