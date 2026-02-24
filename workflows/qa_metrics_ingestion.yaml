@@ -255,7 +255,7 @@ main:
                   - results.gamebench_android: ${gb_a_resp.body}
             - gb_android_validate:
                 switch:
-                  - condition: ${text.find(default(map.get(gb_a_resp.headers, "Content-Type"), ""), "text/html") >= 0}
+                  - condition: ${text.match_regex(default(map.get(gb_a_resp.headers, "Content-Type"), ""), ".*text/html.*")}
                     steps:
                       - gb_android_placeholder_err:
                           assign:
@@ -289,7 +289,7 @@ main:
                   - results.gamebench_ios: ${gb_i_resp.body}
             - gb_ios_validate:
                 switch:
-                  - condition: ${text.find(default(map.get(gb_i_resp.headers, "Content-Type"), ""), "text/html") >= 0}
+                  - condition: ${text.match_regex(default(map.get(gb_i_resp.headers, "Content-Type"), ""), ".*text/html.*")}
                     steps:
                       - gb_ios_placeholder_err:
                           assign:
