@@ -33,9 +33,9 @@ view: bugsnag_errors_latest {
   dimension: events { type: number sql: ${TABLE}.events ;; }
   dimension: users { type: number sql: ${TABLE}.users ;; }
 
-    dimension: is_active {
+  dimension: is_active {
     type: yesno
-    sql: LOWER(IFNULL(${status}, '')) NOT IN ('resolved','closed') ;;
+    sql: LOWER(IFNULL(${status}, '')) NOT IN ('fixed','resolved','closed') ;;
   }
 
   measure: errors { type: count }

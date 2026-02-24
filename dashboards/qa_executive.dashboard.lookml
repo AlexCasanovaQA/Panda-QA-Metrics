@@ -451,7 +451,7 @@
     listen:
       bugsnag_project_id: bugsnag_errors_latest.project_id
     note_display: hover
-    note_text: "Definition: Active production errors not yet closed. Calculation: COUNT of errors where status is not in resolved/closed."
+    note_text: "Definition: Active production errors not yet closed/fixed. Calculation: COUNT of errors where status is not in fixed/resolved/closed."
     row: 44
     col: 0
     width: 6
