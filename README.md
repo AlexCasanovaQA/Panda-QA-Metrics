@@ -22,7 +22,7 @@ Create these secrets in the same GCP project where BigQuery lives (names must ma
 
 ### TestRail
 - `TESTRAIL_BASE_URL` (e.g. `https://testrail.yourcompany.com`)
-- `TESTRAIL_USER`
+- `TESTRAIL_USER` (or `TESTRAIL_EMAIL` for `ingest-testrail-users`)
 - `TESTRAIL_API_KEY`
 - `TESTRAIL_PROJECT_ID` (single id) **or** `TESTRAIL_PROJECT_IDS` (comma-separated)
 
