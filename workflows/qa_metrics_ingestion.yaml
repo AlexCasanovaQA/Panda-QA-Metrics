@@ -7,8 +7,9 @@ main:
           - request_args: ${default(args, request_args)}
           - days: ${default(map.get(request_args, "days"), 7)}
           - lookback_days: ${default(map.get(request_args, "lookback_days"), 90)}
-          - project_keys_csv: ${default(map.get(request_args, "project_keys"), default(sys.get_env("JIRA_PROJECT_KEYS"), default(sys.get_env("QA_METRICS_PROJECT_KEYS"), default(map.get(request_args, "project_key"), default(sys.get_env("QA_METRICS_PROJECT_KEY"), "")))))}
+          - project_keys_csv: ${default(map.get(request_args, "project_keys_csv"), default(map.get(request_args, "project_keys"), default(sys.get_env("JIRA_PROJECT_KEYS"), default(sys.get_env("QA_METRICS_PROJECT_KEYS"), default(map.get(request_args, "project_key"), default(sys.get_env("QA_METRICS_PROJECT_KEY"), ""))))))}
           - project_keys_list: []
+          - raw_project_keys_list: []
 
           - jira_url: "https://ingest-jira-147201244534.europe-west1.run.app"
           - jira_changelog_url: "https://ingest-jira-changelog-147201244534.europe-west1.run.app"
@@ -99,9 +100,27 @@ main:
     - normalize_project_keys:
         switch:
           - condition: ${project_keys_csv != ""}
-            assign:
-              - project_keys_list: ${text.split(project_keys_csv, ",")}
-              - payload_jira.project_keys: ${text.split(project_keys_csv, ",")}
+            steps:
+              - split_project_keys:
+                  assign:
+                    - raw_project_keys_list: ${text.split(project_keys_csv, ",")}
+                    - project_keys_list: []
+              - trim_and_filter_project_keys:
+                  for:
+                    value: project_key
+                    in: ${raw_project_keys_list}
+                    steps:
+                      - trim_project_key:
+                          assign:
+                            - project_key_trimmed: ${text.trim(project_key)}
+                      - append_project_key:
+                          switch:
+                            - condition: ${project_key_trimmed != ""}
+                              assign:
+                                - project_keys_list: ${list.concat(project_keys_list, [project_key_trimmed])}
+              - set_payload_project_keys:
+                  assign:
+                    - payload_jira.project_keys: ${project_keys_list}
 
     - log_effective_project_keys:
         call: sys.log
@@ -121,8 +140,8 @@ main:
                           - preflight_status.jira.reason: "missing_project_keys"
                           - preflight_status.jira_changelog.ready: false
                           - preflight_status.jira_changelog.reason: "missing_project_keys"
-                          - errors: ${list.concat(errors, ["{\"service\":\"jira\",\"type\":\"config_error\",\"code\":\"missing_project_keys\",\"message\":\"project_keys_csv is required for Jira ingestion\"}"])}
-                          - errors: ${list.concat(errors, ["{\"service\":\"jira_changelog\",\"type\":\"config_error\",\"code\":\"missing_project_keys\",\"message\":\"project_keys_csv is required for Jira changelog ingestion\"}"])}
+                          - errors: ${list.concat(errors, ["{\"service\":\"jira\",\"type\":\"config_error\",\"code\":\"missing_project_keys\",\"message\":\"project_keys_csv or project_keys is required for Jira ingestion\"}"])}
+                          - errors: ${list.concat(errors, ["{\"service\":\"jira_changelog\",\"type\":\"config_error\",\"code\":\"missing_project_keys\",\"message\":\"project_keys_csv or project_keys is required for Jira changelog ingestion\"}"])}
           - preflight_testrail_flags:
               switch:
                 - condition: ${include_testrail_results and (text.to_lower("" + testrail_enabled) != "true" or text.to_lower("" + testrail_configured) != "true")}
