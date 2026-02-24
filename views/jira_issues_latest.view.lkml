@@ -27,7 +27,7 @@ view: jira_issues_latest {
       CASE
         WHEN REGEXP_CONTAINS(
           LOWER(COALESCE(${TABLE}.status, '')),
-          r'(ready\\s*for\\s*regression|awaiting\\s*regression|in\\s*regression|retest)'
+          r'(ready\s*for\s*regression|awaiting\s*regression|in\s*regression|retest)'
         ) THEN 'Regression'
         ELSE 'Other'
       END ;;
