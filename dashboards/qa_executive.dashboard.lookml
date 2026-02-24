@@ -401,6 +401,9 @@
     sorts: [jira_bug_events_daily.event_date_date]
     listen:
       date_range: jira_bug_events_daily.event_date_date
+      pod: jira_bug_events_daily.pod
+      priority: jira_bug_events_daily.priority_label
+      severity: jira_bug_events_daily.severity_label
     note_display: hover
     note_text: "Definition (UTC): Reopened bugs over time. Reopened = transition from done_or_fixed to reopened_target statuses. Calculation: daily COUNT of event_type=reopened."
     series_colors: {jira_bug_events_daily.bugs: "#EB5757"}
