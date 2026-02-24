@@ -72,9 +72,21 @@ Some KPIs cannot be derived from Jira/TestRail/Bugsnag without more source data.
 
 Template inserts:
 - `bigquery/manual_kpi_inserts_template.sql`
+- `bigquery/build_size_manual_inserts_template.sql`
 
 **Manual Public KPIs:** P27, P28, P29, P30, P35, P36, P37, P38, P40, P41, P42  
 **Manual Private KPIs:** R1, R10, R17, R18, R19, R2, R20, R24, R3, R4, R5
+
+### Build size (manual, operational MVP)
+Use `qa_metrics.build_size_manual` as a manual weekly feed for the build-size tiles.
+
+Recommended operating model:
+- Insert/update at least one row per week per `(platform, environment)`.
+- Required fields: `platform`, `environment`, `build_version`, `build_size_mb`, `metric_date` (UTC date).
+- Use `bigquery/build_size_manual_inserts_template.sql` as the starter template.
+
+Validation expectation:
+- After inserting at least 2-3 rows (for example across two weeks and two platforms), Build Size tiles should stop showing `No results`.
 
 ---
 

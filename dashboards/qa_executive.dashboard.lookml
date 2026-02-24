@@ -621,11 +621,9 @@
     model: panda_qa_metrics
     explore: build_size_manual
     fields: [build_size_manual.metric_date_date, build_size_manual.platform, build_size_manual.environment, build_size_manual.build_version, build_size_manual.build_size_mb]
-    filters:
-      build_size_manual.metric_date_date: "7 days"
     sorts: [build_size_manual.metric_date_date desc, build_size_manual.platform]
     note_display: hover
-    note_text: "Definition: Most recent build size by platform/environment. Calculation: Snapshot from manual table within a 7-day window ordered by descending date."
+    note_text: "Definition: Most recent build size by platform/environment. Calculation: Snapshot from manual table ordered by descending date (ignores dashboard Date Range)."
     row: 77
     col: 0
     width: 12
