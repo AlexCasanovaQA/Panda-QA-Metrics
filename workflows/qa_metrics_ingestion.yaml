@@ -124,7 +124,6 @@ main:
                                 - project_keys_list: ${list.concat(project_keys_list, [project_key_trimmed])}
               - set_payload_project_keys:
                   assign:
-                    - project_keys_csv: ${text.join(project_keys_list, ",")}
                     - payload_jira.project_keys: ${project_keys_list}
                     - payload_changelog.project_keys: ${project_keys_csv}
 
