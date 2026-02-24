@@ -622,6 +622,7 @@
     explore: build_size_manual
     fields: [build_size_manual.metric_date_date, build_size_manual.platform, build_size_manual.environment, build_size_manual.build_version, build_size_manual.build_size_mb]
     sorts: [build_size_manual.metric_date_date desc, build_size_manual.platform]
+    listen: {}
     note_display: hover
     note_text: "Definition: Most recent build size by platform/environment. Calculation: Snapshot from manual table ordered by descending date (ignores dashboard Date Range)."
     row: 77
@@ -685,6 +686,7 @@
       testrail_runs_latest.is_completed: "yes"
     sorts: [testrail_runs_latest.completed_on_date desc, testrail_runs_latest.run_id desc]
     limit: 1
+    listen: {}
     note_display: hover
     note_text: "Definition: Pass rate of the latest completed TestRail run. Calculation: SUM(passed)/SUM(passed+failed+blocked+retest) for a single row selected by sorting completed_on desc, run_id desc, and limit 1. This tile ignores the dashboard Date Range filter."
     row: 89
@@ -702,6 +704,7 @@
       testrail_bvt_latest.completed_on_date: "NOT NULL"
     sorts: [testrail_bvt_latest.completed_on_date desc, testrail_bvt_latest.run_id desc]
     limit: 1
+    listen: {}
     note_display: hover
     note_text: "Definition: BVT-family pass rate for the latest completed build/run (matches run names containing BVT, Smoke, or Sanity). Calculation: pass_rate from a single row selected by filtering completed_on is not null, sorting completed_on desc and run_id desc, and limit 1. This tile ignores the dashboard Date Range filter."
     row: 89
