@@ -1,5 +1,4 @@
 view: bugsnag_errors_latest {
-  description: "Latest BugSnag error snapshot used for executive production-stability tiles. Fallback: if project/environment columns are absent in upstream data, BugSnag tiles can only be filtered by global date and severity/status dimensions."
   sql_table_name: `qa_metrics.bugsnag_errors_latest` ;;
 
   dimension: error_key {
