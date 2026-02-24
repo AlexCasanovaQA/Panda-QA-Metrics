@@ -99,6 +99,8 @@ main:
 
           - payload_bugsnag:
               days: ${days}
+              max_projects: ${default(map.get(request_args, "bugsnag_max_projects"), 5)}
+              page_size: ${default(map.get(request_args, "bugsnag_page_size"), 50)}
 
           - payload_gamebench_android:
               days: ${days}

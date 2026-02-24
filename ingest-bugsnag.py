@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import time
 import random
@@ -24,6 +25,7 @@ HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "30"))
 MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "6"))
 BASE_BACKOFF = float(os.environ.get("BASE_BACKOFF_SECONDS", "1.0"))
 MAX_BACKOFF = float(os.environ.get("MAX_BACKOFF_SECONDS", "30.0"))
+MAX_RETRY_TOTAL_SECONDS = float(os.environ.get("MAX_RETRY_TOTAL_SECONDS", "90"))
 
 OVERLAP_DAYS = int(os.environ.get("OVERLAP_DAYS", "7"))
 
@@ -31,9 +33,13 @@ OVERLAP_DAYS = int(os.environ.get("OVERLAP_DAYS", "7"))
 LOOKBACK_DAYS = int(os.environ.get("BUGSNAG_LOOKBACK_DAYS", "30"))     # <- último mes
 MAX_RUNTIME_SECONDS = int(os.environ.get("MAX_RUNTIME_SECONDS", "240")) # <- 4 min por run
 MAX_ERRORS_PER_RUN = int(os.environ.get("MAX_ERRORS_PER_RUN", "5000")) # <- corta si hay muchísimo
-PER_PAGE = int(os.environ.get("BUGSNAG_PER_PAGE", "100"))              # <= 100 según docs
+PER_PAGE = int(os.environ.get("BUGSNAG_PER_PAGE", "50"))               # <= 100 según docs
+MAX_PROJECTS_PER_RUN = int(os.environ.get("BUGSNAG_MAX_PROJECTS_PER_RUN", "10"))
 BQ_INSERT_CHUNK_SIZE = int(os.environ.get("BQ_INSERT_CHUNK_SIZE", "500"))
 MAX_DAYS_OVERRIDE = int(os.environ.get("BUGSNAG_MAX_DAYS_OVERRIDE", str(LOOKBACK_DAYS)))
+MAX_PAGE_SIZE_OVERRIDE = int(os.environ.get("BUGSNAG_MAX_PAGE_SIZE_OVERRIDE", "100"))
+
+logger = logging.getLogger(__name__)
 
 def get_secret(name: str) -> str:
     secret_name = f"projects/{PROJECT_ID}/secrets/{name}/versions/latest"
@@ -106,7 +112,10 @@ def _parse_retry_after(header_value: Optional[str]) -> Optional[float]:
 
 def request_with_retries(method: str, url: str, *, headers: Dict[str, str], params: Optional[Dict[str, Any]] = None) -> requests.Response:
     last_exc: Optional[Exception] = None
+    attempt_started = time.monotonic()
     for attempt in range(MAX_RETRIES):
+        if (time.monotonic() - attempt_started) >= MAX_RETRY_TOTAL_SECONDS:
+            break
         try:
             r = requests.request(method, url, headers=headers, params=params, timeout=HTTP_TIMEOUT)
 
@@ -126,11 +135,19 @@ def request_with_retries(method: str, url: str, *, headers: Dict[str, str], para
 
         except requests.RequestException as e:
             last_exc = e
+            is_timeout_class = isinstance(e, (requests.Timeout, requests.ConnectionError))
+            if not is_timeout_class:
+                break
             backoff = min(MAX_BACKOFF, BASE_BACKOFF * (2 ** attempt))
             jitter = random.uniform(0, 0.25 * backoff)
-            time.sleep(backoff + jitter)
+            sleep_s = backoff + jitter
+            elapsed = time.monotonic() - attempt_started
+            remaining = MAX_RETRY_TOTAL_SECONDS - elapsed
+            if remaining <= 0:
+                break
+            time.sleep(min(sleep_s, remaining))
 
-    raise RuntimeError(f"HTTP failed after retries: {last_exc}")
+    raise RuntimeError(f"HTTP failed after retries/time budget ({MAX_RETRY_TOTAL_SECONDS}s): {last_exc}")
 
 def insert_rows(rows: List[Dict[str, Any]]) -> None:
     if not rows:
@@ -146,10 +163,11 @@ def insert_rows(rows: List[Dict[str, Any]]) -> None:
     if errors:
         raise RuntimeError(errors)
 
-def fetch_and_insert_bugsnag_errors(since_ts: datetime, started_monotonic: float) -> int:
+def fetch_and_insert_bugsnag_errors(since_ts: datetime, started_monotonic: float, *, page_size: int, max_projects: int) -> int:
     base_url = get_secret("BUGSNAG_BASE_URL").rstrip("/")
     api_token = get_secret("BUGSNAG_TOKEN")
     project_ids = [p.strip() for p in get_secret("BUGSNAG_PROJECT_IDS").split(",") if p.strip()]
+    project_ids = project_ids[:max_projects]
 
     headers = {"Authorization": f"token {api_token}", "Accept": "application/json"}
 
@@ -163,10 +181,11 @@ def fetch_and_insert_bugsnag_errors(since_ts: datetime, started_monotonic: float
     since_filter = since_ts.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     for project_id in project_ids:
+        page_number = 1
         # IMPORTANTE: paginar con Link header (next), no con page++
         url = f"{base_url}/projects/{project_id}/errors"
         params = {
-            "per_page": PER_PAGE,
+            "per_page": page_size,
             "sort": "last_seen",
             "direction": "asc",
             "filters[event.since]": since_filter,
@@ -180,12 +199,23 @@ def fetch_and_insert_bugsnag_errors(since_ts: datetime, started_monotonic: float
                     total_inserted += len(buffer)
                 return total_inserted
 
+            req_started = time.monotonic()
             resp = request_with_retries("GET", url, headers=headers, params=params)
+            request_duration_ms = round((time.monotonic() - req_started) * 1000, 1)
             data = resp.json() or []
             if isinstance(data, dict):
                 data = data.get("errors", [])
             if not isinstance(data, list):
                 raise RuntimeError(f"Unexpected BugSnag payload type: {type(data).__name__}")
+
+            logger.info(json.dumps({
+                "event": "bugsnag_page_fetched",
+                "project_id": str(project_id),
+                "page_number": page_number,
+                "item_count": len(data),
+                "request_duration_ms": request_duration_ms,
+            }))
+
             if not data:
                 break
 
@@ -225,6 +255,7 @@ def fetch_and_insert_bugsnag_errors(since_ts: datetime, started_monotonic: float
 
             url = next_url
             params = {}  # next_url ya trae sus query params
+            page_number += 1
 
     if buffer:
         insert_rows(buffer)
@@ -239,6 +270,8 @@ def hello_http(request):
     started = time.monotonic()
     now = datetime.now(timezone.utc)
     days_applied: Optional[int] = None
+    page_size_applied: int = PER_PAGE
+    max_projects_applied: int = MAX_PROJECTS_PER_RUN
     try:
         payload = request.get_json(silent=True)
         if payload is None:
@@ -255,6 +288,24 @@ def hello_http(request):
                 raise ValueError("days must be a positive integer")
             days_applied = min(days_applied, MAX_DAYS_OVERRIDE)
 
+        if "page_size" in payload and payload["page_size"] is not None:
+            try:
+                page_size_applied = int(payload["page_size"])
+            except (TypeError, ValueError):
+                raise ValueError("page_size must be a positive integer")
+            if page_size_applied <= 0:
+                raise ValueError("page_size must be a positive integer")
+            page_size_applied = min(page_size_applied, MAX_PAGE_SIZE_OVERRIDE)
+
+        if "max_projects" in payload and payload["max_projects"] is not None:
+            try:
+                max_projects_applied = int(payload["max_projects"])
+            except (TypeError, ValueError):
+                raise ValueError("max_projects must be a positive integer")
+            if max_projects_applied <= 0:
+                raise ValueError("max_projects must be a positive integer")
+            max_projects_applied = min(max_projects_applied, MAX_PROJECTS_PER_RUN)
+
         ensure_table()
         last_seen_ts = get_last_seen()
         since_ts = last_seen_ts
@@ -262,11 +313,18 @@ def hello_http(request):
             since_override = now - timedelta(days=days_applied)
             since_ts = max(last_seen_ts, since_override)
 
-        inserted = fetch_and_insert_bugsnag_errors(since_ts, started_monotonic=started)
+        inserted = fetch_and_insert_bugsnag_errors(
+            since_ts,
+            started_monotonic=started,
+            page_size=page_size_applied,
+            max_projects=max_projects_applied,
+        )
         return (jsonify({
             "status": "OK",
             "rows_inserted": inserted,
             "days_applied": days_applied,
+            "page_size_applied": page_size_applied,
+            "max_projects_applied": max_projects_applied,
             "effective_since": since_ts.isoformat(),
             "runtime_seconds": round(time.monotonic() - started, 2),
         }), 200)
