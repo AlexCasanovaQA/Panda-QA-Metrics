@@ -548,7 +548,7 @@ SELECT
     NULLIF(CAST(passed_count + failed_count + blocked_count + retest_count AS FLOAT64), 0.0)
   ) AS pass_rate_calc
 FROM `qa_metrics.testrail_runs_latest`
-WHERE REGEXP_CONTAINS(UPPER(COALESCE(name, '')), r'\bBVT\b')
+WHERE REGEXP_CONTAINS(UPPER(COALESCE(name, '')), r'\b(BVT|SMOKE|SANITY)\b')
   AND completed_on IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS `qa_metrics.build_size_manual` (

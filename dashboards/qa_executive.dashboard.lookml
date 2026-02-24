@@ -702,7 +702,7 @@
     sorts: [testrail_bvt_latest.completed_on_date desc, testrail_bvt_latest.run_id desc]
     limit: 1
     note_display: hover
-    note_text: "Definition: BVT pass rate for the latest completed build/run. Calculation: pass_rate from a single row selected by filtering completed_on is not null, sorting completed_on desc and run_id desc, and limit 1. This tile ignores the dashboard Date Range filter."
+    note_text: "Definition: BVT-family pass rate for the latest completed build/run (matches run names containing BVT, Smoke, or Sanity). Calculation: pass_rate from a single row selected by filtering completed_on is not null, sorting completed_on desc and run_id desc, and limit 1. This tile ignores the dashboard Date Range filter."
     row: 89
     col: 6
     width: 6
