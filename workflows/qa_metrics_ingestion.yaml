@@ -497,7 +497,7 @@ main:
                                     service: "jira"
                                     event: "skipped_by_preflight"
                                     preflight: ${preflight_status.jira}
-                  - jira_changelog_try:
+                  - jira_changelog_init_state:
                       assign:
                         - results.jira_changelog_ingestion_state:
                             outcome: "pending"
@@ -506,6 +506,7 @@ main:
                             metadata:
                               requested_lookback_days: ${lookback_days}
                               project_keys_csv: ${payload_changelog.project_keys}
+                  - jira_changelog_try:
                       switch:
                         - condition: ${preflight_status.jira_changelog.ready}
                           steps:
@@ -668,7 +669,46 @@ main:
                                   - jira_changelog_empty_data_success: ${results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "reason") == "jira_changelog_empty_data_success"}
                                   - jira_changelog_ok_not_ok: ${results.jira_changelog != null and map.get(results.jira_changelog, "ok") != null and not default(map.get(results.jira_changelog, "ok"), false)}
                                   - jira_changelog_status_not_ok: ${results.jira_changelog != null and map.get(results.jira_changelog, "status") != null and text.to_lower("" + map.get(results.jira_changelog, "status")) != "ok"}
-                                  - jira_status_transitions_data_quality_skip_reason: ${if(not preflight_status.jira_changelog.ready, "jira_changelog_preflight_not_ready:" + preflight_status.jira_changelog.reason, if(jira_changelog_transport_failure, "jira_changelog_dependency_transport_failure", if(jira_changelog_parse_failure, "jira_changelog_dependency_parse_failure", if(jira_changelog_ingestion_state_missing, "jira_changelog_ingestion_state_missing", if(jira_changelog_result_missing, "jira_changelog_result_missing", if(jira_changelog_ok_not_ok, "jira_changelog_result_not_ok", if(jira_changelog_status_not_ok, "jira_changelog_status_not_ok", "jira_changelog_ingestion_not_successful")))))))}
+                                  - jira_status_transitions_data_quality_skip_reason: "jira_changelog_ingestion_not_successful"
+                            - jira_status_transitions_data_quality_set_skip_reason_preflight:
+                                switch:
+                                  - condition: ${not preflight_status.jira_changelog.ready}
+                                    steps:
+                                      - jira_status_transitions_data_quality_assign_skip_reason_preflight:
+                                          assign:
+                                            - jira_status_transitions_data_quality_skip_reason: ${"jira_changelog_preflight_not_ready:" + preflight_status.jira_changelog.reason}
+                                  - condition: ${jira_changelog_transport_failure}
+                                    steps:
+                                      - jira_status_transitions_data_quality_assign_skip_reason_transport:
+                                          assign:
+                                            - jira_status_transitions_data_quality_skip_reason: "jira_changelog_dependency_transport_failure"
+                                  - condition: ${jira_changelog_parse_failure}
+                                    steps:
+                                      - jira_status_transitions_data_quality_assign_skip_reason_parse:
+                                          assign:
+                                            - jira_status_transitions_data_quality_skip_reason: "jira_changelog_dependency_parse_failure"
+                                  - condition: ${jira_changelog_ingestion_state_missing}
+                                    steps:
+                                      - jira_status_transitions_data_quality_assign_skip_reason_state_missing:
+                                          assign:
+                                            - jira_status_transitions_data_quality_skip_reason: "jira_changelog_ingestion_state_missing"
+                                  - condition: ${jira_changelog_result_missing}
+                                    steps:
+                                      - jira_status_transitions_data_quality_assign_skip_reason_result_missing:
+                                          assign:
+                                            - jira_status_transitions_data_quality_skip_reason: "jira_changelog_result_missing"
+                                  - condition: ${jira_changelog_ok_not_ok}
+                                    steps:
+                                      - jira_status_transitions_data_quality_assign_skip_reason_result_not_ok:
+                                          assign:
+                                            - jira_status_transitions_data_quality_skip_reason: "jira_changelog_result_not_ok"
+                                  - condition: ${jira_changelog_status_not_ok}
+                                    steps:
+                                      - jira_status_transitions_data_quality_assign_skip_reason_status_not_ok:
+                                          assign:
+                                            - jira_status_transitions_data_quality_skip_reason: "jira_changelog_status_not_ok"
+                            - jira_status_transitions_data_quality_store_skipped_result:
+                                assign:
                                   - results.jira_status_transitions_data_quality:
                                       status: "skipped"
                                       skip_reason: ${jira_status_transitions_data_quality_skip_reason}
