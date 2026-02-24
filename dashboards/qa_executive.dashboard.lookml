@@ -274,7 +274,7 @@
 
   - name: active_bugs_by_pod
     title: Active bugs by POD
-    type: looker_bar
+    type: looker_pie
     model: panda_qa_metrics
     explore: jira_issues_latest
     fields: [jira_issues_latest.team, jira_issues_latest.issues]
@@ -282,12 +282,17 @@
       jira_issues_latest.issue_type: "Bug,Defect"
       jira_issues_latest.status_category: "-Done"
     sorts: [jira_issues_latest.issues desc]
+    limit: 5
     listen:
       pod: jira_issues_latest.team
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Active backlog split by POD/team. Calculation: COUNT of active bugs (statusCategory != Done) grouped by team. Use: Balance workload across pods."
+    note_text: "Definition: Active backlog split by POD/team. Calculation: COUNT of active bugs (statusCategory != Done) grouped by team. Readability strategy: show Top 5 PODs by active bug volume and bucket the remainder into Other. Use: Balance workload across pods."
+    limit_displayed_rows: true
+    show_others: true
+    show_value_labels: true
+    label_type: labPer
     row: 29
     col: 0
     width: 12
@@ -295,7 +300,7 @@
 
   - name: active_bugs_by_priority
     title: Active bugs by Priority
-    type: looker_bar
+    type: looker_pie
     model: panda_qa_metrics
     explore: jira_issues_latest
     fields: [jira_issues_latest.priority, jira_issues_latest.issues]
@@ -309,6 +314,8 @@
       severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Active backlog by current priority. Calculation: COUNT of active bugs grouped by priority. Use: Validate the mix of pending criticality."
+    show_value_labels: true
+    label_type: labPer
     row: 29
     col: 12
     width: 12
