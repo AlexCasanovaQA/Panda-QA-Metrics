@@ -5,7 +5,7 @@ For non-admin API keys, TestRail supports `get_users/{project_id}`.
 
 Env vars:
 - TESTRAIL_URL (e.g. https://<company>.testrail.io)
-- TESTRAIL_EMAIL
+- TESTRAIL_EMAIL (or TESTRAIL_USER)
 - TESTRAIL_API_KEY
 - TESTRAIL_PROJECT_IDS (comma-separated) OR TESTRAIL_PROJECT_ID
 
@@ -31,7 +31,7 @@ BQ_DATASET_ID = os.environ.get("BQ_DATASET_ID", "qa_metrics")
 BQ_TABLE_ID = os.environ.get("BQ_TABLE_ID", "testrail_users")
 
 TESTRAIL_URL = os.environ.get("TESTRAIL_URL")
-TESTRAIL_EMAIL = os.environ.get("TESTRAIL_EMAIL")
+TESTRAIL_EMAIL = os.environ.get("TESTRAIL_EMAIL") or os.environ.get("TESTRAIL_USER")
 TESTRAIL_API_KEY = os.environ.get("TESTRAIL_API_KEY")
 TESTRAIL_PROJECT_IDS = os.environ.get("TESTRAIL_PROJECT_IDS") or os.environ.get("TESTRAIL_PROJECT_ID") or ""
 
@@ -49,7 +49,7 @@ def _get_project_id() -> str:
 
 def _auth() -> requests.auth.HTTPBasicAuth:
     if not (TESTRAIL_EMAIL and TESTRAIL_API_KEY):
-        raise RuntimeError("Missing TESTRAIL_EMAIL or TESTRAIL_API_KEY")
+        raise RuntimeError("Missing TESTRAIL_EMAIL/TESTRAIL_USER or TESTRAIL_API_KEY")
     return requests.auth.HTTPBasicAuth(TESTRAIL_EMAIL, TESTRAIL_API_KEY)
 
 

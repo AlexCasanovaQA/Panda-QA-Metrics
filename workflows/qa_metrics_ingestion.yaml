@@ -7,7 +7,7 @@ main:
           - request_args: ${default(args, request_args)}
           - days: ${default(map.get(request_args, "days"), 7)}
           - lookback_days: ${default(map.get(request_args, "lookback_days"), 90)}
-          - project_keys_csv: ${default(map.get(request_args, "project_keys"), default(sys.get_env("QA_METRICS_PROJECT_KEYS"), default(map.get(request_args, "project_key"), default(sys.get_env("QA_METRICS_PROJECT_KEY"), ""))))}
+          - project_keys_csv: ${default(map.get(request_args, "project_keys"), default(sys.get_env("JIRA_PROJECT_KEYS"), default(sys.get_env("QA_METRICS_PROJECT_KEYS"), default(map.get(request_args, "project_key"), default(sys.get_env("QA_METRICS_PROJECT_KEY"), "")))))}
           - project_keys_list: []
 
           - jira_url: "https://ingest-jira-147201244534.europe-west1.run.app"
@@ -253,6 +253,14 @@ main:
             - gb_android_store:
                 assign:
                   - results.gamebench_android: ${gb_a_resp.body}
+            - gb_android_validate:
+                switch:
+                  - condition: ${text.find(default(map.get(gb_a_resp.headers, "Content-Type"), ""), "text/html") >= 0}
+                    steps:
+                      - gb_android_placeholder_err:
+                          assign:
+                            - errors: ${list.concat(errors, ["gamebench_android - placeholder_revision_served"]) }
+                            - status: "non_ok"
         except:
           as: e
           steps:
@@ -279,6 +287,14 @@ main:
             - gb_ios_store:
                 assign:
                   - results.gamebench_ios: ${gb_i_resp.body}
+            - gb_ios_validate:
+                switch:
+                  - condition: ${text.find(default(map.get(gb_i_resp.headers, "Content-Type"), ""), "text/html") >= 0}
+                    steps:
+                      - gb_ios_placeholder_err:
+                          assign:
+                            - errors: ${list.concat(errors, ["gamebench_ios - placeholder_revision_served"]) }
+                            - status: "non_ok"
         except:
           as: e
           steps:
