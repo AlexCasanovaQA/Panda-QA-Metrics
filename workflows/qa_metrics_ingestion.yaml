@@ -64,7 +64,7 @@ main:
           - include_testrail_results: ${text.to_lower("" + default(map.get(request_args, "include_testrail_results"), "false")) == "true"}
           - bugsnag_enabled: ${default(map.get(request_args, "bugsnag_enabled"), default(sys.get_env("QA_METRICS_BUGSNAG_ENABLED"), "true"))}
           - bugsnag_configured: ${default(map.get(request_args, "bugsnag_configured"), default(sys.get_env("QA_METRICS_BUGSNAG_CONFIGURED"), "true"))}
-          - require_gamebench_healthz: ${text.to_lower("" + default(map.get(request_args, "require_gamebench_healthz"), default(sys.get_env("QA_METRICS_REQUIRE_GAMEBENCH_HEALTHZ"), "false"))) == "true"}
+          - require_gamebench_healthz: ${text.to_lower("" + default(map.get(request_args, "require_gamebench_healthz"), default(sys.get_env("QA_METRICS_REQUIRE_GAMEBENCH_HEALTHZ"), "true"))) == "true"}
           - gamebench_available: true
 
           # ingest-jira REQUIERE project_keys (lista)
