@@ -45,6 +45,20 @@ JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN")
 JIRA_PROJECT_KEYS = os.environ.get("JIRA_PROJECT_KEYS", "").strip()
 
 
+def _error_response(error_type: str, code: str, message: str, status_code: int, details: Any = None):
+    payload: Dict[str, Any] = {
+        "ok": False,
+        "error": {
+            "type": error_type,
+            "code": code,
+            "message": message,
+        },
+    }
+    if details is not None:
+        payload["error"]["details"] = details
+    return (json.dumps(payload), status_code, {"Content-Type": "application/json"})
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -241,10 +255,11 @@ def ingest_jira_changelog(request):
     project_keys_raw = (req_json.get("project_keys") or JIRA_PROJECT_KEYS)
     project_keys = [p.strip() for p in project_keys_raw.split(",") if p.strip()]
     if not project_keys:
-        return (
-            json.dumps({"error": "No Jira projects provided. Set JIRA_PROJECT_KEYS or pass project_keys"}),
+        return _error_response(
+            "config_error",
+            "missing_project_keys",
+            "No Jira projects provided. Set JIRA_PROJECT_KEYS or pass project_keys",
             400,
-            {"Content-Type": "application/json"},
         )
 
     until = _utc_now()
@@ -312,11 +327,7 @@ def ingest_jira_changelog(request):
                     errors = bq.insert_rows_json(table_ref, rows)
                     if errors:
                         print("BigQuery insert errors (first 3):", errors[:3])
-                        return (
-                            json.dumps({"error": "BigQuery insert failed", "details": errors[:3]}),
-                            500,
-                            {"Content-Type": "application/json"},
-                        )
+                        return _error_response("runtime_error", "bigquery_insert_failed", "BigQuery insert failed", 500, errors[:3])
                     inserted += len(rows)
 
                 # small sleep to avoid hammering

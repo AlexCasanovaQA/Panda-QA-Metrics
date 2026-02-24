@@ -35,6 +35,29 @@ main:
           - errors: []
           - status: "ok"
           - dq_status: "ok"
+          - preflight_status:
+              jira:
+                ready: true
+                reason: "ready"
+              jira_changelog:
+                ready: true
+                reason: "ready"
+              testrail:
+                ready: true
+                reason: "ready"
+              testrail_users:
+                ready: true
+                reason: "ready"
+              testrail_results:
+                ready: true
+                reason: "ready"
+              bugsnag:
+                ready: true
+                reason: "ready"
+          - testrail_enabled: ${default(map.get(request_args, "testrail_enabled"), default(sys.get_env("QA_METRICS_TESTRAIL_ENABLED"), "true"))}
+          - testrail_configured: ${default(map.get(request_args, "testrail_configured"), default(sys.get_env("QA_METRICS_TESTRAIL_CONFIGURED"), "true"))}
+          - bugsnag_enabled: ${default(map.get(request_args, "bugsnag_enabled"), default(sys.get_env("QA_METRICS_BUGSNAG_ENABLED"), "true"))}
+          - bugsnag_configured: ${default(map.get(request_args, "bugsnag_configured"), default(sys.get_env("QA_METRICS_BUGSNAG_CONFIGURED"), "true"))}
 
           # ingest-jira REQUIERE project_keys (lista)
           - payload_jira:
@@ -78,12 +101,51 @@ main:
           severity: "INFO"
           text: '${"qa_metrics_ingestion project keys: " + payload_changelog.project_keys}'
 
+    - preflight_validate_config:
+        steps:
+          - preflight_jira_project_keys:
+              switch:
+                - condition: ${len(project_keys_list) == 0}
+                  steps:
+                    - preflight_jira_not_ready:
+                        assign:
+                          - preflight_status.jira.ready: false
+                          - preflight_status.jira.reason: "missing_project_keys"
+                          - preflight_status.jira_changelog.ready: false
+                          - preflight_status.jira_changelog.reason: "missing_project_keys"
+                          - errors: ${list.concat(errors, [text.decode(json.encode({"service":"jira","type":"config_error","code":"missing_project_keys","message":"project_keys_csv is required for Jira ingestion"}))])}
+                          - errors: ${list.concat(errors, [text.decode(json.encode({"service":"jira_changelog","type":"config_error","code":"missing_project_keys","message":"project_keys_csv is required for Jira changelog ingestion"}))])}
+          - preflight_testrail_flags:
+              switch:
+                - condition: ${text.to_lower("" + testrail_enabled) != "true" or text.to_lower("" + testrail_configured) != "true"}
+                  steps:
+                    - preflight_testrail_not_ready:
+                        assign:
+                          - preflight_status.testrail.ready: false
+                          - preflight_status.testrail.reason: "testrail_not_configured"
+                          - preflight_status.testrail_users.ready: false
+                          - preflight_status.testrail_users.reason: "testrail_not_configured"
+                          - preflight_status.testrail_results.ready: false
+                          - preflight_status.testrail_results.reason: "testrail_not_configured"
+                          - errors: ${list.concat(errors, [text.decode(json.encode({"service":"testrail","type":"config_error","code":"testrail_not_configured","message":"TestRail disabled or not configured via args/env markers"}))])}
+                          - errors: ${list.concat(errors, [text.decode(json.encode({"service":"testrail_users","type":"config_error","code":"testrail_not_configured","message":"TestRail disabled or not configured via args/env markers"}))])}
+                          - errors: ${list.concat(errors, [text.decode(json.encode({"service":"testrail_results","type":"config_error","code":"testrail_not_configured","message":"TestRail disabled or not configured via args/env markers"}))])}
+          - preflight_bugsnag_flags:
+              switch:
+                - condition: ${text.to_lower("" + bugsnag_enabled) != "true" or text.to_lower("" + bugsnag_configured) != "true"}
+                  steps:
+                    - preflight_bugsnag_not_ready:
+                        assign:
+                          - preflight_status.bugsnag.ready: false
+                          - preflight_status.bugsnag.reason: "bugsnag_not_configured"
+                          - errors: ${list.concat(errors, [text.decode(json.encode({"service":"bugsnag","type":"config_error","code":"bugsnag_not_configured","message":"Bugsnag disabled or not configured via args/env markers"}))])}
+
     # --------------------------
     # PARALLEL INGESTION BRANCHES
     # --------------------------
     - ingest_branches_parallel:
         parallel:
-          shared: [results, errors, status, dq_status]
+          shared: [results, errors, status, dq_status, preflight_status]
           branches:
             - branch_a_jira:
                 steps:
@@ -91,49 +153,77 @@ main:
                       assign:
                         - branch_a_started_at: ${sys.now()}
                   - jira_try:
-                      try:
-                        steps:
-                          - jira_call:
-                              call: http.post
-                              args:
-                                url: ${jira_url}
-                                timeout: 600
-                                auth:
-                                  type: OIDC
-                                  audience: ${jira_url}
-                                body: ${payload_jira}
-                              result: jira_resp
-                          - jira_store:
-                              assign:
-                                - results.jira: ${jira_resp.body}
-                      except:
-                        as: e
-                        steps:
-                          - jira_err:
-                              assign:
-                                - errors: ${list.concat(errors, ["jira - " + text.decode(json.encode(e))])}
+                      switch:
+                        - condition: ${preflight_status.jira.ready}
+                          steps:
+                            - jira_call_try:
+                                try:
+                                  steps:
+                                    - jira_call:
+                                        call: http.post
+                                        args:
+                                          url: ${jira_url}
+                                          timeout: 600
+                                          auth:
+                                            type: OIDC
+                                            audience: ${jira_url}
+                                          body: ${payload_jira}
+                                        result: jira_resp
+                                    - jira_store:
+                                        assign:
+                                          - results.jira: ${jira_resp.body}
+                                except:
+                                  as: e
+                                  steps:
+                                    - jira_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, ["jira - " + text.decode(json.encode(e))])}
+                        - condition: ${not preflight_status.jira.ready}
+                          steps:
+                            - jira_skipped_log:
+                                call: sys.log
+                                args:
+                                  severity: "WARNING"
+                                  data:
+                                    service: "jira"
+                                    event: "skipped_by_preflight"
+                                    preflight: ${preflight_status.jira}
                   - jira_changelog_try:
-                      try:
-                        steps:
-                          - jira_changelog_call:
-                              call: http.post
-                              args:
-                                url: ${jira_changelog_url}
-                                timeout: 600
-                                auth:
-                                  type: OIDC
-                                  audience: ${jira_changelog_url}
-                                body: ${payload_changelog}
-                              result: jcl_resp
-                          - jira_changelog_store:
-                              assign:
-                                - results.jira_changelog: ${jcl_resp.body}
-                      except:
-                        as: e
-                        steps:
-                          - jcl_err:
-                              assign:
-                                - errors: ${list.concat(errors, ["jira_changelog - " + text.decode(json.encode(e))])}
+                      switch:
+                        - condition: ${preflight_status.jira_changelog.ready}
+                          steps:
+                            - jira_changelog_call_try:
+                                try:
+                                  steps:
+                                    - jira_changelog_call:
+                                        call: http.post
+                                        args:
+                                          url: ${jira_changelog_url}
+                                          timeout: 600
+                                          auth:
+                                            type: OIDC
+                                            audience: ${jira_changelog_url}
+                                          body: ${payload_changelog}
+                                        result: jcl_resp
+                                    - jira_changelog_store:
+                                        assign:
+                                          - results.jira_changelog: ${jcl_resp.body}
+                                except:
+                                  as: e
+                                  steps:
+                                    - jcl_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, ["jira_changelog - " + text.decode(json.encode(e))])}
+                        - condition: ${not preflight_status.jira_changelog.ready}
+                          steps:
+                            - jira_changelog_skipped_log:
+                                call: sys.log
+                                args:
+                                  severity: "WARNING"
+                                  data:
+                                    service: "jira_changelog"
+                                    event: "skipped_by_preflight"
+                                    preflight: ${preflight_status.jira_changelog}
                   - branch_a_log_elapsed:
                       call: sys.log
                       args:
@@ -150,71 +240,83 @@ main:
                       assign:
                         - branch_b_started_at: ${sys.now()}
                   - testrail_try:
-                      try:
-                        steps:
-                          - testrail_call:
-                              call: http.post
-                              args:
-                                url: ${testrail_url}
-                                timeout: 300
-                                auth:
-                                  type: OIDC
-                                  audience: ${testrail_url}
-                                body: ${payload_testrail}
-                              result: tr_resp
-                          - testrail_store:
-                              assign:
-                                - results.testrail: ${tr_resp.body}
-                      except:
-                        as: e
-                        steps:
-                          - tr_err:
-                              assign:
-                                - errors: ${list.concat(errors, ["testrail - " + text.decode(json.encode(e))])}
+                      switch:
+                        - condition: ${preflight_status.testrail.ready}
+                          steps:
+                            - testrail_call_try:
+                                try:
+                                  steps:
+                                    - testrail_call:
+                                        call: http.post
+                                        args:
+                                          url: ${testrail_url}
+                                          timeout: 300
+                                          auth:
+                                            type: OIDC
+                                            audience: ${testrail_url}
+                                          body: ${payload_testrail}
+                                        result: tr_resp
+                                    - testrail_store:
+                                        assign:
+                                          - results.testrail: ${tr_resp.body}
+                                except:
+                                  as: e
+                                  steps:
+                                    - tr_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, ["testrail - " + text.decode(json.encode(e))])}
                   - testrail_users_try:
-                      try:
-                        steps:
-                          - testrail_users_call:
-                              call: http.post
-                              args:
-                                url: ${testrail_users_url}
-                                timeout: 180
-                                auth:
-                                  type: OIDC
-                                  audience: ${testrail_users_url}
-                                body: {}
-                              result: tru_resp
-                          - testrail_users_store:
-                              assign:
-                                - results.testrail_users: ${tru_resp.body}
-                      except:
-                        as: e
-                        steps:
-                          - tru_err:
-                              assign:
-                                - errors: ${list.concat(errors, ["testrail_users - " + text.decode(json.encode(e))])}
+                      switch:
+                        - condition: ${preflight_status.testrail_users.ready}
+                          steps:
+                            - testrail_users_call_try:
+                                try:
+                                  steps:
+                                    - testrail_users_call:
+                                        call: http.post
+                                        args:
+                                          url: ${testrail_users_url}
+                                          timeout: 180
+                                          auth:
+                                            type: OIDC
+                                            audience: ${testrail_users_url}
+                                          body: {}
+                                        result: tru_resp
+                                    - testrail_users_store:
+                                        assign:
+                                          - results.testrail_users: ${tru_resp.body}
+                                except:
+                                  as: e
+                                  steps:
+                                    - tru_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, ["testrail_users - " + text.decode(json.encode(e))])}
                   - testrail_results_try:
-                      try:
-                        steps:
-                          - testrail_results_call:
-                              call: http.post
-                              args:
-                                url: ${testrail_results_url}
-                                timeout: 1200
-                                auth:
-                                  type: OIDC
-                                  audience: ${testrail_results_url}
-                                body: ${payload_testrail_results}
-                              result: trr_resp
-                          - testrail_results_store:
-                              assign:
-                                - results.testrail_results: ${trr_resp.body}
-                      except:
-                        as: e
-                        steps:
-                          - trr_err:
-                              assign:
-                                - errors: ${list.concat(errors, ["testrail_results - " + text.decode(json.encode(e))])}
+                      switch:
+                        - condition: ${preflight_status.testrail_results.ready}
+                          steps:
+                            - testrail_results_call_try:
+                                try:
+                                  steps:
+                                    - testrail_results_call:
+                                        call: http.post
+                                        args:
+                                          url: ${testrail_results_url}
+                                          timeout: 1200
+                                          auth:
+                                            type: OIDC
+                                            audience: ${testrail_results_url}
+                                          body: ${payload_testrail_results}
+                                        result: trr_resp
+                                    - testrail_results_store:
+                                        assign:
+                                          - results.testrail_results: ${trr_resp.body}
+                                except:
+                                  as: e
+                                  steps:
+                                    - trr_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, ["testrail_results - " + text.decode(json.encode(e))])}
                   - branch_b_log_elapsed:
                       call: sys.log
                       args:
@@ -231,27 +333,31 @@ main:
                       assign:
                         - branch_c_started_at: ${sys.now()}
                   - bugsnag_try:
-                      try:
-                        steps:
-                          - bugsnag_call:
-                              call: http.post
-                              args:
-                                url: ${bugsnag_url}
-                                timeout: 600
-                                auth:
-                                  type: OIDC
-                                  audience: ${bugsnag_url}
-                                body: ${payload_bugsnag}
-                              result: bs_resp
-                          - bugsnag_store:
-                              assign:
-                                - results.bugsnag: ${bs_resp.body}
-                      except:
-                        as: e
-                        steps:
-                          - bs_err:
-                              assign:
-                                - errors: ${list.concat(errors, ["bugsnag - " + text.decode(json.encode(e))])}
+                      switch:
+                        - condition: ${preflight_status.bugsnag.ready}
+                          steps:
+                            - bugsnag_call_try:
+                                try:
+                                  steps:
+                                    - bugsnag_call:
+                                        call: http.post
+                                        args:
+                                          url: ${bugsnag_url}
+                                          timeout: 600
+                                          auth:
+                                            type: OIDC
+                                            audience: ${bugsnag_url}
+                                          body: ${payload_bugsnag}
+                                        result: bs_resp
+                                    - bugsnag_store:
+                                        assign:
+                                          - results.bugsnag: ${bs_resp.body}
+                                except:
+                                  as: e
+                                  steps:
+                                    - bs_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, ["bugsnag - " + text.decode(json.encode(e))])}
                   - branch_c_log_elapsed:
                       call: sys.log
                       args:
@@ -550,4 +656,5 @@ main:
           status: ${status}
           dq_status: ${dq_status}
           results: ${results}
+          preflight_status: ${preflight_status}
           errors: ${errors}

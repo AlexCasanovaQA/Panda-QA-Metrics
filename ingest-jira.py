@@ -55,6 +55,20 @@ SPRINT_FIELD_ID = os.environ.get("JIRA_SPRINT_FIELD_ID", "customfield_10020")
 RESOLVED_SEVERITY_FIELD_ID: Optional[str] = SEVERITY_FIELD_ID
 
 
+def _error_response(error_type: str, code: str, message: str, status_code: int, details: Any = None):
+    payload: Dict[str, Any] = {
+        "ok": False,
+        "error": {
+            "type": error_type,
+            "code": code,
+            "message": message,
+        },
+    }
+    if details is not None:
+        payload["error"]["details"] = details
+    return (json.dumps(payload), status_code, {"Content-Type": "application/json"})
+
+
 def _jira_search_fields() -> str:
     """Build the Jira field list for search requests.
 
@@ -404,11 +418,7 @@ def ingest_jira(request):
 
     lookback_days = int(req_json.get("lookback_days") or DEFAULT_LOOKBACK_DAYS)
     if lookback_days <= 0:
-        return (
-            json.dumps({"error": "lookback_days must be > 0"}),
-            400,
-            {"Content-Type": "application/json"},
-        )
+        return _error_response("config_error", "invalid_lookback_days", "lookback_days must be > 0", 400)
 
     project_keys_raw = (req_json.get("project_keys") or JIRA_PROJECT_KEYS)
     if isinstance(project_keys_raw, list):
@@ -416,10 +426,11 @@ def ingest_jira(request):
     else:
         project_keys = [p.strip() for p in str(project_keys_raw).split(",") if p.strip()]
     if not project_keys:
-        return (
-            json.dumps({"error": "No Jira projects provided. Set JIRA_PROJECT_KEYS or pass project_keys"}),
+        return _error_response(
+            "config_error",
+            "missing_project_keys",
+            "No Jira projects provided. Set JIRA_PROJECT_KEYS or pass project_keys",
             400,
-            {"Content-Type": "application/json"},
         )
 
     until = _utc_now()
@@ -449,11 +460,7 @@ def ingest_jira(request):
                 errors = bq.insert_rows_json(table_ref, rows, row_ids=row_ids)
                 if errors:
                     print("BigQuery insert errors:", errors[:3])
-                    return (
-                        json.dumps({"error": "BigQuery insert failed", "details": errors[:3]}),
-                        500,
-                        {"Content-Type": "application/json"},
-                    )
+                    return _error_response("runtime_error", "bigquery_insert_failed", "BigQuery insert failed", 500, errors[:3])
                 inserted += len(rows)
                 print(f"Inserted {inserted} rows so far")
                 rows.clear()
@@ -466,11 +473,7 @@ def ingest_jira(request):
         errors = bq.insert_rows_json(table_ref, rows, row_ids=row_ids)
         if errors:
             print("BigQuery insert errors:", errors[:3])
-            return (
-                json.dumps({"error": "BigQuery insert failed", "details": errors[:3]}),
-                500,
-                {"Content-Type": "application/json"},
-            )
+            return _error_response("runtime_error", "bigquery_insert_failed", "BigQuery insert failed", 500, errors[:3])
         inserted += len(rows)
 
     return (
