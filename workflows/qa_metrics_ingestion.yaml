@@ -426,7 +426,7 @@ main:
                                     preflight: ${preflight_status.jira_changelog}
                   - jira_status_transitions_data_quality_gate:
                       switch:
-                        - condition: ${preflight_status.jira_changelog.ready}
+                        - condition: ${preflight_status.jira_changelog.ready and results.jira_changelog != null and default(map.get(results.jira_changelog, "ok"), true) and (map.get(results.jira_changelog, "status") == null or text.to_lower("" + map.get(results.jira_changelog, "status")) == "ok")}
                           steps:
                             - jira_status_transitions_data_quality_try:
                                 try:
@@ -470,6 +470,8 @@ main:
                                           severity: ${if(jira_dq_is_ok, "INFO", "ERROR")}
                                           data:
                                             event: "jira_status_transitions_data_quality_gate"
+                                            dq_executed: true
+                                            dq_skipped_due_to_upstream_ingestion: false
                                             status: ${if(jira_dq_is_ok, "ok", "non_ok")}
                                             checks: ${results.jira_status_transitions_data_quality.checks}
                                     - jira_status_transitions_data_quality_set_non_ok:
@@ -500,16 +502,29 @@ main:
                                         assign:
                                           - dq_status: "non_ok"
                                           - errors: ${list.concat(errors, ["jira_status_transitions_data_quality - " + text.decode(json.encode(e))])}
-                        - condition: ${not preflight_status.jira_changelog.ready}
+                        - condition: ${true}
                           steps:
+                            - jira_status_transitions_data_quality_mark_skipped:
+                                assign:
+                                  - jira_status_transitions_data_quality_skip_reason: ${if(not preflight_status.jira_changelog.ready, "jira_changelog_preflight_not_ready:" + preflight_status.jira_changelog.reason, if(results.jira_changelog == null, "jira_changelog_result_missing", if(map.get(results.jira_changelog, "ok") != null and not default(map.get(results.jira_changelog, "ok"), false), "jira_changelog_result_not_ok", if(map.get(results.jira_changelog, "status") != null and text.to_lower("" + map.get(results.jira_changelog, "status")) != "ok", "jira_changelog_status_not_ok", "jira_changelog_ingestion_not_successful"))))}
+                                  - results.jira_status_transitions_data_quality:
+                                      status: "skipped"
+                                      skip_reason: ${jira_status_transitions_data_quality_skip_reason}
+                                      checks: []
                             - jira_status_transitions_data_quality_skipped_log:
                                 call: sys.log
                                 args:
                                   severity: "WARNING"
                                   data:
                                     service: "jira_status_transitions_data_quality"
-                                    event: "skipped_by_preflight"
+                                    event: "skipped_by_upstream_ingestion"
+                                    dq_executed: false
+                                    dq_skipped_due_to_upstream_ingestion: true
+                                    skip_reason: ${jira_status_transitions_data_quality_skip_reason}
                                     preflight: ${preflight_status.jira_changelog}
+                                    jira_changelog_result_present: ${results.jira_changelog != null}
+                                    jira_changelog_ok_field: ${if(results.jira_changelog != null, map.get(results.jira_changelog, "ok"), null)}
+                                    jira_changelog_status_field: ${if(results.jira_changelog != null, map.get(results.jira_changelog, "status"), null)}
                   - branch_a_log_elapsed:
                       call: sys.log
                       args:
