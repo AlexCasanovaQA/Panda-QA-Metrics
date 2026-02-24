@@ -11,13 +11,13 @@ main:
           - project_keys_list: []
           - raw_project_keys_list: []
 
-          - jira_url: "https://ingest-jira-147201244534.europe-west1.run.app"
-          - jira_changelog_url: "https://ingest-jira-changelog-147201244534.europe-west1.run.app"
-          - testrail_url: "https://ingest-testrail-147201244534.europe-west1.run.app"
-          - testrail_users_url: "https://ingest-testrail-users-147201244534.europe-west1.run.app"
-          - testrail_results_url: "https://ingest-testrail-results-147201244534.europe-west1.run.app"
-          - bugsnag_url: "https://ingest-bugsnag-147201244534.europe-west1.run.app"
-          - gamebench_url: "https://ingest-gamebench-147201244534.europe-west1.run.app"
+          - jira_url: ${default(map.get(request_args, "jira_url"), sys.get_env("QA_METRICS_JIRA_URL"))}
+          - jira_changelog_url: ${default(map.get(request_args, "jira_changelog_url"), sys.get_env("QA_METRICS_JIRA_CHANGELOG_URL"))}
+          - testrail_url: ${default(map.get(request_args, "testrail_url"), sys.get_env("QA_METRICS_TESTRAIL_URL"))}
+          - testrail_users_url: ${default(map.get(request_args, "testrail_users_url"), sys.get_env("QA_METRICS_TESTRAIL_USERS_URL"))}
+          - testrail_results_url: ${default(map.get(request_args, "testrail_results_url"), sys.get_env("QA_METRICS_TESTRAIL_RESULTS_URL"))}
+          - bugsnag_url: ${default(map.get(request_args, "bugsnag_url"), sys.get_env("QA_METRICS_BUGSNAG_URL"))}
+          - gamebench_url: ${default(map.get(request_args, "gamebench_url"), sys.get_env("QA_METRICS_GAMEBENCH_URL"))}
           - project_id: ${default(sys.get_env("GOOGLE_CLOUD_PROJECT_ID"), sys.get_env("GOOGLE_CLOUD_PROJECT"))}
           - dq_alert_webhook_url: ${default(map.get(request_args, "dq_alert_webhook_url"), "")}
 
