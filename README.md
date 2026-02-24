@@ -218,15 +218,16 @@ Privacy is enforced in the model with a Looker **user attribute**:
 - anything else → only public
 
 ### Files
-- `models/qa_metrics.model.lkml`
+- `models/panda_qa_metrics.model.lkml`
 - `views/*.view.lkml`
 - Dashboards:
   - `dashboards/qa_kpis_public.dashboard.lookml`
   - `dashboards/qa_kpis_private.dashboard.lookml`
+  - `dashboards/qa_executive.dashboard.lookml`
 
 ### IMPORTANT
 Update the model connection name:
-- In `models/qa_metrics.model.lkml` change:
+- In `models/panda_qa_metrics.model.lkml` change:
   - `connection: "YOUR_BIGQUERY_CONNECTION"`
 
 ## KPI definitions (source-of-truth)
