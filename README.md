@@ -88,7 +88,19 @@ Recommended operating model:
 - Use `bigquery/build_size_manual_inserts_template.sql` as the starter template.
 
 Validation expectation:
-- After inserting at least 2-3 rows (for example across two weeks and two platforms), Build Size tiles should stop showing `No results`.
+- After inserting at least 2-4 rows reales (for example across two weeks and two platforms), Build Size tiles should stop showing `No results`.
+
+### Runbook (carga institucionalizada mínima) — Build Size manual
+1. **Preparar datos semanales** (UTC): recopilar `platform`, `environment`, `build_version`, `build_size_mb`, `metric_date`.
+2. **Ejecutar carga** usando `bigquery/build_size_manual_inserts_template.sql` (reemplazar valores de ejemplo por datos reales).
+3. **Validar en BigQuery**:
+   - Confirmar que existen al menos **2-4 filas reales** recientes en `qa_metrics.build_size_manual`.
+   - Recomendado: validar con una consulta de conteo de últimos 30 días (incluida como bloque comentado en el template SQL).
+4. **Validar en Looker (qa_executive)**:
+   - Tile **snapshot** (`current_build_size_by_platform`) **ignora Date Range** por diseño.
+   - Tile **trend** (`build_size_mb_trend`) **escucha Date Range** por diseño.
+   - Resultado esperado: desaparece el estado `No results` en Build Size.
+5. **Operación continua**: mantener una frecuencia mínima de 1 carga por semana y plataforma/entorno.
 
 ---
 
@@ -129,6 +141,7 @@ Post-ingestion quality checks are enforced in `workflows/qa_metrics_ingestion.ya
 SLA and validation windows (**UTC**):
 - `qa_metrics.gamebench_sessions_latest` must have `row_count > 0` in the **last 24 hours** (`time_pushed >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)`).
 - `qa_metrics.gamebench_daily_metrics` must have `row_count > 0` in the **last 2 days** (`metric_date >= DATE_SUB(CURRENT_DATE("UTC"), INTERVAL 2 DAY)`).
+- `qa_metrics.build_size_manual` is checked as an operational warning for emptiness in the **last 30 days** (`metric_date >= DATE_SUB(CURRENT_DATE("UTC"), INTERVAL 30 DAY)`) to alert if manual feed is missing.
 
 Workflow behavior on check failure:
 - Returns non-OK workflow output (`status: non_ok`, `dq_status: non_ok`).
