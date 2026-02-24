@@ -22,6 +22,8 @@ main:
           - gamebench_url: ${default(map.get(request_args, "gamebench_url"), sys.get_env("QA_METRICS_GAMEBENCH_URL"))}
           - project_id: ${default(sys.get_env("GOOGLE_CLOUD_PROJECT_ID"), sys.get_env("GOOGLE_CLOUD_PROJECT"))}
           - dq_alert_webhook_url: ${default(map.get(request_args, "dq_alert_webhook_url"), "")}
+          - request_id: ${default(map.get(request_args, "request_id"), default(map.get(request_args, "requestId"), default(map.get(request_args, "x_request_id"), default(map.get(request_args, "x-request-id"), ""))))}
+          - correlation_id: ${default(map.get(request_args, "correlation_id"), default(map.get(request_args, "correlationId"), default(map.get(request_args, "x_correlation_id"), default(map.get(request_args, "x-correlation-id"), request_id))))}
 
           - results:
               jira: null
@@ -356,6 +358,29 @@ main:
                       switch:
                         - condition: ${preflight_status.jira.ready}
                           steps:
+                            - jira_retry_context_init:
+                                assign:
+                                  - jira_attempt: 1
+                                  - jira_max_attempts: 3
+                                  - jira_backoff_seconds: 1
+                                  - jira_endpoint_path: ${default(text.replace_all_regex(text.replace_all_regex(jira_url, "^https?://[^/]+", ""), "\\?.*$", ""), "/")}
+                                  - jira_request_context:
+                                      endpoint_path: ${if(jira_endpoint_path == "", "/", jira_endpoint_path)}
+                                      query_window:
+                                        lookback_days: ${payload_jira.lookback_days}
+                                      project_filters: ${payload_jira.project_keys}
+                                      request_id: ${request_id}
+                                      correlation_id: ${correlation_id}
+                            - jira_attempt_log:
+                                call: sys.log
+                                args:
+                                  severity: "INFO"
+                                  data:
+                                    service: "jira"
+                                    event: "ingestion_attempt"
+                                    attempt: ${jira_attempt}
+                                    max_attempts: ${jira_max_attempts}
+                                    request_context: ${jira_request_context}
                             - jira_call_try:
                                 try:
                                   steps:
@@ -372,12 +397,65 @@ main:
                                     - jira_store:
                                         assign:
                                           - results.jira: ${jira_resp.body}
+                                    - jira_success_log:
+                                        call: sys.log
+                                        args:
+                                          severity: "INFO"
+                                          data:
+                                            service: "jira"
+                                            event: "ingestion_success"
+                                            attempt: ${jira_attempt}
+                                            request_context: ${jira_request_context}
                                 except:
                                   as: e
                                   steps:
+                                    - jira_retry_eval:
+                                        switch:
+                                          - condition: ${int(default(map.get(e, "code"), 0)) >= 500 and int(default(map.get(e, "code"), 0)) < 600 and jira_attempt < jira_max_attempts}
+                                            steps:
+                                              - jira_retry_log:
+                                                  call: sys.log
+                                                  args:
+                                                    severity: "WARNING"
+                                                    data:
+                                                      service: "jira"
+                                                      event: "ingestion_retry_scheduled"
+                                                      attempt: ${jira_attempt}
+                                                      next_attempt: ${jira_attempt + 1}
+                                                      max_attempts: ${jira_max_attempts}
+                                                      backoff_seconds: ${jira_backoff_seconds}
+                                                      response_code: ${int(default(map.get(e, "code"), 0))}
+                                                      request_context: ${jira_request_context}
+                                                      detail: ${text.decode(json.encode(e))}
+                                              - jira_retry_sleep:
+                                                  call: sys.sleep
+                                                  args:
+                                                    seconds: ${jira_backoff_seconds}
+                                              - jira_retry_increment:
+                                                  assign:
+                                                    - jira_attempt: ${jira_attempt + 1}
+                                                    - jira_backoff_seconds: ${jira_backoff_seconds * 2}
+                                              - jira_retry_continue:
+                                                  next: jira_attempt_log
+                                    - jira_final_error_payload:
+                                        assign:
+                                          - jira_error_payload:
+                                              service: "jira"
+                                              type: "ingestion_error"
+                                              code: "jira_call_failed"
+                                              message: "Failed to ingest Jira metrics after retries"
+                                              retries_attempted: ${jira_attempt}
+                                              max_attempts: ${jira_max_attempts}
+                                              request_context: ${jira_request_context}
+                                              detail: ${e}
+                                    - jira_final_error_log:
+                                        call: sys.log
+                                        args:
+                                          severity: "ERROR"
+                                          data: ${jira_error_payload}
                                     - jira_err:
                                         assign:
-                                          - errors: ${list.concat(errors, ["{\"service\":\"jira\",\"type\":\"ingestion_error\",\"code\":\"jira_call_failed\",\"message\":\"Failed to ingest Jira metrics\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, [text.decode(json.encode(jira_error_payload))])}
                         - condition: ${not preflight_status.jira.ready}
                           steps:
                             - jira_skipped_log:
