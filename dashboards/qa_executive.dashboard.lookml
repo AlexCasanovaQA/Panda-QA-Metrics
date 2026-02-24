@@ -548,10 +548,8 @@
     filters:
       jira_mttr_claimed_fixed_daily.event_date_date: "7 days"
     sorts: [jira_mttr_claimed_fixed_daily.event_date_date]
-    listen:
-      date_range: jira_mttr_claimed_fixed_daily.event_date_date
     note_display: hover
-    note_text: "Definition: Daily operational MTTR in hours. Calculation: average(first transition to Resolved/Closed/Verified - created_at), aggregated by claimed fixed date."
+    note_text: "Definition: Daily MTTR in hours for bugs claimed fixed in the last 7 days. Calculation: average(first transition to Resolved/Closed/Verified - created_at), aggregated by claimed fixed date. This tile uses a fixed 7-day window and ignores the dashboard Date Range filter."
     series_colors: {jira_mttr_claimed_fixed_daily.avg_mttr_hours: "#9B51E0"}
     row: 70
     col: 12
@@ -630,10 +628,8 @@
       testrail_runs_latest.is_completed: "yes"
     sorts: [testrail_runs_latest.completed_on_date desc, testrail_runs_latest.run_id desc]
     limit: 1
-    listen:
-      date_range: testrail_runs_latest.completed_on_date
     note_display: hover
-    note_text: "Definition: Pass rate of the latest completed run. Calculation: SUM(passed)/SUM(passed+failed+blocked+retest) using the most recent run by completed_on and run_id."
+    note_text: "Definition: Pass rate of the latest completed TestRail run. Calculation: SUM(passed)/SUM(passed+failed+blocked+retest) for a single row selected by sorting completed_on desc, run_id desc, and limit 1. This tile ignores the dashboard Date Range filter."
     row: 82
     col: 12
     width: 6
@@ -645,12 +641,12 @@
     model: panda_qa_metrics
     explore: testrail_bvt_latest
     fields: [testrail_bvt_latest.completed_on_date, testrail_bvt_latest.pass_rate]
+    filters:
+      testrail_bvt_latest.completed_on_date: "NOT NULL"
     sorts: [testrail_bvt_latest.completed_on_date desc, testrail_bvt_latest.run_id desc]
     limit: 1
-    listen:
-      date_range: testrail_bvt_latest.completed_on_date
     note_display: hover
-    note_text: "Definition: BVT pass rate for the latest available build/run. Calculation: pass_rate from testrail_bvt_latest for the most recent record."
+    note_text: "Definition: BVT pass rate for the latest completed build/run. Calculation: pass_rate from a single row selected by filtering completed_on is not null, sorting completed_on desc and run_id desc, and limit 1. This tile ignores the dashboard Date Range filter."
     row: 82
     col: 18
     width: 6
