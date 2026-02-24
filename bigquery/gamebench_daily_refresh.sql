@@ -3,7 +3,17 @@
 -- Self-heal legacy environments where qa_metrics.gamebench_daily_metrics
 -- may still exist as a VIEW from older setup scripts.
 -- The latest day is consumed in Looker via is_latest_metric_date filters on this table.
-DROP VIEW IF EXISTS `qa_metrics.gamebench_daily_metrics`;
+DECLARE gamebench_daily_metrics_type STRING;
+SET gamebench_daily_metrics_type = (
+  SELECT table_type
+  FROM `qa_metrics.INFORMATION_SCHEMA.TABLES`
+  WHERE table_name = 'gamebench_daily_metrics'
+  LIMIT 1
+);
+
+IF gamebench_daily_metrics_type = 'VIEW' THEN
+  EXECUTE IMMEDIATE 'DROP VIEW `qa_metrics.gamebench_daily_metrics`';
+END IF;
 
 CREATE TABLE IF NOT EXISTS `qa_metrics.gamebench_daily_metrics` (
   metric_date DATE,
