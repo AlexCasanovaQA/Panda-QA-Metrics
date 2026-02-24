@@ -124,13 +124,9 @@ main:
                                 - project_keys_list: ${list.concat(project_keys_list, [project_key_trimmed])}
               - set_payload_project_keys:
                   assign:
+                    - project_keys_csv: ${text.join(project_keys_list, ",")}
                     - payload_jira.project_keys: ${project_keys_list}
-
-    - log_effective_project_keys:
-        call: sys.log
-        args:
-          severity: "INFO"
-          text: '${"qa_metrics_ingestion project keys: " + payload_changelog.project_keys}'
+                    - payload_changelog.project_keys: ${project_keys_csv}
 
     - preflight_validate_config:
         steps:
@@ -138,14 +134,18 @@ main:
               switch:
                 - condition: ${len(project_keys_list) == 0}
                   steps:
-                    - preflight_jira_not_ready:
+                    - set_hard_fail:
                         assign:
-                          - preflight_status.jira.ready: false
-                          - preflight_status.jira.reason: "missing_project_keys"
-                          - preflight_status.jira_changelog.ready: false
-                          - preflight_status.jira_changelog.reason: "missing_project_keys"
+                          - status: "non_ok"
+                          - dq_status: "non_ok"
                           - errors: ${list.concat(errors, ["{\"service\":\"jira\",\"type\":\"config_error\",\"code\":\"missing_project_keys\",\"message\":\"project_keys_csv or project_keys is required for Jira ingestion\"}"])}
                           - errors: ${list.concat(errors, ["{\"service\":\"jira_changelog\",\"type\":\"config_error\",\"code\":\"missing_project_keys\",\"message\":\"project_keys_csv or project_keys is required for Jira changelog ingestion\"}"])}
+                    - return_early:
+                        return:
+                          status: ${status}
+                          dq_status: ${dq_status}
+                          errors: ${errors}
+                          results: ${results}
           - preflight_testrail_flags:
               switch:
                 - condition: ${include_testrail_results and (text.to_lower("" + testrail_enabled) != "true" or text.to_lower("" + testrail_configured) != "true")}
@@ -233,6 +233,12 @@ main:
                             - gamebench_smoke_err_warning_store:
                                 assign:
                                   - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"event\":\"health_check_failed\",\"type\":\"warning\",\"code\":\"gamebench_health_check_failed\",\"message\":\"Failed to call Gamebench health endpoint\"}"])}
+
+    - log_effective_project_keys:
+        call: sys.log
+        args:
+          severity: "INFO"
+          text: '${"qa_metrics_ingestion project keys: " + payload_changelog.project_keys}'
 
     # --------------------------
     # PARALLEL INGESTION BRANCHES
