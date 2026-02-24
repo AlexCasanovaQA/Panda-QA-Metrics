@@ -5,7 +5,7 @@ import random
 import re
 from functools import lru_cache
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import google.auth
 import requests
@@ -32,9 +32,6 @@ DEFAULT_APP_PACKAGES = os.environ.get(
 DEFAULT_APP_PACKAGES_ANDROID = os.environ.get("GAMEBENCH_APP_PACKAGES_ANDROID", DEFAULT_APP_PACKAGES)
 DEFAULT_APP_PACKAGES_IOS = os.environ.get("GAMEBENCH_APP_PACKAGES_IOS", DEFAULT_APP_PACKAGES)
 
-# If GAMEBENCH_USER isn't set, we fall back to this to keep it "ready".
-DEFAULT_USER = os.environ.get("GAMEBENCH_USER", "alex.casanova@scopely.com")
-
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "30"))
 MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "6"))
 BASE_BACKOFF = float(os.environ.get("BASE_BACKOFF_SECONDS", "1.0"))
@@ -50,9 +47,6 @@ def _secret(name: str) -> str:
 def _token() -> str:
     return _secret("GAMEBENCH_TOKEN")
 
-def _auth() -> Tuple[str, str]:
-    return (DEFAULT_USER, _token())
-
 def _req(method: str, url: str, *, json_body: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> requests.Response:
     last_exc: Optional[Exception] = None
     for attempt in range(MAX_RETRIES):
@@ -60,8 +54,11 @@ def _req(method: str, url: str, *, json_body: Optional[Dict[str, Any]] = None, p
             r = requests.request(
                 method,
                 url,
-                auth=_auth(),
-                headers={"accept": "application/json", "Content-Type": "application/json"},
+                headers={
+                    "accept": "application/json",
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {_token()}",
+                },
                 params=params,
                 json=json_body,
                 timeout=HTTP_TIMEOUT,
@@ -224,6 +221,10 @@ def _platform_matches(target_platform: Optional[str], source_platform: Optional[
 
     return target_platform in source_platform
 
+def _session_dashboard_url(session_id: str, company_id: str, collection_id: str) -> str:
+    base = f"{BASE_URL.rstrip('/')}/dashboard/sessions"
+    return f"{base}?collectionId={collection_id}&companyId={company_id}&sessionId={session_id}"
+
 def ingest(days: int, platform: Optional[str], company_id: str, collection_id: str, app_packages: List[str]) -> Dict[str, Any]:
     since = datetime.now(timezone.utc) - timedelta(days=days)
     ingested_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -281,7 +282,7 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
                 "platform": (str(plat).lower() if plat else None),
                 "app_package": app_pkg,
                 "app_version": _get(detail, "appVersion") or _get(detail, "app_version"),
-                "user_email": _get(detail, "user") or _get(detail, "account") or DEFAULT_USER,
+                "user_email": _get(detail, "user") or _get(detail, "account"),
                 "device_model": _get(detail, "device") or _get(detail, "deviceModel") or _get(detail, "device_model"),
                 "device_manufacturer": _get(detail, "manufacturer") or _get(detail, "deviceManufacturer") or _get(detail, "device_manufacturer"),
                 "os_version": _get(detail, "osVersion") or _get(detail, "os_version"),
@@ -303,7 +304,7 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
                 "battery_mah": _f(_get(detail, "batteryMah") or _get(detail, "battery_mah")),
                 "download_mb": _f(_get(detail, "downloadMb") or _get(detail, "download_mb")),
                 "upload_mb": _f(_get(detail, "uploadMb") or _get(detail, "upload_mb")),
-                "session_url": _get(detail, "url") or f"{BASE_URL.rstrip('/')}/dashboard/sessions/{sid}/Summary?collectionId={collection_id}&companyId={company_id}",
+                "session_url": _get(detail, "url") or _session_dashboard_url(str(sid), company_id, collection_id),
                 "raw_json": json.dumps(detail, ensure_ascii=False)[:500000],
                 "_ingested_at": ingested_at,
             }

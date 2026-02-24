@@ -34,6 +34,13 @@ Create these secrets in the same GCP project where BigQuery lives (names must ma
 - `BUGSNAG_TOKEN`
 - `BUGSNAG_PROJECT_IDS` (comma-separated)
 
+### Gamebench
+- `GAMEBENCH_TOKEN` (API token used as `Authorization: Bearer <token>`)
+- `GAMEBENCH_BASE_URL` (API host, default `https://web.gamebench.net`)
+- `GAMEBENCH_COMPANY_ID` (default `AWGaWNjXBxsUazsJuoUp`)
+- `GAMEBENCH_COLLECTION_ID` (default `7cf80f11-6915-4e6c-b70c-4ad7ed44aaf9`)
+- Dashboard reference URL: `https://web.gamebench.net/dashboard/sessions?collectionId=7cf80f11-6915-4e6c-b70c-4ad7ed44aaf9&companyId=AWGaWNjXBxsUazsJuoUp`
+
 ---
 
 ## 2) BigQuery Setup
@@ -211,7 +218,7 @@ Pass Jira keys explicitly in the workflow invocation (`project_keys_csv` or `pro
 Gamebench preflight requirements:
 - `QA_METRICS_GAMEBENCH_URL` (or runtime arg `gamebench_url`) is the **ingest service URL** used by the workflow to invoke the Gamebench ingestion Cloud Run service.
 - `QA_METRICS_GAMEBENCH_API_BASE_URL` (or runtime arg `gamebench_api_base_url`, fallback env `GAMEBENCH_BASE_URL`) must point to the **actual Gamebench provider API host** (for example `https://web.gamebench.net`).
-- Preflight now probes `${gamebench_api_base_url}/v1/sessions` and treats `200` (reachable) plus `401/403` (auth required but host/path valid) as healthy.
+- Preflight now probes `${gamebench_api_base_url}/v1/sessions` and treats `200` (reachable) plus `401/403` (token required but host/path valid) as healthy.
 - `require_gamebench_healthz` (or env `QA_METRICS_REQUIRE_GAMEBENCH_HEALTHZ`) controls strictness:
   - `true` (default): preflight fails closed when the Gamebench probe fails, and Gamebench branches are skipped.
   - `false`: probe issues are logged as warnings (including error detail), but downstream Gamebench ingestion/data-quality steps still run.
