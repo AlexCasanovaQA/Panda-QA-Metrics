@@ -33,6 +33,7 @@ MAX_RUNTIME_SECONDS = int(os.environ.get("MAX_RUNTIME_SECONDS", "240")) # <- 4 m
 MAX_ERRORS_PER_RUN = int(os.environ.get("MAX_ERRORS_PER_RUN", "5000")) # <- corta si hay muchísimo
 PER_PAGE = int(os.environ.get("BUGSNAG_PER_PAGE", "100"))              # <= 100 según docs
 BQ_INSERT_CHUNK_SIZE = int(os.environ.get("BQ_INSERT_CHUNK_SIZE", "500"))
+MAX_DAYS_OVERRIDE = int(os.environ.get("BUGSNAG_MAX_DAYS_OVERRIDE", str(LOOKBACK_DAYS)))
 
 def get_secret(name: str) -> str:
     secret_name = f"projects/{PROJECT_ID}/secrets/{name}/versions/latest"
@@ -236,19 +237,50 @@ def hello_http(request):
         return (jsonify({"status": "OK", "service": "ingest-bugsnag", "ready": True}), 200)
 
     started = time.monotonic()
+    now = datetime.now(timezone.utc)
+    days_applied: Optional[int] = None
     try:
+        payload = request.get_json(silent=True)
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            raise ValueError("JSON body must be an object")
+
+        if "days" in payload and payload["days"] is not None:
+            try:
+                days_applied = int(payload["days"])
+            except (TypeError, ValueError):
+                raise ValueError("days must be a positive integer")
+            if days_applied <= 0:
+                raise ValueError("days must be a positive integer")
+            days_applied = min(days_applied, MAX_DAYS_OVERRIDE)
+
         ensure_table()
-        since_ts = get_last_seen()
+        last_seen_ts = get_last_seen()
+        since_ts = last_seen_ts
+        if days_applied is not None:
+            since_override = now - timedelta(days=days_applied)
+            since_ts = max(last_seen_ts, since_override)
+
         inserted = fetch_and_insert_bugsnag_errors(since_ts, started_monotonic=started)
         return (jsonify({
             "status": "OK",
             "rows_inserted": inserted,
-            "since": since_ts.isoformat(),
+            "days_applied": days_applied,
+            "effective_since": since_ts.isoformat(),
             "runtime_seconds": round(time.monotonic() - started, 2),
         }), 200)
+    except ValueError as e:
+        return (jsonify({
+            "status": "ERROR",
+            "message": str(e),
+            "days_applied": days_applied,
+            "runtime_seconds": round(time.monotonic() - started, 2),
+        }), 400)
     except Exception as e:
         return (jsonify({
             "status": "ERROR",
             "message": str(e),
+            "days_applied": days_applied,
             "runtime_seconds": round(time.monotonic() - started, 2),
         }), 500)
