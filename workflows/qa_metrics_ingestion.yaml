@@ -317,7 +317,7 @@ main:
                                                       - preflight_status.gamebench.ready: false
                                                       - preflight_status.gamebench.reason: "gamebench_health_check_failed"
                                                       - gamebench_available: false
-                                                      - errors: ${list.concat(errors, [json.encode({"service":"gamebench","type":"preflight_error","code":"gamebench_health_check_failed","message":"Failed to call Gamebench health endpoint","detail":text.decode(json.encode(e))})])}
+                                                      - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"type\":\"preflight_error\",\"code\":\"gamebench_health_check_failed\",\"message\":\"Failed to call Gamebench health endpoint\",\"detail\":" + json.encode(text.decode(json.encode(e))) + "}"])}
                                             - condition: ${not require_gamebench_healthz}
                                               steps:
                                                 - gamebench_smoke_err_warning_log:
@@ -332,7 +332,7 @@ main:
                                                         detail: ${text.decode(json.encode(e))}
                                                 - gamebench_smoke_err_warning_store:
                                                     assign:
-                                                      - errors: ${list.concat(errors, [json.encode({"service":"gamebench","event":"health_check_failed","type":"warning","code":"gamebench_health_check_failed","message":"Failed to call Gamebench health endpoint","detail":text.decode(json.encode(e))})])}
+                                                      - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"event\":\"health_check_failed\",\"type\":\"warning\",\"code\":\"gamebench_health_check_failed\",\"message\":\"Failed to call Gamebench health endpoint\",\"detail\":" + json.encode(text.decode(json.encode(e))) + "}"])}
 
     - log_effective_project_keys:
         call: sys.log
@@ -506,7 +506,10 @@ main:
                           steps:
                             - jira_status_transitions_data_quality_mark_skipped:
                                 assign:
-                                  - jira_status_transitions_data_quality_skip_reason: ${if(not preflight_status.jira_changelog.ready, "jira_changelog_preflight_not_ready:" + preflight_status.jira_changelog.reason, if(results.jira_changelog == null, "jira_changelog_result_missing", if(map.get(results.jira_changelog, "ok") != null and not default(map.get(results.jira_changelog, "ok"), false), "jira_changelog_result_not_ok", if(map.get(results.jira_changelog, "status") != null and text.to_lower("" + map.get(results.jira_changelog, "status")) != "ok", "jira_changelog_status_not_ok", "jira_changelog_ingestion_not_successful"))))}
+                                  - jira_changelog_result_missing: ${results.jira_changelog == null}
+                                  - jira_changelog_ok_not_ok: ${results.jira_changelog != null and map.get(results.jira_changelog, "ok") != null and not default(map.get(results.jira_changelog, "ok"), false)}
+                                  - jira_changelog_status_not_ok: ${results.jira_changelog != null and map.get(results.jira_changelog, "status") != null and text.to_lower("" + map.get(results.jira_changelog, "status")) != "ok"}
+                                  - jira_status_transitions_data_quality_skip_reason: ${if(not preflight_status.jira_changelog.ready, "jira_changelog_preflight_not_ready:" + preflight_status.jira_changelog.reason, if(jira_changelog_result_missing, "jira_changelog_result_missing", if(jira_changelog_ok_not_ok, "jira_changelog_result_not_ok", if(jira_changelog_status_not_ok, "jira_changelog_status_not_ok", "jira_changelog_ingestion_not_successful"))))}
                                   - results.jira_status_transitions_data_quality:
                                       status: "skipped"
                                       skip_reason: ${jira_status_transitions_data_quality_skip_reason}
