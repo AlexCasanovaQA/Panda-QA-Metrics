@@ -29,6 +29,8 @@ DEFAULT_APP_PACKAGES = os.environ.get(
     "GAMEBENCH_APP_PACKAGES",
     "com.scopely.internal.wwedomination|com.scopely.wwedomination",
 )
+DEFAULT_APP_PACKAGES_ANDROID = os.environ.get("GAMEBENCH_APP_PACKAGES_ANDROID", DEFAULT_APP_PACKAGES)
+DEFAULT_APP_PACKAGES_IOS = os.environ.get("GAMEBENCH_APP_PACKAGES_IOS", DEFAULT_APP_PACKAGES)
 
 # If GAMEBENCH_USER isn't set, we fall back to this to keep it "ready".
 DEFAULT_USER = os.environ.get("GAMEBENCH_USER", "alex.casanova@scopely.com")
@@ -181,6 +183,14 @@ def _normalize_apps(app_packages: Any) -> List[str]:
         return [str(x).strip() for x in app_packages if str(x).strip()]
     if isinstance(app_packages, str):
         return _split_packages(app_packages)
+    return []
+
+def _default_apps_for_platform(platform: Optional[str]) -> List[str]:
+    target_platform = _normalize_platform_target(platform)
+    if target_platform == "android":
+        return _split_packages(DEFAULT_APP_PACKAGES_ANDROID)
+    if target_platform == "ios":
+        return _split_packages(DEFAULT_APP_PACKAGES_IOS)
     return _split_packages(DEFAULT_APP_PACKAGES)
 
 def _normalize_platform_target(platform: Optional[str]) -> Optional[str]:
@@ -351,9 +361,13 @@ def ingest_gamebench(request):
     company_id = body.get("company_id") or DEFAULT_COMPANY_ID
     collection_id = body.get("collection_id") or DEFAULT_COLLECTION_ID
     apps = _normalize_apps(body.get("app_packages"))
+    if not apps:
+        apps = _default_apps_for_platform(platform)
 
     try:
         result = ingest(days=days, platform=platform, company_id=company_id, collection_id=collection_id, app_packages=apps)
+        result["platform"] = _normalize_platform_target(platform) or "all"
+        result["app_packages"] = apps
         return jsonify({"status": "OK", **result}), 200
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500

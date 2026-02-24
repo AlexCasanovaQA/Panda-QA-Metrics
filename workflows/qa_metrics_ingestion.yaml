@@ -93,10 +93,12 @@ main:
           - payload_gamebench_android:
               days: ${days}
               platform: "android"
+              app_packages: ${default(map.get(request_args, "gamebench_app_packages_android"), default(sys.get_env("GAMEBENCH_APP_PACKAGES_ANDROID"), default(sys.get_env("GAMEBENCH_APP_PACKAGES"), "")))}
 
           - payload_gamebench_ios:
               days: ${days}
               platform: "ios"
+              app_packages: ${default(map.get(request_args, "gamebench_app_packages_ios"), default(sys.get_env("GAMEBENCH_APP_PACKAGES_IOS"), default(sys.get_env("GAMEBENCH_APP_PACKAGES"), "")))}
 
     - normalize_project_keys:
         switch:
@@ -625,6 +627,32 @@ main:
                                               query:
                                                 useLegacySql: false
                                                 query: |
+                                                  DROP VIEW IF EXISTS `qa_metrics.gamebench_daily_metrics`;
+
+                                                  CREATE TABLE IF NOT EXISTS `qa_metrics.gamebench_daily_metrics` (
+                                                    metric_date DATE,
+                                                    environment STRING,
+                                                    platform STRING,
+                                                    app_package STRING,
+                                                    app_version STRING,
+                                                    device_model STRING,
+                                                    device_manufacturer STRING,
+                                                    os_version STRING,
+                                                    gpu_model STRING,
+                                                    sessions INT64,
+                                                    median_fps FLOAT64,
+                                                    fps_stability_pct FLOAT64,
+                                                    fps_stability_index FLOAT64,
+                                                    cpu_avg_pct FLOAT64,
+                                                    cpu_max_pct FLOAT64,
+                                                    memory_avg_mb FLOAT64,
+                                                    memory_max_mb FLOAT64,
+                                                    current_avg_ma FLOAT64,
+                                                    _updated_at TIMESTAMP
+                                                  )
+                                                  PARTITION BY metric_date
+                                                  CLUSTER BY environment, platform, app_version;
+
                                                   MERGE `qa_metrics.gamebench_daily_metrics` AS target
                                                   USING (
                                                     SELECT
