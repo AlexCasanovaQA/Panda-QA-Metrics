@@ -1,0 +1,48 @@
+main:
+  params: [args]
+  steps:
+    - init:
+        assign:
+          - request_args: ${default(args, {})}
+          - testrail_results_url: "https://ingest-testrail-results-147201244534.europe-west1.run.app"
+          - max_iterations: ${default(map.get(request_args, "max_iterations"), 5)}
+          - iteration: 0
+          - continuation_token: ${default(map.get(request_args, "continuation_token"), null)}
+          - recovery_mode: ${default(map.get(request_args, "recovery_mode"), false)}
+          - days: ${default(map.get(request_args, "days"), 1)}
+          - responses: []
+
+    - ingest_loop:
+        while: ${iteration < max_iterations}
+        steps:
+          - call_results:
+              call: http.post
+              args:
+                url: ${testrail_results_url}
+                timeout: 1200
+                auth:
+                  type: OIDC
+                  audience: ${testrail_results_url}
+                body:
+                  days: ${days}
+                  recovery_mode: ${recovery_mode}
+                  continuation_token: ${continuation_token}
+              result: trr_resp
+
+          - store_response:
+              assign:
+                - responses: ${list.concat(responses, [trr_resp.body])}
+                - continuation_token: ${default(map.get(trr_resp.body, "continuation_token"), null)}
+                - iteration: ${iteration + 1}
+
+          - maybe_stop:
+              switch:
+                - condition: ${continuation_token == null}
+                  next: done
+
+    - done:
+        return:
+          status: "OK"
+          iterations: ${iteration}
+          continuation_token: ${continuation_token}
+          responses: ${responses}

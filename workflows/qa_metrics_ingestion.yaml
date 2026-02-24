@@ -59,6 +59,7 @@ main:
                 reason: "ready"
           - testrail_enabled: ${default(map.get(request_args, "testrail_enabled"), default(sys.get_env("QA_METRICS_TESTRAIL_ENABLED"), "true"))}
           - testrail_configured: ${default(map.get(request_args, "testrail_configured"), default(sys.get_env("QA_METRICS_TESTRAIL_CONFIGURED"), "true"))}
+          - include_testrail_results: ${text.to_lower("" + default(map.get(request_args, "include_testrail_results"), "false")) == "true"}
           - bugsnag_enabled: ${default(map.get(request_args, "bugsnag_enabled"), default(sys.get_env("QA_METRICS_BUGSNAG_ENABLED"), "true"))}
           - bugsnag_configured: ${default(map.get(request_args, "bugsnag_configured"), default(sys.get_env("QA_METRICS_BUGSNAG_CONFIGURED"), "true"))}
           - gamebench_available: true
@@ -79,7 +80,9 @@ main:
               days: ${days}
 
           - payload_testrail_results:
-              days: ${days}
+              days: ${default(map.get(request_args, "testrail_results_days"), 1)}
+              recovery_mode: ${default(map.get(request_args, "testrail_results_recovery_mode"), false)}
+              continuation_token: ${default(map.get(request_args, "testrail_results_continuation_token"), null)}
 
           - payload_bugsnag:
               days: ${days}
@@ -121,7 +124,7 @@ main:
                           - errors: ${list.concat(errors, [text.decode(json.encode({"service":"jira_changelog","type":"config_error","code":"missing_project_keys","message":"project_keys_csv is required for Jira changelog ingestion"}))])}
           - preflight_testrail_flags:
               switch:
-                - condition: ${text.to_lower("" + testrail_enabled) != "true" or text.to_lower("" + testrail_configured) != "true"}
+                - condition: ${include_testrail_results and (text.to_lower("" + testrail_enabled) != "true" or text.to_lower("" + testrail_configured) != "true")}
                   steps:
                     - preflight_testrail_not_ready:
                         assign:
@@ -328,7 +331,7 @@ main:
                                           - errors: ${list.concat(errors, ["testrail_users - " + text.decode(json.encode(e))])}
                   - testrail_results_try:
                       switch:
-                        - condition: ${preflight_status.testrail_results.ready}
+                        - condition: ${include_testrail_results and preflight_status.testrail_results.ready}
                           steps:
                             - testrail_results_call_try:
                                 try:
