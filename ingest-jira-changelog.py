@@ -44,6 +44,8 @@ JIRA_EMAIL = os.environ.get("JIRA_EMAIL")
 JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN")
 JIRA_PROJECT_KEYS = os.environ.get("JIRA_PROJECT_KEYS", "").strip()
 
+JIRA_CALLS = 0
+
 
 def _error_response(error_type: str, code: str, message: str, status_code: int, details: Any = None):
     payload: Dict[str, Any] = {
@@ -88,9 +90,29 @@ def _jira_get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, A
     if not JIRA_BASE_URL:
         raise RuntimeError("Missing JIRA_BASE_URL env var")
     url = JIRA_BASE_URL.rstrip("/") + path
-    r = requests.get(url, headers=_jira_headers(), auth=_jira_auth(), params=params, timeout=60)
-    r.raise_for_status()
-    return r.json()
+    max_attempts = 5
+    attempt = 0
+
+    global JIRA_CALLS
+
+    while True:
+        attempt += 1
+        JIRA_CALLS += 1
+        r = requests.get(url, headers=_jira_headers(), auth=_jira_auth(), params=params, timeout=60)
+        if r.status_code != 429:
+            r.raise_for_status()
+            return r.json()
+
+        if attempt >= max_attempts:
+            r.raise_for_status()
+
+        retry_after = r.headers.get("Retry-After")
+        if retry_after and retry_after.isdigit():
+            sleep_s = max(1, int(retry_after))
+        else:
+            sleep_s = min(16, 2 ** (attempt - 1))
+        print(f"Jira rate-limited on {path}; sleeping {sleep_s}s before retry {attempt + 1}/{max_attempts}")
+        time.sleep(sleep_s)
 
 
 def _ensure_table(bq: bigquery.Client, table_ref: bigquery.TableReference) -> None:
@@ -152,34 +174,51 @@ def _get_latest_history_ts(bq: bigquery.Client, table_ref: bigquery.TableReferen
         return None
 
 
-def _get_existing_history_ids(
+def _get_existing_history_ids_batch(
     bq: bigquery.Client,
     table_ref: bigquery.TableReference,
-    issue_key: str,
-    history_ids: List[str],
-) -> Set[str]:
-    """Fetch existing history ids for an issue to keep ingestion idempotent across reruns."""
-    if not history_ids:
-        return set()
+    page_histories: Dict[str, List[str]],
+) -> Dict[str, Set[str]]:
+    """Fetch existing history ids for issues in one page to keep ingestion idempotent across reruns."""
+    issue_keys = [k for k, ids in page_histories.items() if ids]
+    if not issue_keys:
+        return {}
+
+    all_history_ids = sorted({hid for ids in page_histories.values() for hid in ids})
+    if not all_history_ids:
+        return {}
 
     sql = f"""
-      SELECT history_id
+      SELECT issue_key, history_id
       FROM `{table_ref.project}.{table_ref.dataset_id}.{table_ref.table_id}`
-      WHERE issue_key = @issue_key
+      WHERE issue_key IN UNNEST(@issue_keys)
         AND history_id IN UNNEST(@history_ids)
     """
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
-            bigquery.ScalarQueryParameter("issue_key", "STRING", issue_key),
-            bigquery.ArrayQueryParameter("history_ids", "STRING", history_ids),
+            bigquery.ArrayQueryParameter("issue_keys", "STRING", issue_keys),
+            bigquery.ArrayQueryParameter("history_ids", "STRING", all_history_ids),
         ]
     )
     rows = bq.query(sql, job_config=job_config).result()
-    return {str(row["history_id"]) for row in rows if row.get("history_id") is not None}
+    existing: Dict[str, Set[str]] = {}
+    for row in rows:
+        issue_key = row.get("issue_key")
+        history_id = row.get("history_id")
+        if issue_key is None or history_id is None:
+            continue
+        existing.setdefault(str(issue_key), set()).add(str(history_id))
+    return existing
 
 
-def _search_issue_keys(project_key: str, since: datetime, until: datetime, start_at: int, max_results: int = 100) -> Tuple[List[str], Optional[int]]:
-    """Return (issue_keys, total) for a page."""
+def _search_issue_keys(
+    project_key: str,
+    since: datetime,
+    until: datetime,
+    start_at: int,
+    max_results: int = 100,
+) -> Tuple[List[Tuple[str, Optional[datetime]]], Optional[int]]:
+    """Return ((issue_key, updated_ts), total) for a page."""
     jql = (
         f'project = "{project_key}" '
         f'AND updated >= "{since.strftime("%Y/%m/%d %H:%M")}" '
@@ -193,12 +232,19 @@ def _search_issue_keys(project_key: str, since: datetime, until: datetime, start
             "jql": jql,
             "startAt": start_at,
             "maxResults": max_results,
-            "fields": "key",
+            "fields": "key,updated",
         },
     )
 
     issues = data.get("issues") or []
-    keys = [i.get("key") for i in issues if i.get("key")]
+    keys: List[Tuple[str, Optional[datetime]]] = []
+    for issue in issues:
+        key = issue.get("key")
+        if not key:
+            continue
+        fields = issue.get("fields") if isinstance(issue.get("fields"), dict) else {}
+        updated_ts = _parse_jira_ts(fields.get("updated"))
+        keys.append((key, updated_ts))
     total = data.get("total")
     return keys, total
 
@@ -221,8 +267,6 @@ def _fetch_changelog(issue_key: str) -> List[Dict[str, Any]]:
         if total is None or start_at >= total or not hs:
             break
 
-        # be nice to Jira
-        time.sleep(0.05)
 
     return histories
 
@@ -247,6 +291,9 @@ def _history_to_rows(issue_key: str, project_key: str, history: Dict[str, Any], 
 
 @functions_framework.http
 def ingest_jira_changelog(request):
+    global JIRA_CALLS
+    JIRA_CALLS = 0
+
     req_json = request.get_json(silent=True) or {}
 
     lookback_days = int(req_json.get("lookback_days") or DEFAULT_LOOKBACK_DAYS)
@@ -286,6 +333,9 @@ def ingest_jira_changelog(request):
 
     inserted = 0
     issue_count = 0
+    skipped_unchanged = 0
+    processed_issue_keys: Dict[str, Optional[datetime]] = {}
+    overlap_since = latest_ts - timedelta(days=overlap_days) if latest_ts else since
 
     for project_key in project_keys:
         print(f"Processing project {project_key}")
@@ -299,18 +349,38 @@ def ingest_jira_changelog(request):
 
             print(f"Project {project_key}: issues page startAt={start_at} got={len(keys)} total={total}")
 
-            for issue_key in keys:
+            page_histories: Dict[str, List[Dict[str, Any]]] = {}
+            page_history_ids: Dict[str, List[str]] = {}
+
+            for issue_key, updated_ts in keys:
                 issue_count += 1
+                if issue_key in processed_issue_keys:
+                    already_updated = processed_issue_keys[issue_key]
+                    if (
+                        updated_ts is not None
+                        and already_updated is not None
+                        and updated_ts <= overlap_since
+                        and already_updated >= updated_ts
+                    ):
+                        skipped_unchanged += 1
+                        continue
                 try:
                     histories = _fetch_changelog(issue_key)
                 except Exception as e:
                     print(f"Failed to fetch changelog for {issue_key}: {e}")
                     continue
 
-                history_ids = [str(h.get("id")) for h in histories if h.get("id") is not None]
-                existing_ids = _get_existing_history_ids(bq, table_ref, issue_key, history_ids)
+                page_histories[issue_key] = histories
+                page_history_ids[issue_key] = [str(h.get("id")) for h in histories if h.get("id") is not None]
+                prev_updated = processed_issue_keys.get(issue_key)
+                if prev_updated is None or (updated_ts and updated_ts > prev_updated):
+                    processed_issue_keys[issue_key] = updated_ts
 
-                rows = []
+            existing_by_issue = _get_existing_history_ids_batch(bq, table_ref, page_history_ids)
+
+            rows = []
+            for issue_key, histories in page_histories.items():
+                existing_ids = existing_by_issue.get(issue_key, set())
                 for h in histories:
                     hid = h.get("id")
                     if hid is None:
@@ -323,22 +393,16 @@ def ingest_jira_changelog(request):
                         continue
                     rows.append(_history_to_rows(issue_key, project_key, h, ingested_at))
 
-                if rows:
-                    errors = bq.insert_rows_json(table_ref, rows)
-                    if errors:
-                        print("BigQuery insert errors (first 3):", errors[:3])
-                        return _error_response("runtime_error", "bigquery_insert_failed", "BigQuery insert failed", 500, errors[:3])
-                    inserted += len(rows)
-
-                # small sleep to avoid hammering
-                time.sleep(0.05)
+            if rows:
+                errors = bq.insert_rows_json(table_ref, rows)
+                if errors:
+                    print("BigQuery insert errors (first 3):", errors[:3])
+                    return _error_response("runtime_error", "bigquery_insert_failed", "BigQuery insert failed", 500, errors[:3])
+                inserted += len(rows)
 
             start_at += len(keys)
             if total is not None and start_at >= total:
                 break
-
-            # if Jira throttles, slow down
-            time.sleep(0.2)
 
     return (
         json.dumps(
@@ -350,6 +414,10 @@ def ingest_jira_changelog(request):
                 "until": _iso(until),
                 "issues_processed": issue_count,
                 "rows_inserted": inserted,
+                "issues_scanned": issue_count,
+                "issues_skipped_unchanged": skipped_unchanged,
+                "histories_inserted": inserted,
+                "jira_calls": JIRA_CALLS,
                 "bq_table": f"{table_ref.project}.{table_ref.dataset_id}.{table_ref.table_id}",
             }
         ),
