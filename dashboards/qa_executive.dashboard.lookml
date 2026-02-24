@@ -77,7 +77,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Number of bugs/defects created today in Jira. Calculation: COUNT(issue_key) filtered by issue_type in (Bug, Defect) and created_date=today. Use: Detect daily intake spikes and compare against triage/fix capacity."
+    note_text: "Definition (UTC): Entered bugs today. Entered = bug/defect issues with created_date in window. Calculation: COUNT(issue_key) where issue_type in (Bug, Defect) and created_date=today (UTC)."
     row: 3
     col: 0
     width: 6
@@ -93,7 +93,7 @@
       jira_bug_events_daily.event_type: "fixed"
       jira_bug_events_daily.event_date_date: "today"
     note_display: hover
-    note_text: "Definition: Bugs that moved to Fixed status today. Calculation: COUNT of changelog events with event_type=fixed and event_date=today. Note: This tile keeps a fixed daily window and does not depend on the global date_range filter."
+    note_text: "Definition (UTC): Fixed bugs today. Fixed = transitions into done_or_fixed statuses (resolved/closed/verified/done/fixed/completed/qa approved/ready for release). Calculation: COUNT of event_type=fixed on today (UTC). This tile keeps a fixed daily window and ignores dashboard date_range."
     row: 3
     col: 6
     width: 6
@@ -114,7 +114,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Current active bug backlog. Calculation: COUNT of issues where statusCategory != Done. Use: Measure current operational pressure and pending closure volume."
+    note_text: "Definition: Active bugs now. Active = current bug backlog with statusCategory != Done. Calculation: COUNT of bug/defect issues where statusCategory != Done."
     row: 6
     col: 0
     width: 24
@@ -183,7 +183,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Percentage distribution of bugs created by severity for the selected Date Range. Calculation: COUNT of bugs grouped by severity where created_date is controlled by the dashboard Date Range filter."
+    note_text: "Definition (UTC): Entered bugs by severity. Entered = created_date in selected window. Calculation: COUNT of bug/defect issues grouped by severity, controlled by dashboard Date Range."
     show_value_labels: true
     label_type: labPer
     series_colors: {"(S0) Blocker": "#D64550", "(S1) Critical": "#F28B30", "(S2) Major": "#F2C94C", "(S3) Minor": "#2D9CDB", "(S4) Trivial": "#6FCF97", "(unknown)": "#BDBDBD"}
@@ -206,7 +206,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Entered = created_date in Date Range. Shows the percentage distribution of bugs created by priority for the selected Date Range."
+    note_text: "Definition (UTC): Entered bugs by priority. Entered = created_date in selected window. Calculation: COUNT of bug/defect issues grouped by priority, controlled by dashboard Date Range."
     show_value_labels: true
     label_type: labPer
     row: 11
@@ -231,7 +231,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Daily trend of incoming bugs by priority for the selected Date Range. Calculation: COUNT of bugs by created_date and priority. Use: Detect whether critical intake grows faster than resolution capacity."
+    note_text: "Definition (UTC): Entered bug trend by priority. Entered = created_date in selected window. Calculation: daily COUNT of bug/defect issues by created_date and priority."
     series_colors: {Highest: "#D64550", High: "#F28B30", Medium: "#F2C94C", Low: "#2D9CDB", Lowest: "#6FCF97"}
     row: 17
     col: 0
@@ -250,7 +250,7 @@
     listen:
       date_range: jira_bug_events_daily.event_date_date
     note_display: hover
-    note_text: "Definition: Distribution of bugs fixed by priority for the selected Date Range. Calculation: COUNT of fixed events grouped by priority_label where event_date is controlled by the dashboard Date Range filter."
+    note_text: "Definition (UTC): Fixed bugs by priority. Fixed = transition into done_or_fixed statuses. Calculation: COUNT of event_type=fixed grouped by priority_label, controlled by dashboard Date Range."
     row: 23
     col: 0
     width: 12
@@ -272,7 +272,7 @@
       priority: jira_bug_events_daily.priority_label
       severity: jira_bug_events_daily.severity_label
     note_display: hover
-    note_text: "Definition: Daily trend of fixed bugs by priority for the selected Date Range. Calculation: COUNT of event_type=fixed by event_date and priority_label. Use: Compare fix throughput by priority over time."
+    note_text: "Definition (UTC): Fixed bug trend by priority. Fixed = transition into done_or_fixed statuses. Calculation: daily COUNT of event_type=fixed by event_date and priority_label."
     stacking: normal
     row: 23
     col: 12
@@ -295,7 +295,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Active backlog split by POD/team. Calculation: COUNT of active bugs (statusCategory != Done) grouped by team. Readability strategy: show Top 5 PODs by active bug volume and bucket the remainder into Other. Use: Balance workload across pods."
+    note_text: "Definition: Active bugs by POD. Active = current bug backlog with statusCategory != Done. Calculation: COUNT grouped by team (Top 5 shown; remainder in Other)."
     limit_displayed_rows: true
     show_others: true
     show_value_labels: true
@@ -320,7 +320,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Active backlog by current priority. Calculation: COUNT of active bugs grouped by priority. Use: Validate the mix of pending criticality."
+    note_text: "Definition: Active bugs by priority. Active = current bug backlog with statusCategory != Done. Calculation: COUNT grouped by priority."
     show_value_labels: true
     label_type: labPer
     row: 29
@@ -342,7 +342,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Distribution of bugs by current Jira status. Calculation: COUNT of bugs grouped by status. Use: Identify bottlenecks in QA/dev workflow."
+    note_text: "Definition: Bugs by current Jira status. Includes statuses such as open/claimed fixed/fixed/reopened based on current state labels. Calculation: COUNT of bug/defect issues grouped by current status."
     row: 35
     col: 0
     width: 12
@@ -358,7 +358,7 @@
     listen:
       date_range: jira_active_bug_count_daily.metric_date_date
     note_display: hover
-    note_text: "Definition: Daily evolution of active bug inventory. Calculation: Daily active_bug_count snapshot by date. Use: See whether backlog is converging or diverging."
+    note_text: "Definition (UTC): Active bug count over time. Active = bugs not yet in done state as-of each day. Calculation: daily active_bug_count snapshot."
     series_colors: {jira_active_bug_count_daily.active_bug_count: "#2F80ED"}
     row: 35
     col: 12
@@ -377,7 +377,7 @@
     listen:
       date_range: jira_bug_events_daily.event_date_date
     note_display: hover
-    note_text: "Definition: Reopened bugs per day. Calculation: COUNT of changelog events with event_type=reopened by date. Use: Proxy for fix quality and functional escapes."
+    note_text: "Definition (UTC): Reopened bugs over time. Reopened = transition from done_or_fixed to reopened_target statuses. Calculation: daily COUNT of event_type=reopened."
     series_colors: {jira_bug_events_daily.bugs: "#EB5757"}
     row: 41
     col: 0
@@ -399,7 +399,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Active bugs by fixVersion (milestone proxy). Calculation: COUNT of active bugs grouped by fix_versions. Use: Prioritize by release/milestone."
+    note_text: "Definition: Active bugs by milestone proxy (fixVersion). Active = current bug backlog with statusCategory != Done. Calculation: COUNT of active bug/defect issues grouped by fix_versions."
     row: 41
     col: 12
     width: 12
@@ -563,7 +563,7 @@
     listen:
       date_range: jira_fix_fail_rate_daily.event_date_date
     note_display: hover
-    note_text: "Definition: Daily fix fail rate. Calculation: reopened/fixed per day. Interpretation: Higher values mean more fixes return due to regressions or insufficient coverage."
+    note_text: "Definition (UTC): Fix fail rate over time. Formula: reopened_count / fixed_count. Reopened = done_or_fixed -> reopened_target; Fixed = transition into done_or_fixed. Denominator window matches numerator window (per-day on trend)."
     series_colors: {jira_fix_fail_rate_daily.fix_fail_rate: "#EB5757"}
     row: 76
     col: 0
@@ -580,7 +580,7 @@
       jira_mttr_claimed_fixed_daily.event_date_date: "7 days"
     sorts: [jira_mttr_claimed_fixed_daily.event_date_date]
     note_display: hover
-    note_text: "Definition: Daily MTTR in hours for bugs claimed fixed in the last 7 days. Calculation: average(first transition to Resolved/Closed/Verified - created_at), aggregated by claimed fixed date. This tile uses a fixed 7-day window and ignores the dashboard Date Range filter."
+    note_text: "Definition (UTC): MTTR (hours) for bugs claimed fixed in last 7 days. Claimed fixed = first transition into done_or_fixed statuses. Formula: AVG((claimed_fixed_at - created_at) in hours), grouped by DATE(claimed_fixed_at). Guard: exclude invalid negative durations; no outlier trimming. Tile uses fixed 7-day window and ignores dashboard Date Range."
     series_colors: {jira_mttr_claimed_fixed_daily.avg_mttr_hours: "#9B51E0"}
     row: 76
     col: 12
