@@ -97,7 +97,7 @@
       priority: jira_bug_events_daily.priority_label
       severity: jira_bug_events_daily.severity_label
     note_display: hover
-    note_text: "Definition (UTC): Fixed bugs today. Fixed = transitions into done_or_fixed statuses (resolved/closed/verified/done/fixed/completed/qa approved/ready for release). Calculation: COUNT of event_type=fixed on today (UTC). This tile keeps a fixed daily window and ignores dashboard date_range."
+    note_text: "Definition (UTC): Fixed bugs today. Fixed = transition where LOWER(TRIM(to_status)) maps to done_or_fixed in qa_metrics.jira_status_category_map (bigquery/setup.sql). Calculation: COUNT of jira_bug_events_daily rows with event_type=fixed on today (UTC). This tile keeps a fixed daily window and ignores dashboard date_range."
     row: 2
     col: 5
     width: 4
@@ -118,7 +118,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Active bugs now. Active = current bug backlog with statusCategory != Done. Calculation: COUNT of bug/defect issues where statusCategory != Done."
+    note_text: "Definition: Active bugs now (current backlog snapshot). Active = bug/defect issues in jira_issues_latest with status_category != Done. Calculation: COUNT(issue_key)."
     row: 2
     col: 10
     width: 4
@@ -187,7 +187,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition (UTC): Entered bugs by severity. Entered = created_date in selected window. Calculation: COUNT of bug/defect issues grouped by severity, controlled by dashboard Date Range."
+    note_text: "Definition (UTC): Entered bugs by Jira severity. Entered = bug/defect issues with created_date in selected window. Calculation: COUNT(issue_key) grouped by jira_issues_latest.severity_normalized, controlled by dashboard Date Range."
     show_value_labels: true
     label_type: labPer
     series_colors: {"(S0) Blocker": "#D64550", "(S1) Critical": "#F28B30", "(S2) Major": "#F2C94C", "(S3) Minor": "#2D9CDB", "(S4) Trivial": "#6FCF97", "(unknown)": "#BDBDBD"}
@@ -266,7 +266,7 @@
       priority: jira_bug_events_daily.priority_label
       severity: jira_bug_events_daily.severity_label
     note_display: hover
-    note_text: "Definition (UTC): Fixed bugs by priority. Fixed = transition into done_or_fixed statuses. Calculation: COUNT of event_type=fixed grouped by priority_label, controlled by dashboard Date Range."
+    note_text: "Definition (UTC): Fixed bugs by priority. Fixed = transition where LOWER(TRIM(to_status)) maps to done_or_fixed in qa_metrics.jira_status_category_map (bigquery/setup.sql). Calculation: COUNT of jira_bug_events_daily rows with event_type=fixed grouped by priority_label, controlled by dashboard Date Range."
     row: 22
     col: 0
     width: 12
@@ -288,7 +288,7 @@
       priority: jira_bug_events_daily.priority_label
       severity: jira_bug_events_daily.severity_label
     note_display: hover
-    note_text: "Definition (UTC): Fixed bug trend by priority. Fixed = transition into done_or_fixed statuses. Calculation: daily COUNT of event_type=fixed by event_date and priority_label."
+    note_text: "Definition (UTC): Fixed bug trend by priority. Fixed = transition where LOWER(TRIM(to_status)) maps to done_or_fixed in qa_metrics.jira_status_category_map (bigquery/setup.sql). Calculation: daily COUNT of jira_bug_events_daily rows with event_type=fixed by event_date and priority_label."
     stacking: normal
     row: 22
     col: 12
@@ -320,7 +320,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Active bugs by POD. Active = current bug backlog with statusCategory != Done. Calculation: COUNT grouped by team (Top 5 shown; remainder in Other)."
+    note_text: "Definition: Active bugs by POD (current backlog snapshot). Active = bug/defect issues in jira_issues_latest with status_category != Done. Calculation: COUNT(issue_key) grouped by team (Top 5 shown; remainder in Other)."
     limit_displayed_rows: true
     show_others: true
     show_value_labels: true
@@ -345,7 +345,7 @@
       priority: jira_issues_latest.priority
       severity: jira_issues_latest.severity_normalized
     note_display: hover
-    note_text: "Definition: Active bugs by priority. Active = current bug backlog with statusCategory != Done. Calculation: COUNT grouped by priority."
+    note_text: "Definition: Active bugs by priority (current backlog snapshot). Active = bug/defect issues in jira_issues_latest with status_category != Done. Calculation: COUNT(issue_key) grouped by priority."
     show_value_labels: true
     label_type: labPer
     row: 30
@@ -383,7 +383,7 @@
     listen:
       date_range: jira_active_bug_count_daily.metric_date_date
     note_display: hover
-    note_text: "Definition (UTC): Active bug count over time. Source: jira_active_bug_count_daily. Active = created on/before day and not yet fixed by earliest transition to Resolved/Closed/Verified. Calculation: daily active_bug_count snapshot."
+    note_text: "Definition (UTC): Active bug count over time (historical snapshot). Source: jira_active_bug_count_daily. Active = created on/before day and not yet fixed by earliest transition to a done_or_fixed status from qa_metrics.jira_status_category_map (as implemented in setup.sql). Calculation: daily active_bug_count snapshot."
     series_colors: {jira_active_bug_count_daily.active_bug_count: "#2F80ED"}
     row: 36
     col: 12
@@ -405,7 +405,7 @@
       priority: jira_bug_events_daily.priority_label
       severity: jira_bug_events_daily.severity_label
     note_display: hover
-    note_text: "Definition (UTC): Reopened bugs over time. Reopened = transition from done_or_fixed to reopened_target statuses. Calculation: daily COUNT of event_type=reopened."
+    note_text: "Definition (UTC): Reopened bugs over time. Reopened = transition where LOWER(TRIM(from_status)) maps to done_or_fixed and LOWER(TRIM(to_status)) maps to reopened_target in qa_metrics.jira_status_category_map (bigquery/setup.sql). Calculation: daily COUNT of jira_bug_events_daily rows with event_type=reopened."
     series_colors: {jira_bug_events_daily.bugs: "#EB5757"}
     row: 93
     col: 0
@@ -451,7 +451,7 @@
     listen:
       bugsnag_project_id: bugsnag_errors_latest.project_id
     note_display: hover
-    note_text: "Definition: Active production errors not yet closed/fixed. Calculation: COUNT of errors where status is not in fixed/resolved/closed."
+    note_text: "Definition: Active Bugsnag errors. Source-of-truth: bugsnag_errors_latest.is_active in LookML. Active = LOWER(IFNULL(status,'')) NOT IN ('fixed','resolved','closed'). Calculation: active_errors = COUNT(*) filtered to is_active = yes."
     row: 44
     col: 0
     width: 6
@@ -466,7 +466,7 @@
     listen:
       bugsnag_project_id: bugsnag_errors_latest.project_id
     note_display: hover
-    note_text: "Definition: Highest-impact subset of active errors. Calculation: COUNT of active errors with severity in (critical, error)."
+    note_text: "Definition: Highest-impact subset of active Bugsnag errors. Calculation: COUNT(*) where is_active = yes and severity in (critical, error) (measure high_critical_active_errors)."
     row: 44
     col: 6
     width: 6
@@ -481,7 +481,7 @@
     listen:
       bugsnag_project_id: bugsnag_errors_latest.project_id
     note_display: hover
-    note_text: "Definition: Composition of active errors by severity. Calculation: COUNT of active_errors grouped by severity. Use: Understand the current risk profile."
+    note_text: "Definition: Active Bugsnag error composition by severity. Calculation: active_errors (is_active = yes) grouped by raw Bugsnag severity values (critical/error/warning/info/other). Note: this tile uses Bugsnag-native severity labels (not Jira severity_normalized)."
     series_colors: {critical: "#D64550", error: "#F28B30", warning: "#F2C94C", info: "#56CCF2"}
     row: 44
     col: 12
@@ -591,7 +591,7 @@
     listen:
       date_range: jira_fix_fail_rate_daily.event_date_date
     note_display: hover
-    note_text: "Definition (UTC): Fix fail rate over time. Formula: reopened_count / fixed_count. Reopened = done_or_fixed -> reopened_target; Fixed = transition into done_or_fixed. Denominator window matches numerator window (per-day on trend)."
+    note_text: "Definition (UTC): Fix fail rate over time. Formula: reopened_count / fixed_count from jira_fix_fail_rate_daily. Reopened = done_or_fixed -> reopened_target and Fixed = transition into done_or_fixed, using qa_metrics.jira_status_category_map (bigquery/setup.sql). Denominator window matches numerator window (per-day on trend)."
     series_colors: {jira_fix_fail_rate_daily.fix_fail_rate: "#EB5757"}
     row: 71
     col: 0
@@ -608,7 +608,7 @@
       jira_mttr_claimed_fixed_daily.event_date_date: "7 days"
     sorts: [jira_mttr_claimed_fixed_daily.event_date_date]
     note_display: hover
-    note_text: "Definition (UTC): MTTR (hours) for bugs claimed fixed in last 7 days. Claimed fixed = first transition into done_or_fixed statuses. Formula: AVG((claimed_fixed_at - created_at) in hours), grouped by DATE(claimed_fixed_at). Guard: exclude invalid negative durations; no outlier trimming. Tile uses fixed 7-day window and ignores dashboard Date Range."
+    note_text: "Definition (UTC): MTTR (hours) for bugs claimed fixed in last 7 days. Claimed fixed = first transition timestamp where LOWER(TRIM(to_status)) maps to done_or_fixed in qa_metrics.jira_status_category_map (bigquery/setup.sql). Formula: AVG((claimed_fixed_at - created_at) in hours), grouped by DATE(claimed_fixed_at). Guard: exclude invalid negative durations; no outlier trimming. Tile uses fixed 7-day window and ignores dashboard Date Range."
     series_colors: {jira_mttr_claimed_fixed_daily.avg_mttr_hours: "#9B51E0"}
     row: 71
     col: 12
