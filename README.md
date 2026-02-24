@@ -206,7 +206,7 @@ Use a single schedule for `qa_metrics_ingestion` and tune TestRail freshness wit
 - `testrail_results_days: 1`
 - `testrail_results_max_iterations: 5`
 
-Pass Jira keys explicitly in the workflow invocation (`project_keys_csv` or `project_keys`) so Jira and Jira changelog ingestion never run with empty keys. The workflow now hard-fails early when keys are missing.
+Pass Jira keys explicitly in the workflow invocation (`project_keys_csv` or `project_keys`) so Jira and Jira changelog ingestion never run with empty keys. The workflow also accepts `jira_project_keys_csv` / `jira_project_keys` args and `JIRA_PROJECT_KEYS_CSV` / `JIRA_PROJECT_KEY` env fallbacks for compatibility with older scheduler payloads. It still hard-fails early when keys are missing.
 
 Example invocation args:
 
