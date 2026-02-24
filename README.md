@@ -213,6 +213,67 @@ Update the model connection name:
 - In `models/qa_metrics.model.lkml` change:
   - `connection: "YOUR_BIGQUERY_CONNECTION"`
 
+## KPI definitions (source-of-truth)
+
+The definitions below are the canonical ones used by SQL/LookML in this repository. If a business definition changes, update the SQL views first and then align dashboard note text.
+
+### Jira status mapping used by event-based KPIs
+
+Source-of-truth: `qa_metrics.jira_status_category_map` in `bigquery/setup.sql`.
+
+- `done_or_fixed` statuses:
+  - `resolved`, `closed`, `verified`, `done`, `fixed`, `completed`, `qa approved`, `ready for release`
+- `reopened_target` statuses:
+  - `open`, `reopened`, `backlog`, `to do`, `in progress`, `selected for development`, `in review`, `ready for qa`, `ready for test`, `qa testing`, `testing`
+
+Matching is case-insensitive and trim-tolerant (`LOWER(TRIM(status))`).
+
+### Entered
+
+- Meaning: bugs/defects created in period.
+- Source-of-truth:
+  - `qa_metrics.jira_bug_events_daily` (`event_type = 'created'`) for event-based trend tiles.
+  - `qa_metrics.jira_issues_latest` filtered on `created_date` for current-state explore tiles.
+- Logic: `COUNT(DISTINCT issue_key)` where issue type is `Bug` or `Defect` and event date is in selected window.
+
+### Fixed
+
+- Meaning: bugs/defects that transitioned into any `done_or_fixed` status.
+- Source-of-truth: `qa_metrics.jira_bug_events_daily` (`event_type = 'fixed'`) and `qa_metrics.jira_fix_fail_rate_daily.fixed_count`.
+- Logic: status change where normalized `to_status` is in `done_or_fixed`; aggregated as daily distinct issue count.
+
+### Reopened
+
+- Meaning: bugs/defects that moved from done/fixed workflow back to active workflow.
+- Source-of-truth: `qa_metrics.jira_bug_events_daily` (`event_type = 'reopened'`) and `qa_metrics.jira_fix_fail_rate_daily.reopened_count`.
+- Logic: status change where normalized `from_status` is in `done_or_fixed` and normalized `to_status` is in `reopened_target`; aggregated as daily distinct issue count.
+
+### Fix fail rate
+
+- Meaning: reopened-to-fixed ratio in the same daily window.
+- Source-of-truth: `qa_metrics.jira_fix_fail_rate_daily` and LookML measure `jira_fix_fail_rate_daily.fix_fail_rate`.
+- Formula: `SUM(reopened_count) / NULLIF(SUM(fixed_count), 0)`.
+
+### Active
+
+This dashboard uses two active definitions intentionally; both should remain explicit in notes:
+
+- Current backlog active (composition tiles):
+  - Source-of-truth: `qa_metrics.jira_issues_latest`.
+  - Logic: bug/defect issues with `status_category != 'Done'` (current snapshot).
+- Active over time (trend tile):
+  - Source-of-truth: `qa_metrics.jira_active_bug_count_daily`.
+  - Logic: for each day in a date spine, count bugs with `created_date <= metric_date` and (`fixed_date IS NULL OR fixed_date > metric_date`), where `fixed_date` is earliest status change to `Resolved`, `Closed`, or `Verified`.
+
+### MTTR (hours)
+
+- Meaning: average time from bug creation to first claimed fixed transition.
+- Source-of-truth: `qa_metrics.jira_mttr_claimed_fixed_daily` and LookML explore `jira_mttr_claimed_fixed_daily`.
+- Logic:
+  - `claimed_fixed_at = MIN(changed_at)` where normalized `to_status` is in `done_or_fixed`.
+  - `avg_mttr_hours = AVG(TIMESTAMP_DIFF(claimed_fixed_at, created, SECOND) / 3600.0)`.
+  - Guard: exclude invalid rows where `claimed_fixed_at < created`.
+
 ---
 
 ## Notes / Known assumptions
