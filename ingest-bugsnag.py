@@ -232,6 +232,9 @@ def fetch_and_insert_bugsnag_errors(since_ts: datetime, started_monotonic: float
     return total_inserted
 
 def hello_http(request):
+    if request.path.endswith("/healthz") or request.method == "GET":
+        return (jsonify({"status": "OK", "service": "ingest-bugsnag", "ready": True}), 200)
+
     started = time.monotonic()
     try:
         ensure_table()

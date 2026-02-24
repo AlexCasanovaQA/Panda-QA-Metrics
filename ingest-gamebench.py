@@ -360,6 +360,6 @@ def ingest_gamebench(request):
 
 # Default Functions Framework target
 def hello_http(request):
-    if request.path.endswith("/healthz"):
+    if request.path.endswith("/healthz") or request.method == "GET":
         return healthz(request)
     return ingest_gamebench(request)

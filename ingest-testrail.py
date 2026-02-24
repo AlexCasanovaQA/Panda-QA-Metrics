@@ -250,6 +250,9 @@ def insert_rows(rows: List[Dict[str, Any]]) -> None:
 
 # ----------------- Entry -----------------
 def hello_http(request):
+    if request.path.endswith("/healthz") or request.method == "GET":
+        return (jsonify({"status": "OK", "service": "ingest-testrail", "ready": True}), 200)
+
     try:
         ensure_table()
         auth = testrail_auth()
