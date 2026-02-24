@@ -21,6 +21,18 @@ steps:
       - "--platform=managed"
       - "--no-allow-unauthenticated"
 
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: /bin/bash
+    args:
+      - "-c"
+      - |
+        set -euo pipefail
+        SERVICE_URL="$(gcloud run services describe ingest-gamebench --region=europe-west1 --format='value(status.url)')"
+        TOKEN="$(gcloud auth print-identity-token)"
+        RESPONSE="$(curl -fsS -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/healthz")"
+        echo "${RESPONSE}"
+        echo "${RESPONSE}" | python -c 'import json,sys; body=json.load(sys.stdin); assert body.get("ready") is True, body'
+
 images:
   - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:$SHORT_SHA"
   - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:latest"

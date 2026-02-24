@@ -336,6 +336,14 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
         "rows_skipped_platform": rows_skipped_platform,
     }
 
+def healthz(_request):
+    return jsonify({
+        "status": "OK",
+        "service": "ingest-gamebench",
+        "ready": True,
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }), 200
+
 def ingest_gamebench(request):
     body = request.get_json(silent=True) or {}
     days = _sanitize_days(body.get("days", 7))
@@ -352,4 +360,6 @@ def ingest_gamebench(request):
 
 # Default Functions Framework target
 def hello_http(request):
+    if request.path.endswith("/healthz"):
+        return healthz(request)
     return ingest_gamebench(request)

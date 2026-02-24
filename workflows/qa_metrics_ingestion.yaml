@@ -54,10 +54,14 @@ main:
               bugsnag:
                 ready: true
                 reason: "ready"
+              gamebench:
+                ready: true
+                reason: "ready"
           - testrail_enabled: ${default(map.get(request_args, "testrail_enabled"), default(sys.get_env("QA_METRICS_TESTRAIL_ENABLED"), "true"))}
           - testrail_configured: ${default(map.get(request_args, "testrail_configured"), default(sys.get_env("QA_METRICS_TESTRAIL_CONFIGURED"), "true"))}
           - bugsnag_enabled: ${default(map.get(request_args, "bugsnag_enabled"), default(sys.get_env("QA_METRICS_BUGSNAG_ENABLED"), "true"))}
           - bugsnag_configured: ${default(map.get(request_args, "bugsnag_configured"), default(sys.get_env("QA_METRICS_BUGSNAG_CONFIGURED"), "true"))}
+          - gamebench_available: true
 
           # ingest-jira REQUIERE project_keys (lista)
           - payload_jira:
@@ -139,13 +143,44 @@ main:
                           - preflight_status.bugsnag.ready: false
                           - preflight_status.bugsnag.reason: "bugsnag_not_configured"
                           - errors: ${list.concat(errors, [text.decode(json.encode({"service":"bugsnag","type":"config_error","code":"bugsnag_not_configured","message":"Bugsnag disabled or not configured via args/env markers"}))])}
+          - preflight_gamebench_smoke_check:
+              try:
+                steps:
+                  - gamebench_smoke_call:
+                      call: http.get
+                      args:
+                        url: ${gamebench_url + "/healthz"}
+                        timeout: 30
+                        auth:
+                          type: OIDC
+                          audience: ${gamebench_url}
+                      result: gb_smoke_resp
+                  - gamebench_smoke_eval:
+                      switch:
+                        - condition: ${default(map.get(gb_smoke_resp.body, "ready"), false) != true}
+                          steps:
+                            - gamebench_smoke_mark_not_ready:
+                                assign:
+                                  - preflight_status.gamebench.ready: false
+                                  - preflight_status.gamebench.reason: "gamebench_not_ready"
+                                  - gamebench_available: false
+                                  - errors: ${list.concat(errors, [text.decode(json.encode({"service":"gamebench","type":"preflight_error","code":"gamebench_not_ready","message":"Gamebench health endpoint returned not ready"}))])}
+              except:
+                as: e
+                steps:
+                  - gamebench_smoke_err:
+                      assign:
+                        - preflight_status.gamebench.ready: false
+                        - preflight_status.gamebench.reason: "gamebench_health_check_failed"
+                        - gamebench_available: false
+                        - errors: ${list.concat(errors, [text.decode(json.encode({"service":"gamebench","type":"preflight_error","code":"gamebench_health_check_failed","message":"Failed to call Gamebench health endpoint"}))])}
 
     # --------------------------
     # PARALLEL INGESTION BRANCHES
     # --------------------------
     - ingest_branches_parallel:
         parallel:
-          shared: [results, errors, status, dq_status, preflight_status]
+          shared: [results, errors, status, dq_status, preflight_status, gamebench_available]
           branches:
             - branch_a_jira:
                 steps:
@@ -374,264 +409,334 @@ main:
                       assign:
                         - branch_d_started_at: ${sys.now()}
                   - gamebench_android_try:
-                      try:
-                        steps:
-                          - gb_android_call:
-                              call: http.post
-                              args:
-                                url: ${gamebench_url}
-                                timeout: 600
-                                auth:
-                                  type: OIDC
-                                  audience: ${gamebench_url}
-                                body: ${payload_gamebench_android}
-                              result: gb_a_resp
-                          - gb_android_store:
-                              assign:
-                                - results.gamebench_android: ${gb_a_resp.body}
-                          - gb_android_validate:
-                              switch:
-                                - condition: ${text.match_regex(default(map.get(gb_a_resp.headers, "Content-Type"), ""), ".*text/html.*")}
+                      switch:
+                        - condition: ${preflight_status.gamebench.ready and gamebench_available}
+                          steps:
+                            - gamebench_android_call_try:
+                                try:
                                   steps:
-                                    - gb_android_placeholder_err:
+                                    - gb_android_call:
+                                        call: http.post
+                                        args:
+                                          url: ${gamebench_url}
+                                          timeout: 600
+                                          auth:
+                                            type: OIDC
+                                            audience: ${gamebench_url}
+                                          body: ${payload_gamebench_android}
+                                        result: gb_a_resp
+                                    - gb_android_store:
                                         assign:
-                                          - errors: ${list.concat(errors, ["gamebench_android - placeholder_revision_served"])}
-                                          - status: "non_ok"
-                      except:
-                        as: e
-                        steps:
-                          - gb_android_err:
-                              assign:
-                                - errors: ${list.concat(errors, ["gamebench_android - " + text.decode(json.encode(e))])}
+                                          - results.gamebench_android: ${gb_a_resp.body}
+                                    - gb_android_validate:
+                                        assign:
+                                          - gb_android_content_type: ${text.to_lower(default(map.get(gb_a_resp.headers, "Content-Type"), default(map.get(gb_a_resp.headers, "content-type"), "")))}
+                                          - gb_android_body_text: ${text.decode(json.encode(gb_a_resp.body))}
+                                    - gb_android_placeholder_check:
+                                        switch:
+                                          - condition: ${text.match_regex(gb_android_content_type, ".*text/html.*") and (text.match_regex(gb_android_body_text, ".*Placeholder \| Cloud Run.*") or text.match_regex(gb_android_body_text, ".*Continuous deployment has been set up.*"))}
+                                            steps:
+                                              - gb_android_placeholder_err:
+                                                  assign:
+                                                    - gamebench_available: false
+                                                    - preflight_status.gamebench.ready: false
+                                                    - preflight_status.gamebench.reason: "gamebench_not_deployed"
+                                                    - status: "non_ok"
+                                                    - errors: ${list.concat(errors, [text.decode(json.encode({"service":"gamebench","branch":"android","code":"gamebench_not_deployed","message":"Placeholder revision served by ingest-gamebench"}))])}
+                                except:
+                                  as: e
+                                  steps:
+                                    - gb_android_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, ["gamebench_android - " + text.decode(json.encode(e))])}
+                        - condition: ${not (preflight_status.gamebench.ready and gamebench_available)}
+                          steps:
+                            - gamebench_android_skipped_log:
+                                call: sys.log
+                                args:
+                                  severity: "WARNING"
+                                  data:
+                                    service: "gamebench_android"
+                                    event: "skipped_by_preflight"
+                                    preflight: ${preflight_status.gamebench}
                   - gamebench_ios_try:
-                      try:
-                        steps:
-                          - gb_ios_call:
-                              call: http.post
-                              args:
-                                url: ${gamebench_url}
-                                timeout: 600
-                                auth:
-                                  type: OIDC
-                                  audience: ${gamebench_url}
-                                body: ${payload_gamebench_ios}
-                              result: gb_i_resp
-                          - gb_ios_store:
-                              assign:
-                                - results.gamebench_ios: ${gb_i_resp.body}
-                          - gb_ios_validate:
-                              switch:
-                                - condition: ${text.match_regex(default(map.get(gb_i_resp.headers, "Content-Type"), ""), ".*text/html.*")}
+                      switch:
+                        - condition: ${preflight_status.gamebench.ready and gamebench_available}
+                          steps:
+                            - gamebench_ios_call_try:
+                                try:
                                   steps:
-                                    - gb_ios_placeholder_err:
+                                    - gb_ios_call:
+                                        call: http.post
+                                        args:
+                                          url: ${gamebench_url}
+                                          timeout: 600
+                                          auth:
+                                            type: OIDC
+                                            audience: ${gamebench_url}
+                                          body: ${payload_gamebench_ios}
+                                        result: gb_i_resp
+                                    - gb_ios_store:
                                         assign:
-                                          - errors: ${list.concat(errors, ["gamebench_ios - placeholder_revision_served"])}
-                                          - status: "non_ok"
-                      except:
-                        as: e
-                        steps:
-                          - gb_ios_err:
-                              assign:
-                                - errors: ${list.concat(errors, ["gamebench_ios - " + text.decode(json.encode(e))])}
-                  - gamebench_daily_refresh_try:
-                      try:
-                        steps:
-                          - gamebench_daily_refresh_job:
-                              call: googleapis.bigquery.v2.jobs.insert
-                              args:
-                                projectId: ${project_id}
-                                body:
-                                  configuration:
-                                    query:
-                                      useLegacySql: false
-                                      query: |
-                                        MERGE `qa_metrics.gamebench_daily_metrics` AS target
-                                        USING (
-                                          SELECT
-                                            DATE(time_pushed) AS metric_date,
-                                            COALESCE(environment, 'unknown') AS environment,
-                                            COALESCE(platform, 'unknown') AS platform,
-                                            COALESCE(app_package, 'unknown') AS app_package,
-                                            COALESCE(app_version, 'unknown') AS app_version,
-                                            COALESCE(device_model, 'unknown') AS device_model,
-                                            COALESCE(device_manufacturer, 'unknown') AS device_manufacturer,
-                                            COALESCE(os_version, 'unknown') AS os_version,
-                                            COALESCE(gpu_model, 'unknown') AS gpu_model,
-                                            COUNT(*) AS sessions,
-                                            AVG(median_fps) AS median_fps,
-                                            AVG(fps_stability_pct) AS fps_stability_pct,
-                                            AVG(fps_stability_index) AS fps_stability_index,
-                                            AVG(cpu_avg_pct) AS cpu_avg_pct,
-                                            MAX(cpu_max_pct) AS cpu_max_pct,
-                                            AVG(memory_avg_mb) AS memory_avg_mb,
-                                            MAX(memory_max_mb) AS memory_max_mb,
-                                            AVG(current_avg_ma) AS current_avg_ma,
-                                            CURRENT_TIMESTAMP() AS _updated_at
-                                          FROM `qa_metrics.gamebench_sessions_latest`
-                                          WHERE time_pushed IS NOT NULL
-                                          GROUP BY
-                                            metric_date,
-                                            environment,
-                                            platform,
-                                            app_package,
-                                            app_version,
-                                            device_model,
-                                            device_manufacturer,
-                                            os_version,
-                                            gpu_model
-                                        ) AS source
-                                        ON target.metric_date = source.metric_date
-                                          AND target.environment = source.environment
-                                          AND target.platform = source.platform
-                                          AND target.app_package = source.app_package
-                                          AND target.app_version = source.app_version
-                                          AND target.device_model = source.device_model
-                                          AND target.device_manufacturer = source.device_manufacturer
-                                          AND target.os_version = source.os_version
-                                          AND target.gpu_model = source.gpu_model
-                                        WHEN MATCHED THEN
-                                          UPDATE SET
-                                            sessions = source.sessions,
-                                            median_fps = source.median_fps,
-                                            fps_stability_pct = source.fps_stability_pct,
-                                            fps_stability_index = source.fps_stability_index,
-                                            cpu_avg_pct = source.cpu_avg_pct,
-                                            cpu_max_pct = source.cpu_max_pct,
-                                            memory_avg_mb = source.memory_avg_mb,
-                                            memory_max_mb = source.memory_max_mb,
-                                            current_avg_ma = source.current_avg_ma,
-                                            _updated_at = source._updated_at
-                                        WHEN NOT MATCHED THEN
-                                          INSERT (
-                                            metric_date,
-                                            environment,
-                                            platform,
-                                            app_package,
-                                            app_version,
-                                            device_model,
-                                            device_manufacturer,
-                                            os_version,
-                                            gpu_model,
-                                            sessions,
-                                            median_fps,
-                                            fps_stability_pct,
-                                            fps_stability_index,
-                                            cpu_avg_pct,
-                                            cpu_max_pct,
-                                            memory_avg_mb,
-                                            memory_max_mb,
-                                            current_avg_ma,
-                                            _updated_at
-                                          )
-                                          VALUES (
-                                            source.metric_date,
-                                            source.environment,
-                                            source.platform,
-                                            source.app_package,
-                                            source.app_version,
-                                            source.device_model,
-                                            source.device_manufacturer,
-                                            source.os_version,
-                                            source.gpu_model,
-                                            source.sessions,
-                                            source.median_fps,
-                                            source.fps_stability_pct,
-                                            source.fps_stability_index,
-                                            source.cpu_avg_pct,
-                                            source.cpu_max_pct,
-                                            source.memory_avg_mb,
-                                            source.memory_max_mb,
-                                            source.current_avg_ma,
-                                            source._updated_at
-                                          )
-                              result: gb_daily_refresh_resp
-                          - gamebench_daily_refresh_store:
-                              assign:
-                                - results.gamebench_daily_refresh: ${gb_daily_refresh_resp.jobReference.jobId}
-                      except:
-                        as: e
-                        steps:
-                          - gb_daily_refresh_err:
-                              assign:
-                                - errors: ${list.concat(errors, ["gamebench_daily_refresh - " + text.decode(json.encode(e))])}
-                  - gamebench_data_quality_check_try:
-                      try:
-                        steps:
-                          - gamebench_data_quality_query:
-                              call: googleapis.bigquery.v2.jobs.query
-                              args:
-                                projectId: ${project_id}
-                                body:
-                                  useLegacySql: false
-                                  query: |
-                                    SELECT
-                                      (SELECT COUNT(*)
-                                       FROM `qa_metrics.gamebench_sessions_latest`
-                                       WHERE time_pushed >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)) AS sessions_recent_row_count,
-                                      (SELECT COUNT(*)
-                                       FROM `qa_metrics.gamebench_daily_metrics`
-                                       WHERE metric_date >= DATE_SUB(CURRENT_DATE("UTC"), INTERVAL 2 DAY)) AS daily_recent_row_count
-                              result: gb_dq_resp
-
-                          - gamebench_data_quality_parse:
-                              assign:
-                                - gb_dq_rows: ${default(map.get(gb_dq_resp, "rows"), [])}
-                                - gb_dq_fields: ${if(len(gb_dq_rows) > 0, default(map.get(gb_dq_rows[0], "f"), []), [])}
-                                - gb_dq_sessions_count: ${if(len(gb_dq_fields) > 0, int(default(map.get(gb_dq_fields[0], "v"), "0")), 0)}
-                                - gb_dq_daily_count: ${if(len(gb_dq_fields) > 1, int(default(map.get(gb_dq_fields[1], "v"), "0")), 0)}
-                                - gb_dq_is_ok: ${gb_dq_sessions_count > 0 and gb_dq_daily_count > 0}
-                                - results.gamebench_data_quality:
-                                    checks:
-                                      - dataset: "qa_metrics"
-                                        table: "gamebench_sessions_latest"
-                                        checked_window: "last_24h_utc"
-                                        row_count: ${gb_dq_sessions_count}
-                                      - dataset: "qa_metrics"
-                                        table: "gamebench_daily_metrics"
-                                        checked_window: "last_2d_utc"
-                                        row_count: ${gb_dq_daily_count}
-                                    status: ${if(gb_dq_is_ok, "ok", "non_ok")}
-
-                          - gamebench_data_quality_log_info:
-                              call: sys.log
-                              args:
-                                severity: ${if(gb_dq_is_ok, "INFO", "ERROR")}
-                                data:
-                                  event: "gamebench_data_quality_check"
-                                  status: ${if(gb_dq_is_ok, "ok", "non_ok")}
-                                  checks: ${results.gamebench_data_quality.checks}
-
-                          - gamebench_data_quality_set_non_ok:
-                              switch:
-                                - condition: ${not gb_dq_is_ok}
+                                          - results.gamebench_ios: ${gb_i_resp.body}
+                                    - gb_ios_validate:
+                                        assign:
+                                          - gb_ios_content_type: ${text.to_lower(default(map.get(gb_i_resp.headers, "Content-Type"), default(map.get(gb_i_resp.headers, "content-type"), "")))}
+                                          - gb_ios_body_text: ${text.decode(json.encode(gb_i_resp.body))}
+                                    - gb_ios_placeholder_check:
+                                        switch:
+                                          - condition: ${text.match_regex(gb_ios_content_type, ".*text/html.*") and (text.match_regex(gb_ios_body_text, ".*Placeholder \| Cloud Run.*") or text.match_regex(gb_ios_body_text, ".*Continuous deployment has been set up.*"))}
+                                            steps:
+                                              - gb_ios_placeholder_err:
+                                                  assign:
+                                                    - gamebench_available: false
+                                                    - preflight_status.gamebench.ready: false
+                                                    - preflight_status.gamebench.reason: "gamebench_not_deployed"
+                                                    - status: "non_ok"
+                                                    - errors: ${list.concat(errors, [text.decode(json.encode({"service":"gamebench","branch":"ios","code":"gamebench_not_deployed","message":"Placeholder revision served by ingest-gamebench"}))])}
+                                except:
+                                  as: e
                                   steps:
-                                    - gamebench_data_quality_mark_status:
+                                    - gb_ios_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, ["gamebench_ios - " + text.decode(json.encode(e))])}
+                        - condition: ${not (preflight_status.gamebench.ready and gamebench_available)}
+                          steps:
+                            - gamebench_ios_skipped_log:
+                                call: sys.log
+                                args:
+                                  severity: "WARNING"
+                                  data:
+                                    service: "gamebench_ios"
+                                    event: "skipped_by_preflight"
+                                    preflight: ${preflight_status.gamebench}
+                  - gamebench_daily_refresh_try:
+                      switch:
+                        - condition: ${preflight_status.gamebench.ready and gamebench_available}
+                          steps:
+                            - gamebench_daily_refresh_query_try:
+                                try:
+                                  steps:
+                                    - gamebench_daily_refresh_job:
+                                        call: googleapis.bigquery.v2.jobs.insert
+                                        args:
+                                          projectId: ${project_id}
+                                          body:
+                                            configuration:
+                                              query:
+                                                useLegacySql: false
+                                                query: |
+                                                  MERGE `qa_metrics.gamebench_daily_metrics` AS target
+                                                  USING (
+                                                    SELECT
+                                                      DATE(time_pushed) AS metric_date,
+                                                      COALESCE(environment, 'unknown') AS environment,
+                                                      COALESCE(platform, 'unknown') AS platform,
+                                                      COALESCE(app_package, 'unknown') AS app_package,
+                                                      COALESCE(app_version, 'unknown') AS app_version,
+                                                      COALESCE(device_model, 'unknown') AS device_model,
+                                                      COALESCE(device_manufacturer, 'unknown') AS device_manufacturer,
+                                                      COALESCE(os_version, 'unknown') AS os_version,
+                                                      COALESCE(gpu_model, 'unknown') AS gpu_model,
+                                                      COUNT(*) AS sessions,
+                                                      AVG(median_fps) AS median_fps,
+                                                      AVG(fps_stability_pct) AS fps_stability_pct,
+                                                      AVG(fps_stability_index) AS fps_stability_index,
+                                                      AVG(cpu_avg_pct) AS cpu_avg_pct,
+                                                      MAX(cpu_max_pct) AS cpu_max_pct,
+                                                      AVG(memory_avg_mb) AS memory_avg_mb,
+                                                      MAX(memory_max_mb) AS memory_max_mb,
+                                                      AVG(current_avg_ma) AS current_avg_ma,
+                                                      CURRENT_TIMESTAMP() AS _updated_at
+                                                    FROM `qa_metrics.gamebench_sessions_latest`
+                                                    WHERE time_pushed IS NOT NULL
+                                                    GROUP BY
+                                                      metric_date,
+                                                      environment,
+                                                      platform,
+                                                      app_package,
+                                                      app_version,
+                                                      device_model,
+                                                      device_manufacturer,
+                                                      os_version,
+                                                      gpu_model
+                                                  ) AS source
+                                                  ON target.metric_date = source.metric_date
+                                                    AND target.environment = source.environment
+                                                    AND target.platform = source.platform
+                                                    AND target.app_package = source.app_package
+                                                    AND target.app_version = source.app_version
+                                                    AND target.device_model = source.device_model
+                                                    AND target.device_manufacturer = source.device_manufacturer
+                                                    AND target.os_version = source.os_version
+                                                    AND target.gpu_model = source.gpu_model
+                                                  WHEN MATCHED THEN
+                                                    UPDATE SET
+                                                      sessions = source.sessions,
+                                                      median_fps = source.median_fps,
+                                                      fps_stability_pct = source.fps_stability_pct,
+                                                      fps_stability_index = source.fps_stability_index,
+                                                      cpu_avg_pct = source.cpu_avg_pct,
+                                                      cpu_max_pct = source.cpu_max_pct,
+                                                      memory_avg_mb = source.memory_avg_mb,
+                                                      memory_max_mb = source.memory_max_mb,
+                                                      current_avg_ma = source.current_avg_ma,
+                                                      _updated_at = source._updated_at
+                                                  WHEN NOT MATCHED THEN
+                                                    INSERT (
+                                                      metric_date,
+                                                      environment,
+                                                      platform,
+                                                      app_package,
+                                                      app_version,
+                                                      device_model,
+                                                      device_manufacturer,
+                                                      os_version,
+                                                      gpu_model,
+                                                      sessions,
+                                                      median_fps,
+                                                      fps_stability_pct,
+                                                      fps_stability_index,
+                                                      cpu_avg_pct,
+                                                      cpu_max_pct,
+                                                      memory_avg_mb,
+                                                      memory_max_mb,
+                                                      current_avg_ma,
+                                                      _updated_at
+                                                    )
+                                                    VALUES (
+                                                      source.metric_date,
+                                                      source.environment,
+                                                      source.platform,
+                                                      source.app_package,
+                                                      source.app_version,
+                                                      source.device_model,
+                                                      source.device_manufacturer,
+                                                      source.os_version,
+                                                      source.gpu_model,
+                                                      source.sessions,
+                                                      source.median_fps,
+                                                      source.fps_stability_pct,
+                                                      source.fps_stability_index,
+                                                      source.cpu_avg_pct,
+                                                      source.cpu_max_pct,
+                                                      source.memory_avg_mb,
+                                                      source.memory_max_mb,
+                                                      source.current_avg_ma,
+                                                      source._updated_at
+                                                    )
+                                        result: gb_daily_refresh_resp
+                                    - gamebench_daily_refresh_store:
+                                        assign:
+                                          - results.gamebench_daily_refresh: ${gb_daily_refresh_resp.jobReference.jobId}
+                                except:
+                                  as: e
+                                  steps:
+                                    - gb_daily_refresh_err:
+                                        assign:
+                                          - errors: ${list.concat(errors, ["gamebench_daily_refresh - " + text.decode(json.encode(e))])}
+                        - condition: ${not (preflight_status.gamebench.ready and gamebench_available)}
+                          steps:
+                            - gamebench_daily_refresh_skipped_log:
+                                call: sys.log
+                                args:
+                                  severity: "WARNING"
+                                  data:
+                                    service: "gamebench_daily_refresh"
+                                    event: "skipped_gamebench_unavailable"
+                                    code: ${preflight_status.gamebench.reason}
+                  - gamebench_data_quality_check_try:
+                      switch:
+                        - condition: ${preflight_status.gamebench.ready and gamebench_available}
+                          steps:
+                            - gamebench_data_quality_try:
+                                try:
+                                  steps:
+                                    - gamebench_data_quality_query:
+                                        call: googleapis.bigquery.v2.jobs.query
+                                        args:
+                                          projectId: ${project_id}
+                                          body:
+                                            useLegacySql: false
+                                            query: |
+                                              SELECT
+                                                (SELECT COUNT(*)
+                                                 FROM `qa_metrics.gamebench_sessions_latest`
+                                                 WHERE time_pushed >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)) AS sessions_recent_row_count,
+                                                (SELECT COUNT(*)
+                                                 FROM `qa_metrics.gamebench_daily_metrics`
+                                                 WHERE metric_date >= DATE_SUB(CURRENT_DATE("UTC"), INTERVAL 2 DAY)) AS daily_recent_row_count
+                                        result: gb_dq_resp
+
+                                    - gamebench_data_quality_parse:
+                                        assign:
+                                          - gb_dq_rows: ${default(map.get(gb_dq_resp, "rows"), [])}
+                                          - gb_dq_fields: ${if(len(gb_dq_rows) > 0, default(map.get(gb_dq_rows[0], "f"), []), [])}
+                                          - gb_dq_sessions_count: ${if(len(gb_dq_fields) > 0, int(default(map.get(gb_dq_fields[0], "v"), "0")), 0)}
+                                          - gb_dq_daily_count: ${if(len(gb_dq_fields) > 1, int(default(map.get(gb_dq_fields[1], "v"), "0")), 0)}
+                                          - gb_dq_is_ok: ${gb_dq_sessions_count > 0 and gb_dq_daily_count > 0}
+                                          - results.gamebench_data_quality:
+                                              checks:
+                                                - dataset: "qa_metrics"
+                                                  table: "gamebench_sessions_latest"
+                                                  checked_window: "last_24h_utc"
+                                                  row_count: ${gb_dq_sessions_count}
+                                                - dataset: "qa_metrics"
+                                                  table: "gamebench_daily_metrics"
+                                                  checked_window: "last_2d_utc"
+                                                  row_count: ${gb_dq_daily_count}
+                                              status: ${if(gb_dq_is_ok, "ok", "non_ok")}
+
+                                    - gamebench_data_quality_log_info:
+                                        call: sys.log
+                                        args:
+                                          severity: ${if(gb_dq_is_ok, "INFO", "ERROR")}
+                                          data:
+                                            event: "gamebench_data_quality_check"
+                                            status: ${if(gb_dq_is_ok, "ok", "non_ok")}
+                                            checks: ${results.gamebench_data_quality.checks}
+
+                                    - gamebench_data_quality_set_non_ok:
+                                        switch:
+                                          - condition: ${not gb_dq_is_ok}
+                                            steps:
+                                              - gamebench_data_quality_mark_status:
+                                                  assign:
+                                                    - dq_status: "non_ok"
+                                                    - status: "non_ok"
+                                                    - errors: ${list.concat(errors, ["gamebench_data_quality - empty_or_stale_source_data"])}
+
+                                    - gamebench_data_quality_alert_webhook:
+                                        switch:
+                                          - condition: ${not gb_dq_is_ok and dq_alert_webhook_url != ""}
+                                            steps:
+                                              - gamebench_data_quality_webhook_call:
+                                                  call: http.post
+                                                  args:
+                                                    url: ${dq_alert_webhook_url}
+                                                    timeout: 30
+                                                    body:
+                                                      event: "gamebench_data_quality_alert"
+                                                      status: "non_ok"
+                                                      checks: ${results.gamebench_data_quality.checks}
+                                except:
+                                  as: e
+                                  steps:
+                                    - gb_dq_err:
                                         assign:
                                           - dq_status: "non_ok"
                                           - status: "non_ok"
-                                          - errors: ${list.concat(errors, ["gamebench_data_quality - empty_or_stale_source_data"])}
-
-                          - gamebench_data_quality_alert_webhook:
-                              switch:
-                                - condition: ${not gb_dq_is_ok and dq_alert_webhook_url != ""}
-                                  steps:
-                                    - gamebench_data_quality_webhook_call:
-                                        call: http.post
-                                        args:
-                                          url: ${dq_alert_webhook_url}
-                                          timeout: 30
-                                          body:
-                                            event: "gamebench_data_quality_alert"
-                                            status: "non_ok"
-                                            checks: ${results.gamebench_data_quality.checks}
-                      except:
-                        as: e
-                        steps:
-                          - gb_dq_err:
-                              assign:
-                                - dq_status: "non_ok"
-                                - status: "non_ok"
-                                - errors: ${list.concat(errors, ["gamebench_data_quality - " + text.decode(json.encode(e))])}
+                                          - errors: ${list.concat(errors, ["gamebench_data_quality - " + text.decode(json.encode(e))])}
+                        - condition: ${not (preflight_status.gamebench.ready and gamebench_available)}
+                          steps:
+                            - gamebench_data_quality_skipped_log:
+                                call: sys.log
+                                args:
+                                  severity: "WARNING"
+                                  data:
+                                    service: "gamebench_data_quality"
+                                    event: "skipped_gamebench_unavailable"
+                                    code: ${preflight_status.gamebench.reason}
                   - branch_d_log_elapsed:
                       call: sys.log
                       args:
