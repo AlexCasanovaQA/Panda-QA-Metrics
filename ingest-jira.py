@@ -41,8 +41,8 @@ DEFAULT_LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS", "30"))
 BQ_DATASET_ID = os.environ.get("BQ_DATASET_ID", "qa_metrics")
 BQ_TABLE_ID = os.environ.get("BQ_TABLE_ID", "jira_issues_v2")
 
-JIRA_BASE_URL = os.environ.get("JIRA_BASE_URL")  # required
-JIRA_EMAIL = os.environ.get("JIRA_EMAIL")  # required
+JIRA_BASE_URL = os.environ.get("JIRA_BASE_URL") or os.environ.get("JIRA_SITE")  # required
+JIRA_EMAIL = os.environ.get("JIRA_EMAIL") or os.environ.get("JIRA_USER")  # required
 JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN")  # required
 JIRA_PROJECT_KEYS = os.environ.get("JIRA_PROJECT_KEYS", "").strip()
 
@@ -215,6 +215,8 @@ def _resolve_severity_field_id() -> Optional[str]:
     if SEVERITY_FIELD_ID:
         print(f"Using explicit severity field id from env: {SEVERITY_FIELD_ID}")
         return SEVERITY_FIELD_ID
+
+    print("JIRA_SEVERITY_FIELD_ID not set; attempting best-effort auto-detection from Jira /field metadata.")
 
     try:
         payload = _jira_get("/rest/api/3/field")
