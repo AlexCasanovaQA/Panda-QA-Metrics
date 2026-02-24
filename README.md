@@ -208,6 +208,12 @@ Use a single schedule for `qa_metrics_ingestion` and tune TestRail freshness wit
 
 Pass Jira keys explicitly in the workflow invocation (`project_keys_csv` or `project_keys`) so Jira and Jira changelog ingestion never run with empty keys. The workflow also accepts `jira_project_keys_csv` / `jira_project_keys` args and `JIRA_PROJECT_KEYS_CSV` / `JIRA_PROJECT_KEY` env fallbacks for compatibility with older scheduler payloads. It still hard-fails early when keys are missing.
 
+Gamebench preflight requirements:
+- `QA_METRICS_GAMEBENCH_URL` (or runtime arg `gamebench_url`) must be set to a valid `http(s)` URL so the workflow can call `${gamebench_url}/healthz` before Gamebench ingestion runs.
+- `require_gamebench_healthz` (or env `QA_METRICS_REQUIRE_GAMEBENCH_HEALTHZ`) controls strictness:
+  - `true` (default): preflight fails closed when Gamebench health check fails/not-ready, and Gamebench branches are skipped.
+  - `false`: health check issues are logged as warnings (including error detail), but downstream Gamebench ingestion/data-quality steps still run.
+
 Example invocation args:
 
 ```json
