@@ -92,6 +92,10 @@
     filters:
       jira_bug_events_daily.event_type: "fixed"
       jira_bug_events_daily.event_date_date: "today"
+    listen:
+      pod: jira_bug_events_daily.pod
+      priority: jira_bug_events_daily.priority_label
+      severity: jira_bug_events_daily.severity_label
     note_display: hover
     note_text: "Definition (UTC): Fixed bugs today. Fixed = transitions into done_or_fixed statuses (resolved/closed/verified/done/fixed/completed/qa approved/ready for release). Calculation: COUNT of event_type=fixed on today (UTC). This tile keeps a fixed daily window and ignores dashboard date_range."
     row: 2
@@ -258,6 +262,9 @@
     sorts: [jira_bug_events_daily.bugs desc]
     listen:
       date_range: jira_bug_events_daily.event_date_date
+      pod: jira_bug_events_daily.pod
+      priority: jira_bug_events_daily.priority_label
+      severity: jira_bug_events_daily.severity_label
     note_display: hover
     note_text: "Definition (UTC): Fixed bugs by priority. Fixed = transition into done_or_fixed statuses. Calculation: COUNT of event_type=fixed grouped by priority_label, controlled by dashboard Date Range."
     row: 22
