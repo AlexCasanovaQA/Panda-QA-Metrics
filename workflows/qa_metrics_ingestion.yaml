@@ -63,6 +63,7 @@ main:
           - include_testrail_results: ${text.to_lower("" + default(map.get(request_args, "include_testrail_results"), "false")) == "true"}
           - bugsnag_enabled: ${default(map.get(request_args, "bugsnag_enabled"), default(sys.get_env("QA_METRICS_BUGSNAG_ENABLED"), "true"))}
           - bugsnag_configured: ${default(map.get(request_args, "bugsnag_configured"), default(sys.get_env("QA_METRICS_BUGSNAG_CONFIGURED"), "true"))}
+          - require_gamebench_healthz: ${text.to_lower("" + default(map.get(request_args, "require_gamebench_healthz"), default(sys.get_env("QA_METRICS_REQUIRE_GAMEBENCH_HEALTHZ"), "false"))) == "true"}
           - gamebench_available: true
 
           # ingest-jira REQUIERE project_keys (lista)
@@ -180,7 +181,7 @@ main:
                       result: gb_smoke_resp
                   - gamebench_smoke_eval:
                       switch:
-                        - condition: ${default(map.get(gb_smoke_resp.body, "ready"), false) != true}
+                        - condition: ${default(map.get(gb_smoke_resp.body, "ready"), false) != true and require_gamebench_healthz}
                           steps:
                             - gamebench_smoke_mark_not_ready:
                                 assign:
@@ -188,15 +189,47 @@ main:
                                   - preflight_status.gamebench.reason: "gamebench_not_ready"
                                   - gamebench_available: false
                                   - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"type\":\"preflight_error\",\"code\":\"gamebench_not_ready\",\"message\":\"Gamebench health endpoint returned not ready\"}"])}
+                        - condition: ${default(map.get(gb_smoke_resp.body, "ready"), false) != true and not require_gamebench_healthz}
+                          steps:
+                            - gamebench_smoke_not_ready_warning_log:
+                                call: sys.log
+                                args:
+                                  severity: "WARNING"
+                                  data:
+                                    service: "gamebench"
+                                    event: "health_check_failed"
+                                    code: "gamebench_not_ready"
+                                    message: "Gamebench health endpoint returned not ready; continuing because require_gamebench_healthz=false"
+                            - gamebench_smoke_not_ready_warning_store:
+                                assign:
+                                  - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"event\":\"health_check_failed\",\"type\":\"warning\",\"code\":\"gamebench_not_ready\",\"message\":\"Gamebench health endpoint returned not ready\"}"])}
               except:
                 as: e
                 steps:
-                  - gamebench_smoke_err:
-                      assign:
-                        - preflight_status.gamebench.ready: false
-                        - preflight_status.gamebench.reason: "gamebench_health_check_failed"
-                        - gamebench_available: false
-                        - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"type\":\"preflight_error\",\"code\":\"gamebench_health_check_failed\",\"message\":\"Failed to call Gamebench health endpoint\"}"])}
+                  - gamebench_smoke_err_switch:
+                      switch:
+                        - condition: ${require_gamebench_healthz}
+                          steps:
+                            - gamebench_smoke_err_strict:
+                                assign:
+                                  - preflight_status.gamebench.ready: false
+                                  - preflight_status.gamebench.reason: "gamebench_health_check_failed"
+                                  - gamebench_available: false
+                                  - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"type\":\"preflight_error\",\"code\":\"gamebench_health_check_failed\",\"message\":\"Failed to call Gamebench health endpoint\"}"])}
+                        - condition: ${not require_gamebench_healthz}
+                          steps:
+                            - gamebench_smoke_err_warning_log:
+                                call: sys.log
+                                args:
+                                  severity: "WARNING"
+                                  data:
+                                    service: "gamebench"
+                                    event: "health_check_failed"
+                                    code: "gamebench_health_check_failed"
+                                    message: "Failed to call Gamebench health endpoint; continuing because require_gamebench_healthz=false"
+                            - gamebench_smoke_err_warning_store:
+                                assign:
+                                  - errors: ${list.concat(errors, ["{\"service\":\"gamebench\",\"event\":\"health_check_failed\",\"type\":\"warning\",\"code\":\"gamebench_health_check_failed\",\"message\":\"Failed to call Gamebench health endpoint\"}"])}
 
     # --------------------------
     # PARALLEL INGESTION BRANCHES
