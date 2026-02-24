@@ -26,6 +26,7 @@ main:
           - results:
               jira: null
               jira_changelog: null
+              jira_changelog_ingestion_state: null
               jira_status_transitions_data_quality: null
               testrail: null
               testrail_users: null
@@ -389,6 +390,14 @@ main:
                                     event: "skipped_by_preflight"
                                     preflight: ${preflight_status.jira}
                   - jira_changelog_try:
+                      assign:
+                        - results.jira_changelog_ingestion_state:
+                            outcome: "pending"
+                            failure_class: null
+                            reason: "pending"
+                            metadata:
+                              requested_lookback_days: ${lookback_days}
+                              project_keys_csv: ${payload_changelog.project_keys}
                       switch:
                         - condition: ${preflight_status.jira_changelog.ready}
                           steps:
@@ -396,24 +405,53 @@ main:
                                 try:
                                   steps:
                                     - jira_changelog_call:
-                                        call: http.post
-                                        args:
-                                          url: ${jira_changelog_url}
-                                          timeout: 600
-                                          auth:
-                                            type: OIDC
-                                            audience: ${jira_changelog_url}
-                                          body: ${payload_changelog}
-                                        result: jcl_resp
+                                        try:
+                                          call: http.post
+                                          args:
+                                            url: ${jira_changelog_url}
+                                            timeout: 600
+                                            auth:
+                                              type: OIDC
+                                              audience: ${jira_changelog_url}
+                                            body: ${payload_changelog}
+                                          result: jcl_resp
+                                        retry:
+                                          predicate: ${http.default_retry_predicate}
+                                          max_retries: 4
+                                          backoff:
+                                            initial_delay: 2
+                                            max_delay: 30
+                                            multiplier: 2
                                     - jira_changelog_store:
                                         assign:
                                           - results.jira_changelog: ${jcl_resp.body}
+                                          - jira_changelog_rows_inserted: ${int(default(map.get(jcl_resp.body, "rows_inserted"), 0))}
+                                          - jira_changelog_empty_data_success: ${jira_changelog_rows_inserted == 0}
+                                          - jira_changelog_parse_failure: ${jcl_resp.body == null or map.get(jcl_resp.body, "ok") == null}
+                                          - results.jira_changelog_ingestion_state:
+                                              outcome: ${if(jira_changelog_parse_failure, "failed", "success")}
+                                              failure_class: ${if(jira_changelog_parse_failure, "parse_failure", null)}
+                                              reason: ${if(jira_changelog_parse_failure, "jira_changelog_parse_failure", if(jira_changelog_empty_data_success, "jira_changelog_empty_data_success", "jira_changelog_ingestion_succeeded"))}
+                                              metadata:
+                                                requested_lookback_days: ${lookback_days}
+                                                project_keys_csv: ${payload_changelog.project_keys}
+                                                since: ${if(jcl_resp.body != null, map.get(jcl_resp.body, "since"), null)}
+                                                until: ${if(jcl_resp.body != null, map.get(jcl_resp.body, "until"), null)}
+                                                rows_inserted: ${if(jcl_resp.body != null, map.get(jcl_resp.body, "rows_inserted"), null)}
                                 except:
                                   as: e
                                   steps:
                                     - jcl_err:
                                         assign:
-                                          - errors: ${list.concat(errors, ["{\"service\":\"jira_changelog\",\"type\":\"ingestion_error\",\"code\":\"jira_changelog_call_failed\",\"message\":\"Failed to ingest Jira changelog metrics\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - results.jira_changelog_ingestion_state:
+                                              outcome: "failed"
+                                              failure_class: "transport_failure"
+                                              reason: "jira_changelog_call_failed_transport"
+                                              metadata:
+                                                requested_lookback_days: ${lookback_days}
+                                                project_keys_csv: ${payload_changelog.project_keys}
+                                                error: ${text.decode(json.encode(e))}
+                                          - errors: ${list.concat(errors, ["{\"service\":\"jira_changelog\",\"type\":\"ingestion_error\",\"code\":\"jira_changelog_call_failed\",\"message\":\"Failed to ingest Jira changelog metrics\",\"classification\":\"transport_failure\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
                         - condition: ${not preflight_status.jira_changelog.ready}
                           steps:
                             - jira_changelog_skipped_log:
@@ -424,9 +462,18 @@ main:
                                     service: "jira_changelog"
                                     event: "skipped_by_preflight"
                                     preflight: ${preflight_status.jira_changelog}
+                            - jira_changelog_preflight_state:
+                                assign:
+                                  - results.jira_changelog_ingestion_state:
+                                      outcome: "skipped"
+                                      failure_class: "dependency_not_ready"
+                                      reason: ${"jira_changelog_preflight_not_ready:" + preflight_status.jira_changelog.reason}
+                                      metadata:
+                                        requested_lookback_days: ${lookback_days}
+                                        project_keys_csv: ${payload_changelog.project_keys}
                   - jira_status_transitions_data_quality_gate:
                       switch:
-                        - condition: ${preflight_status.jira_changelog.ready and results.jira_changelog != null and default(map.get(results.jira_changelog, "ok"), true) and (map.get(results.jira_changelog, "status") == null or text.to_lower("" + map.get(results.jira_changelog, "status")) == "ok")}
+                        - condition: ${preflight_status.jira_changelog.ready and results.jira_changelog != null and results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "outcome") == "success" and default(map.get(results.jira_changelog, "ok"), true) and (map.get(results.jira_changelog, "status") == null or text.to_lower("" + map.get(results.jira_changelog, "status")) == "ok")}
                           steps:
                             - jira_status_transitions_data_quality_try:
                                 try:
@@ -507,12 +554,25 @@ main:
                             - jira_status_transitions_data_quality_mark_skipped:
                                 assign:
                                   - jira_changelog_result_missing: ${results.jira_changelog == null}
+                                  - jira_changelog_ingestion_state_missing: ${results.jira_changelog_ingestion_state == null}
+                                  - jira_changelog_transport_failure: ${results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "failure_class") == "transport_failure"}
+                                  - jira_changelog_parse_failure: ${results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "failure_class") == "parse_failure"}
+                                  - jira_changelog_empty_data_success: ${results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "reason") == "jira_changelog_empty_data_success"}
                                   - jira_changelog_ok_not_ok: ${results.jira_changelog != null and map.get(results.jira_changelog, "ok") != null and not default(map.get(results.jira_changelog, "ok"), false)}
                                   - jira_changelog_status_not_ok: ${results.jira_changelog != null and map.get(results.jira_changelog, "status") != null and text.to_lower("" + map.get(results.jira_changelog, "status")) != "ok"}
-                                  - jira_status_transitions_data_quality_skip_reason: ${if(not preflight_status.jira_changelog.ready, "jira_changelog_preflight_not_ready:" + preflight_status.jira_changelog.reason, if(jira_changelog_result_missing, "jira_changelog_result_missing", if(jira_changelog_ok_not_ok, "jira_changelog_result_not_ok", if(jira_changelog_status_not_ok, "jira_changelog_status_not_ok", "jira_changelog_ingestion_not_successful"))))}
+                                  - jira_status_transitions_data_quality_skip_reason: ${if(not preflight_status.jira_changelog.ready, "jira_changelog_preflight_not_ready:" + preflight_status.jira_changelog.reason, if(jira_changelog_transport_failure, "jira_changelog_dependency_transport_failure", if(jira_changelog_parse_failure, "jira_changelog_dependency_parse_failure", if(jira_changelog_ingestion_state_missing, "jira_changelog_ingestion_state_missing", if(jira_changelog_result_missing, "jira_changelog_result_missing", if(jira_changelog_ok_not_ok, "jira_changelog_result_not_ok", if(jira_changelog_status_not_ok, "jira_changelog_status_not_ok", "jira_changelog_ingestion_not_successful")))))))}
                                   - results.jira_status_transitions_data_quality:
                                       status: "skipped"
                                       skip_reason: ${jira_status_transitions_data_quality_skip_reason}
+                                      dependency:
+                                        service: "jira_changelog"
+                                        failure_class: ${if(results.jira_changelog_ingestion_state != null, map.get(results.jira_changelog_ingestion_state, "failure_class"), null)}
+                                        reason: ${if(results.jira_changelog_ingestion_state != null, map.get(results.jira_changelog_ingestion_state, "reason"), null)}
+                                        metadata:
+                                          requested_lookback_days: ${if(results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "metadata") != null and map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "requested_lookback_days") != null, map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "requested_lookback_days"), lookback_days)}
+                                          project_keys_csv: ${if(results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "metadata") != null and map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "project_keys_csv") != null, map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "project_keys_csv"), payload_changelog.project_keys)}
+                                          since: ${if(results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "metadata") != null, map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "since"), null)}
+                                          until: ${if(results.jira_changelog_ingestion_state != null and map.get(results.jira_changelog_ingestion_state, "metadata") != null, map.get(map.get(results.jira_changelog_ingestion_state, "metadata"), "until"), null)}
                                       checks: []
                             - jira_status_transitions_data_quality_skipped_log:
                                 call: sys.log
