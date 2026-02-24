@@ -3,7 +3,7 @@ main:
   steps:
     - init:
         assign:
-          - request_args: ${default(args, {})}
+          - request_args: ${default(args, json.decode("{}"))}
           - testrail_results_url: "https://ingest-testrail-results-147201244534.europe-west1.run.app"
           - max_iterations: ${default(map.get(request_args, "max_iterations"), 5)}
           - iteration: 0
@@ -13,7 +13,9 @@ main:
           - responses: []
 
     - ingest_loop:
-        while: ${iteration < max_iterations}
+        for:
+          value: iteration_index
+          range: ${[0, max_iterations]}
         steps:
           - call_results:
               call: http.post
@@ -33,7 +35,7 @@ main:
               assign:
                 - responses: ${list.concat(responses, [trr_resp.body])}
                 - continuation_token: ${default(map.get(trr_resp.body, "continuation_token"), null)}
-                - iteration: ${iteration + 1}
+                - iteration: ${iteration_index + 1}
 
           - maybe_stop:
               switch:
