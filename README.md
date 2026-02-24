@@ -252,9 +252,9 @@ The definitions below are the canonical ones used by SQL/LookML in this reposito
 Source-of-truth: `qa_metrics.jira_status_category_map` in `bigquery/setup.sql`.
 
 - `done_or_fixed` statuses:
-  - `resolved`, `closed`, `verified`, `done`, `fixed`, `completed`, `qa approved`, `ready for release`
+  - `resolved`, `closed`, `verified`, `done`, `fixed`, `completed`, `qa approved`, `qa verified`, `ready for deploy`, `ready for release`, `released`, `in cert`
 - `reopened_target` statuses:
-  - `open`, `reopened`, `backlog`, `to do`, `in progress`, `selected for development`, `in review`, `ready for qa`, `ready for test`, `qa testing`, `testing`
+  - `open`, `reopened`, `backlog`, `to do`, `in progress`, `selected for development`, `in review`, `ready for qa`, `ready for test`, `qa testing`, `in qa`, `testing`
 
 Matching is case-insensitive and trim-tolerant (`LOWER(TRIM(status))`).
 
@@ -271,6 +271,12 @@ Matching is case-insensitive and trim-tolerant (`LOWER(TRIM(status))`).
 - Meaning: bugs/defects that transitioned into any `done_or_fixed` status.
 - Source-of-truth: `qa_metrics.jira_bug_events_daily` (`event_type = 'fixed'`) and `qa_metrics.jira_fix_fail_rate_daily.fixed_count`.
 - Logic: status change where normalized `to_status` is in `done_or_fixed`; aggregated as daily distinct issue count.
+
+### Claimed fixed
+
+- Meaning: first timestamp when a bug/defect reaches any `done_or_fixed` status.
+- Source-of-truth: `qa_metrics.jira_mttr_claimed_fixed_daily`.
+- Logic: `claimed_fixed_at = MIN(changed_at)` per issue where normalized `to_status` is in `done_or_fixed`.
 
 ### Reopened
 
@@ -303,6 +309,18 @@ This dashboard uses two active definitions intentionally; both should remain exp
   - `claimed_fixed_at = MIN(changed_at)` where normalized `to_status` is in `done_or_fixed`.
   - `avg_mttr_hours = AVG(TIMESTAMP_DIFF(claimed_fixed_at, created, SECOND) / 3600.0)`.
   - Guard: exclude invalid rows where `claimed_fixed_at < created`.
+
+### Bugsnag active + severity (dashboard alignment)
+
+- Active Bugsnag error:
+  - Source-of-truth: LookML `views/bugsnag_errors_latest.view.lkml` measure `active_errors`.
+  - Logic: `is_active = LOWER(IFNULL(status, '')) NOT IN ('fixed','resolved','closed')`; `active_errors = COUNT(*)` filtered to `is_active = yes`.
+- High/Critical active Bugsnag errors:
+  - Source-of-truth: same view, measure `high_critical_active_errors`.
+  - Logic: active errors with `severity IN ('critical','error')`.
+- Severity note for consumers:
+  - Bugsnag tiles use raw Bugsnag severities (`critical`, `error`, `warning`, `info`, etc.) in the Bugsnag explore.
+  - In consolidated KPI facts (`qa_metrics.qa_kpi_facts`), severity is normalized for cross-source reporting (`error -> High`, `warning -> Medium`, `info -> Low`).
 
 ---
 
