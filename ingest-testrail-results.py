@@ -307,6 +307,9 @@ def _safe_int(value: Any) -> Optional[int]:
 
 # ----------------- Entry -----------------
 def hello_http(request):
+    if request.path.endswith("/healthz") or request.method == "GET":
+        return (jsonify({"status": "OK", "service": "ingest-testrail-results", "ready": True}), 200)
+
     started = time.monotonic()
     try:
         ensure_table()

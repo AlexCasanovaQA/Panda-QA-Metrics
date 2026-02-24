@@ -231,3 +231,9 @@ def ingest_testrail_users(request):
         200,
         {"Content-Type": "application/json"},
     )
+
+
+def hello_http(request):
+    if request.path.endswith("/healthz") or request.method == "GET":
+        return (json.dumps({"ok": True, "service": "ingest-testrail-users", "ready": True}), 200, {"Content-Type": "application/json"})
+    return ingest_testrail_users(request)

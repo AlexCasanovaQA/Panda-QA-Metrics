@@ -489,3 +489,9 @@ def ingest_jira(request):
         200,
         {"Content-Type": "application/json"},
     )
+
+
+def hello_http(request):
+    if request.path.endswith("/healthz") or request.method == "GET":
+        return (json.dumps({"ok": True, "service": "ingest-jira", "ready": True}), 200, {"Content-Type": "application/json"})
+    return ingest_jira(request)
