@@ -78,9 +78,9 @@
       severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition (UTC): Entered bugs today. Entered = bug/defect issues with created_date in window. Calculation: COUNT(issue_key) where issue_type in (Bug, Defect) and created_date=today (UTC)."
-    row: 3
+    row: 2
     col: 0
-    width: 6
+    width: 4
     height: 3
 
   - name: fixes_today
@@ -94,9 +94,9 @@
       jira_bug_events_daily.event_date_date: "today"
     note_display: hover
     note_text: "Definition (UTC): Fixed bugs today. Fixed = transitions into done_or_fixed statuses (resolved/closed/verified/done/fixed/completed/qa approved/ready for release). Calculation: COUNT of event_type=fixed on today (UTC). This tile keeps a fixed daily window and ignores dashboard date_range."
-    row: 3
-    col: 6
-    width: 6
+    row: 2
+    col: 5
+    width: 4
     height: 3
 
 
@@ -115,9 +115,9 @@
       severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Active bugs now. Active = current bug backlog with statusCategory != Done. Calculation: COUNT of bug/defect issues where statusCategory != Done."
-    row: 6
-    col: 0
-    width: 24
+    row: 2
+    col: 10
+    width: 4
     height: 3
 
   - name: qa_verification_queue_now
@@ -135,9 +135,9 @@
       severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Current QA verification queue. Calculation: COUNT of bugs with qa_verification_state='QA Verification' (normalizes states such as Ready for QA, In QA, Awaiting QA Verification)."
-    row: 3
-    col: 12
-    width: 6
+    row: 2
+    col: 15
+    width: 4
     height: 3
 
   - name: awaiting_regression_now
@@ -155,16 +155,16 @@
       severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Bugs waiting for or currently in regression. Calculation: COUNT with status in (Ready for Regression, In Regression). Use: Evaluate ongoing regression testing load."
-    row: 3
-    col: 18
-    width: 6
+    row: 2
+    col: 20
+    width: 4
     height: 3
 
   - name: header_incoming
     type: text
     title_text: "Incoming defects"
     body_text: "Bug intake analysis by severity and priority, with proportional distribution and daily trend."
-    row: 9
+    row: 6
     col: 0
     width: 24
     height: 2
@@ -187,7 +187,7 @@
     show_value_labels: true
     label_type: labPer
     series_colors: {"(S0) Blocker": "#D64550", "(S1) Critical": "#F28B30", "(S2) Major": "#F2C94C", "(S3) Minor": "#2D9CDB", "(S4) Trivial": "#6FCF97", "(unknown)": "#BDBDBD"}
-    row: 11
+    row: 8
     col: 0
     width: 12
     height: 6
@@ -209,7 +209,7 @@
     note_text: "Definition (UTC): Entered bugs by priority. Entered = created_date in selected window. Calculation: COUNT of bug/defect issues grouped by priority, controlled by dashboard Date Range."
     show_value_labels: true
     label_type: labPer
-    row: 11
+    row: 8
     col: 12
     width: 12
     height: 6
@@ -233,10 +233,19 @@
     note_display: hover
     note_text: "Definition (UTC): Entered bug trend by priority. Entered = created_date in selected window. Calculation: daily COUNT of bug/defect issues by created_date and priority."
     series_colors: {Highest: "#D64550", High: "#F28B30", Medium: "#F2C94C", Low: "#2D9CDB", Lowest: "#6FCF97"}
-    row: 17
+    row: 14
     col: 0
     width: 24
     height: 6
+
+  - name: header_fixes
+    type: text
+    title_text: "Fixes"
+    body_text: "Resolution throughput by priority with distribution and daily trend."
+    row: 20
+    col: 0
+    width: 24
+    height: 2
 
   - name: fixed_by_priority
     title: Bugs fixed by Priority
@@ -251,7 +260,7 @@
       date_range: jira_bug_events_daily.event_date_date
     note_display: hover
     note_text: "Definition (UTC): Fixed bugs by priority. Fixed = transition into done_or_fixed statuses. Calculation: COUNT of event_type=fixed grouped by priority_label, controlled by dashboard Date Range."
-    row: 23
+    row: 22
     col: 0
     width: 12
     height: 6
@@ -274,10 +283,19 @@
     note_display: hover
     note_text: "Definition (UTC): Fixed bug trend by priority. Fixed = transition into done_or_fixed statuses. Calculation: daily COUNT of event_type=fixed by event_date and priority_label."
     stacking: normal
-    row: 23
+    row: 22
     col: 12
     width: 12
     height: 6
+
+  - name: header_active
+    type: text
+    title_text: "Active defects"
+    body_text: "Current active backlog composition, status distribution, and trend."
+    row: 28
+    col: 0
+    width: 24
+    height: 2
 
   - name: active_bugs_by_pod
     title: Active bugs by POD
@@ -300,8 +318,8 @@
     show_others: true
     show_value_labels: true
     label_type: labPer
-    row: 29
-    col: 0
+    row: 30
+    col: 12
     width: 12
     height: 6
 
@@ -323,8 +341,8 @@
     note_text: "Definition: Active bugs by priority. Active = current bug backlog with statusCategory != Done. Calculation: COUNT grouped by priority."
     show_value_labels: true
     label_type: labPer
-    row: 29
-    col: 12
+    row: 30
+    col: 0
     width: 12
     height: 6
 
@@ -343,7 +361,7 @@
       severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Bugs by current Jira status. Includes statuses such as open/claimed fixed/fixed/reopened based on current state labels. Calculation: COUNT of bug/defect issues grouped by current status."
-    row: 35
+    row: 36
     col: 0
     width: 12
     height: 6
@@ -360,7 +378,7 @@
     note_display: hover
     note_text: "Definition (UTC): Active bug count over time. Active = bugs not yet in done state as-of each day. Calculation: daily active_bug_count snapshot."
     series_colors: {jira_active_bug_count_daily.active_bug_count: "#2F80ED"}
-    row: 35
+    row: 36
     col: 12
     width: 12
     height: 6
@@ -379,7 +397,7 @@
     note_display: hover
     note_text: "Definition (UTC): Reopened bugs over time. Reopened = transition from done_or_fixed to reopened_target statuses. Calculation: daily COUNT of event_type=reopened."
     series_colors: {jira_bug_events_daily.bugs: "#EB5757"}
-    row: 41
+    row: 93
     col: 0
     width: 12
     height: 6
@@ -400,7 +418,7 @@
       severity: jira_issues_latest.severity_normalized
     note_display: hover
     note_text: "Definition: Active bugs by milestone proxy (fixVersion). Active = current bug backlog with statusCategory != Done. Calculation: COUNT of active bug/defect issues grouped by fix_versions."
-    row: 41
+    row: 93
     col: 12
     width: 12
     height: 6
@@ -409,7 +427,7 @@
     type: text
     title_text: "BugSnag"
     body_text: "Production stability: active error volume and BugSnag severity mix. If BugSnag environment/project dimensions are missing in the source table, project-level slicing is unavailable and BugSnag tiles will stay on global totals/date only."
-    row: 47
+    row: 42
     col: 0
     width: 24
     height: 2
@@ -424,7 +442,7 @@
       bugsnag_project_id: bugsnag_errors_latest.project_id
     note_display: hover
     note_text: "Definition: Active production errors not yet closed. Calculation: COUNT of errors where status is not in resolved/closed."
-    row: 49
+    row: 44
     col: 0
     width: 6
     height: 3
@@ -439,7 +457,7 @@
       bugsnag_project_id: bugsnag_errors_latest.project_id
     note_display: hover
     note_text: "Definition: Highest-impact subset of active errors. Calculation: COUNT of active errors with severity in (critical, error)."
-    row: 49
+    row: 44
     col: 6
     width: 6
     height: 3
@@ -455,7 +473,7 @@
     note_display: hover
     note_text: "Definition: Composition of active errors by severity. Calculation: COUNT of active_errors grouped by severity. Use: Understand the current risk profile."
     series_colors: {critical: "#D64550", error: "#F28B30", warning: "#F2C94C", info: "#56CCF2"}
-    row: 49
+    row: 44
     col: 12
     width: 12
     height: 6
@@ -473,7 +491,7 @@
     note_display: hover
     note_text: "Definition: Daily count of newly seen BugSnag errors. Calculation: COUNT(error_key) by first_seen_date, controlled by dashboard Date Range. Alternative: swap to last_seen_date to visualize active error touchpoints over time."
     series_colors: {bugsnag_errors_latest.errors: "#2F80ED"}
-    row: 55
+    row: 50
     col: 0
     width: 24
     height: 6
@@ -482,7 +500,7 @@
     type: text
     title_text: "GameBench"
     body_text: "Gameplay performance: current snapshots and trends by platform/environment."
-    row: 61
+    row: 56
     col: 0
     width: 24
     height: 2
@@ -501,7 +519,7 @@
       platform: gamebench_daily_metrics.platform
     note_display: hover
     note_text: "Definition: Snapshot of median FPS by platform on the latest available day in GameBench daily metrics. Calculation: median_fps filtered to is_latest_metric_date = yes."
-    row: 63
+    row: 58
     col: 0
     width: 12
     height: 5
@@ -519,7 +537,7 @@
       platform: gamebench_daily_metrics.platform
     note_display: hover
     note_text: "Definition: Current session stability proxy from the latest available day in GameBench daily metrics. Calculation: fps_stability_pct filtered to is_latest_metric_date = yes. Note: Used as a proxy because crash-free sessions are not available in this explore."
-    row: 63
+    row: 58
     col: 12
     width: 12
     height: 5
@@ -539,7 +557,7 @@
     note_display: hover
     note_text: "Definition: Daily median FPS trend by platform. Calculation: median_fps by date pivoted by platform, governed by the global date_range."
     series_colors: {Android: "#27AE60", iOS: "#2D9CDB"}
-    row: 68
+    row: 63
     col: 0
     width: 24
     height: 6
@@ -548,7 +566,7 @@
     type: text
     title_text: "Operational QA metrics"
     body_text: "Operational QA metrics: fix quality, resolution speed, build size, and test execution."
-    row: 74
+    row: 69
     col: 0
     width: 24
     height: 2
@@ -565,7 +583,7 @@
     note_display: hover
     note_text: "Definition (UTC): Fix fail rate over time. Formula: reopened_count / fixed_count. Reopened = done_or_fixed -> reopened_target; Fixed = transition into done_or_fixed. Denominator window matches numerator window (per-day on trend)."
     series_colors: {jira_fix_fail_rate_daily.fix_fail_rate: "#EB5757"}
-    row: 76
+    row: 71
     col: 0
     width: 12
     height: 6
@@ -582,7 +600,7 @@
     note_display: hover
     note_text: "Definition (UTC): MTTR (hours) for bugs claimed fixed in last 7 days. Claimed fixed = first transition into done_or_fixed statuses. Formula: AVG((claimed_fixed_at - created_at) in hours), grouped by DATE(claimed_fixed_at). Guard: exclude invalid negative durations; no outlier trimming. Tile uses fixed 7-day window and ignores dashboard Date Range."
     series_colors: {jira_mttr_claimed_fixed_daily.avg_mttr_hours: "#9B51E0"}
-    row: 76
+    row: 71
     col: 12
     width: 12
     height: 6
@@ -598,7 +616,7 @@
     sorts: [build_size_manual.metric_date_date desc, build_size_manual.platform]
     note_display: hover
     note_text: "Definition: Most recent build size by platform/environment. Calculation: Snapshot from manual table within a 7-day window ordered by descending date."
-    row: 82
+    row: 77
     col: 0
     width: 12
     height: 4
@@ -616,7 +634,7 @@
     note_display: hover
     note_text: "Definition: Build size evolution in MB by platform. Calculation: build_size_mb by date pivoted by platform."
     series_colors: {Android: "#27AE60", iOS: "#2D9CDB"}
-    row: 86
+    row: 81
     col: 0
     width: 12
     height: 6
@@ -625,9 +643,9 @@
     type: text
     title_text: "TestRail"
     body_text: "TestRail execution health: daily throughput and quality signal from the latest run/build."
-    row: 82
-    col: 12
-    width: 12
+    row: 87
+    col: 0
+    width: 24
     height: 2
 
   - name: testcases_completed_by_day_7d
@@ -644,7 +662,7 @@
     note_display: hover
     note_text: "Definition: Executed test cases per day (excludes untested). Calculation: passed+failed+blocked+retest by completed_on, controlled by global date_range."
     series_colors: {testrail_runs_latest.executed_cases: "#2D9CDB"}
-    row: 84
+    row: 89
     col: 12
     width: 12
     height: 4
@@ -661,8 +679,8 @@
     limit: 1
     note_display: hover
     note_text: "Definition: Pass rate of the latest completed TestRail run. Calculation: SUM(passed)/SUM(passed+failed+blocked+retest) for a single row selected by sorting completed_on desc, run_id desc, and limit 1. This tile ignores the dashboard Date Range filter."
-    row: 82
-    col: 12
+    row: 89
+    col: 0
     width: 6
     height: 3
 
@@ -678,7 +696,7 @@
     limit: 1
     note_display: hover
     note_text: "Definition: BVT pass rate for the latest completed build/run. Calculation: pass_rate from a single row selected by filtering completed_on is not null, sorting completed_on desc and run_id desc, and limit 1. This tile ignores the dashboard Date Range filter."
-    row: 82
-    col: 18
+    row: 89
+    col: 6
     width: 6
     height: 3
