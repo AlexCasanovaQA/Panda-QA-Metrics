@@ -32,6 +32,13 @@
     explore: jira_issues_latest
     field: jira_issues_latest.severity_normalized
 
+  - name: bugsnag_project_id
+    title: BugSnag Project
+    type: field_filter
+    model: panda_qa_metrics
+    explore: bugsnag_errors_latest
+    field: bugsnag_errors_latest.project_id
+
   - name: env
     title: GameBench Environment
     type: field_filter
@@ -401,7 +408,7 @@
   - name: header_bugsnag
     type: text
     title_text: "BugSnag"
-    body_text: "Production stability: active error volume and BugSnag severity mix."
+    body_text: "Production stability: active error volume and BugSnag severity mix. If BugSnag environment/project dimensions are missing in the source table, project-level slicing is unavailable and BugSnag tiles will stay on global totals/date only."
     row: 47
     col: 0
     width: 24
@@ -413,6 +420,8 @@
     model: panda_qa_metrics
     explore: bugsnag_errors_latest
     fields: [bugsnag_errors_latest.active_errors]
+    listen:
+      bugsnag_project_id: bugsnag_errors_latest.project_id
     note_display: hover
     note_text: "Definition: Active production errors not yet closed. Calculation: COUNT of errors where status is not in resolved/closed."
     row: 49
@@ -426,6 +435,8 @@
     model: panda_qa_metrics
     explore: bugsnag_errors_latest
     fields: [bugsnag_errors_latest.high_critical_active_errors]
+    listen:
+      bugsnag_project_id: bugsnag_errors_latest.project_id
     note_display: hover
     note_text: "Definition: Highest-impact subset of active errors. Calculation: COUNT of active errors with severity in (critical, error)."
     row: 49
@@ -439,6 +450,8 @@
     model: panda_qa_metrics
     explore: bugsnag_errors_latest
     fields: [bugsnag_errors_latest.severity, bugsnag_errors_latest.active_errors]
+    listen:
+      bugsnag_project_id: bugsnag_errors_latest.project_id
     note_display: hover
     note_text: "Definition: Composition of active errors by severity. Calculation: COUNT of active_errors grouped by severity. Use: Understand the current risk profile."
     series_colors: {critical: "#D64550", error: "#F28B30", warning: "#F2C94C", info: "#56CCF2"}
@@ -447,11 +460,29 @@
     width: 12
     height: 6
 
+  - name: bugsnag_errors_created_daily
+    title: BugSnag errors created daily
+    type: looker_line
+    model: panda_qa_metrics
+    explore: bugsnag_errors_latest
+    fields: [bugsnag_errors_latest.first_seen_date, bugsnag_errors_latest.errors]
+    sorts: [bugsnag_errors_latest.first_seen_date]
+    listen:
+      date_range: bugsnag_errors_latest.first_seen_date
+      bugsnag_project_id: bugsnag_errors_latest.project_id
+    note_display: hover
+    note_text: "Definition: Daily count of newly seen BugSnag errors. Calculation: COUNT(error_key) by first_seen_date, controlled by dashboard Date Range. Alternative: swap to last_seen_date to visualize active error touchpoints over time."
+    series_colors: {bugsnag_errors_latest.errors: "#2F80ED"}
+    row: 55
+    col: 0
+    width: 24
+    height: 6
+
   - name: header_gamebench
     type: text
     title_text: "GameBench"
     body_text: "Gameplay performance: current snapshots and trends by platform/environment."
-    row: 55
+    row: 61
     col: 0
     width: 24
     height: 2
@@ -470,7 +501,7 @@
       platform: gamebench_daily_metrics.platform
     note_display: hover
     note_text: "Definition: Snapshot of median FPS by platform on the latest available day in GameBench daily metrics. Calculation: median_fps filtered to is_latest_metric_date = yes."
-    row: 57
+    row: 63
     col: 0
     width: 12
     height: 5
@@ -488,7 +519,7 @@
       platform: gamebench_daily_metrics.platform
     note_display: hover
     note_text: "Definition: Current session stability proxy from the latest available day in GameBench daily metrics. Calculation: fps_stability_pct filtered to is_latest_metric_date = yes. Note: Used as a proxy because crash-free sessions are not available in this explore."
-    row: 57
+    row: 63
     col: 12
     width: 12
     height: 5
@@ -508,7 +539,7 @@
     note_display: hover
     note_text: "Definition: Daily median FPS trend by platform. Calculation: median_fps by date pivoted by platform, governed by the global date_range."
     series_colors: {Android: "#27AE60", iOS: "#2D9CDB"}
-    row: 62
+    row: 68
     col: 0
     width: 24
     height: 6
@@ -517,7 +548,7 @@
     type: text
     title_text: "Operational QA metrics"
     body_text: "Operational QA metrics: fix quality, resolution speed, build size, and test execution."
-    row: 68
+    row: 74
     col: 0
     width: 24
     height: 2
@@ -534,7 +565,7 @@
     note_display: hover
     note_text: "Definition: Daily fix fail rate. Calculation: reopened/fixed per day. Interpretation: Higher values mean more fixes return due to regressions or insufficient coverage."
     series_colors: {jira_fix_fail_rate_daily.fix_fail_rate: "#EB5757"}
-    row: 70
+    row: 76
     col: 0
     width: 12
     height: 6
@@ -551,7 +582,7 @@
     note_display: hover
     note_text: "Definition: Daily MTTR in hours for bugs claimed fixed in the last 7 days. Calculation: average(first transition to Resolved/Closed/Verified - created_at), aggregated by claimed fixed date. This tile uses a fixed 7-day window and ignores the dashboard Date Range filter."
     series_colors: {jira_mttr_claimed_fixed_daily.avg_mttr_hours: "#9B51E0"}
-    row: 70
+    row: 76
     col: 12
     width: 12
     height: 6
@@ -567,7 +598,7 @@
     sorts: [build_size_manual.metric_date_date desc, build_size_manual.platform]
     note_display: hover
     note_text: "Definition: Most recent build size by platform/environment. Calculation: Snapshot from manual table within a 7-day window ordered by descending date."
-    row: 76
+    row: 82
     col: 0
     width: 12
     height: 4
@@ -585,7 +616,7 @@
     note_display: hover
     note_text: "Definition: Build size evolution in MB by platform. Calculation: build_size_mb by date pivoted by platform."
     series_colors: {Android: "#27AE60", iOS: "#2D9CDB"}
-    row: 80
+    row: 86
     col: 0
     width: 12
     height: 6
@@ -594,7 +625,7 @@
     type: text
     title_text: "TestRail"
     body_text: "TestRail execution health: daily throughput and quality signal from the latest run/build."
-    row: 76
+    row: 82
     col: 12
     width: 12
     height: 2
@@ -613,7 +644,7 @@
     note_display: hover
     note_text: "Definition: Executed test cases per day (excludes untested). Calculation: passed+failed+blocked+retest by completed_on, controlled by global date_range."
     series_colors: {testrail_runs_latest.executed_cases: "#2D9CDB"}
-    row: 78
+    row: 84
     col: 12
     width: 12
     height: 4

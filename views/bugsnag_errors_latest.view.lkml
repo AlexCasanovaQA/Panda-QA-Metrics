@@ -1,4 +1,5 @@
 view: bugsnag_errors_latest {
+  description: "Latest BugSnag error snapshot used for executive production-stability tiles. Fallback: if project/environment columns are absent in upstream data, BugSnag tiles can only be filtered by global date and severity/status dimensions."
   sql_table_name: `qa_metrics.bugsnag_errors_latest` ;;
 
   dimension: error_key {
@@ -7,7 +8,11 @@ view: bugsnag_errors_latest {
     sql: CONCAT(${TABLE}.project_id, ":", ${TABLE}.error_id) ;;
   }
 
-  dimension: project_id { type: string sql: ${TABLE}.project_id ;; }
+  dimension: project_id {
+    type: string
+    description: "BugSnag project identifier for BugSnag-only dashboard filtering. If unavailable in source data, keep BugSnag tiles unsegmented by project/environment."
+    sql: ${TABLE}.project_id ;;
+  }
   dimension: error_id { type: string sql: ${TABLE}.error_id ;; }
   dimension: error_class { type: string sql: ${TABLE}.error_class ;; }
   dimension: message { type: string sql: ${TABLE}.message ;; }
