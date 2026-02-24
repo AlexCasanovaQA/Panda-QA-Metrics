@@ -36,6 +36,20 @@ TESTRAIL_API_KEY = os.environ.get("TESTRAIL_API_KEY")
 TESTRAIL_PROJECT_IDS = os.environ.get("TESTRAIL_PROJECT_IDS") or os.environ.get("TESTRAIL_PROJECT_ID") or ""
 
 
+def _error_response(error_type: str, code: str, message: str, status_code: int, details: Any = None):
+    payload: Dict[str, Any] = {
+        "ok": False,
+        "error": {
+            "type": error_type,
+            "code": code,
+            "message": message,
+        },
+    }
+    if details is not None:
+        payload["error"]["details"] = details
+    return (json.dumps(payload), status_code, {"Content-Type": "application/json"})
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -127,10 +141,11 @@ def ingest_testrail_users(request):
     proj_raw = req.get("project_ids") or TESTRAIL_PROJECT_IDS
     project_ids = _normalize_project_ids(proj_raw)
     if not project_ids:
-        return (
-            json.dumps({"error": "No project ids provided. Set TESTRAIL_PROJECT_IDS or pass project_ids"}),
+        return _error_response(
+            "config_error",
+            "missing_project_ids",
+            "No project ids provided. Set TESTRAIL_PROJECT_IDS or pass project_ids",
             400,
-            {"Content-Type": "application/json"},
         )
 
     bq = bigquery.Client(project=_get_project_id())
@@ -195,21 +210,13 @@ def ingest_testrail_users(request):
 
     if not rows and failures:
         print("; ".join(failures))
-        return (
-            json.dumps({"error": "No users ingested", "details": failures[:5]}),
-            502,
-            {"Content-Type": "application/json"},
-        )
+        return _error_response("runtime_error", "testrail_users_ingest_failed", "No users ingested", 502, failures[:5])
 
     if rows:
         errors = bq.insert_rows_json(table_ref, rows)
         if errors:
             print("BigQuery insert errors (first 3):", errors[:3])
-            return (
-                json.dumps({"error": "BigQuery insert failed", "details": errors[:3]}),
-                500,
-                {"Content-Type": "application/json"},
-            )
+            return _error_response("runtime_error", "bigquery_insert_failed", "BigQuery insert failed", 500, errors[:3])
 
     return (
         json.dumps(
