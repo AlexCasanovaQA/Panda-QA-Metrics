@@ -2,7 +2,7 @@
   title: QA Executive
   layout: newspaper
   preferred_viewer: dashboards-next
-  description: "Executive QA dashboard with curated KPI definitions, clearer visual hierarchy, and consistent chart sizing/colors (Jira + TestRail + BugSnag + GameBench)."
+  description: "Executive QA dashboard with curated KPI definitions, clearer visual hierarchy, and consistent chart sizing/colors (Jira + TestRail + BugSnag + GameBench). Canonical version uses a single Date Range filter (default 7 days) and avoids duplicated 7d/30d tiles."
   refresh: 15 minutes
 
   filters:
