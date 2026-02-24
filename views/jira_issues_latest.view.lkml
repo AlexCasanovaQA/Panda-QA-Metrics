@@ -42,7 +42,14 @@ view: jira_issues_latest {
     order_by_field: severity_sort_order
     sql:
       CASE
-        WHEN ${TABLE}.severity IS NULL OR TRIM(${TABLE}.severity) = '' THEN '(unknown)'
+        WHEN ${TABLE}.severity IS NULL OR TRIM(${TABLE}.severity) = '' THEN
+          CASE
+            WHEN REGEXP_CONTAINS(LOWER(COALESCE(${TABLE}.priority,'')), r'(blocker|critical|highest|p0)') THEN '(S0) Blocker'
+            WHEN REGEXP_CONTAINS(LOWER(COALESCE(${TABLE}.priority,'')), r'(high|p1)') THEN '(S1) Critical'
+            WHEN REGEXP_CONTAINS(LOWER(COALESCE(${TABLE}.priority,'')), r'(medium|normal|p2)') THEN '(S2) Major'
+            WHEN REGEXP_CONTAINS(LOWER(COALESCE(${TABLE}.priority,'')), r'(low|lowest|p3|p4|minor|trivial)') THEN '(S3) Minor'
+            ELSE '(unknown)'
+          END
         WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s0|sev[\s_-]*0|blocker|showstopper)') THEN '(S0) Blocker'
         WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s1|sev[\s_-]*1|critical|high)') THEN '(S1) Critical'
         WHEN REGEXP_CONTAINS(LOWER(${TABLE}.severity), r'(s2|sev[\s_-]*2|major|medium|moderate)') THEN '(S2) Major'
