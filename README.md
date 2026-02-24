@@ -16,9 +16,10 @@ Timezone: **UTC**
 Create these secrets in the same GCP project where BigQuery lives (names must match exactly):
 
 ### Jira
-- `JIRA_SITE` (e.g. `https://yourcompany.atlassian.net`)
-- `JIRA_USER` (email)
+- `JIRA_BASE_URL` **or** `JIRA_SITE` (e.g. `https://yourcompany.atlassian.net`)
+- `JIRA_EMAIL` **or** `JIRA_USER` (email)
 - `JIRA_API_TOKEN`
+- `JIRA_SEVERITY_FIELD_ID` (**strongly recommended**, e.g. `customfield_12345`) to avoid fragile autodetection
 
 ### TestRail
 - `TESTRAIL_BASE_URL` (e.g. `https://testrail.yourcompany.com`)
