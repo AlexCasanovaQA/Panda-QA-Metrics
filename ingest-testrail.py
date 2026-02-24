@@ -254,11 +254,25 @@ def hello_http(request):
         return (jsonify({"status": "OK", "service": "ingest-testrail", "ready": True}), 200)
 
     try:
+        body = request.get_json(silent=True) or {}
+        days_raw = body.get("days")
+        days_applied: Optional[int] = None
+        if days_raw is not None:
+            days_applied = as_int(days_raw)
+            if days_applied is None or days_applied < 1 or days_applied > 90:
+                return (jsonify({"status": "ERROR", "message": "Invalid 'days'. Expected integer in range 1..90."}), 400)
+
         ensure_table()
         auth = testrail_auth()
         base = testrail_base_url()
 
-        since_ts = get_last_created_on()
+        incremental_since = get_last_created_on()
+        now = datetime.now(timezone.utc)
+        since_ts = incremental_since
+        if days_applied is not None:
+            days_since = now - timedelta(days=days_applied)
+            since_ts = max(incremental_since, days_since)
+
         pids = testrail_project_ids()
         if not pids:
             return (jsonify({"status":"ERROR","message":"No TESTRAIL_PROJECT_IDS/TESTRAIL_PROJECT_ID configured"}), 500)
@@ -268,6 +282,17 @@ def hello_http(request):
             all_rows.extend(fetch_runs(pid, since_ts, auth=auth, base=base))
 
         insert_rows(all_rows)
-        return (jsonify({"status":"OK","rows":len(all_rows), "since": since_ts.isoformat()}), 200)
+        return (
+            jsonify(
+                {
+                    "status": "OK",
+                    "rows": len(all_rows),
+                    "since": since_ts.isoformat(),
+                    "effective_since": since_ts.isoformat(),
+                    "days_applied": days_applied,
+                }
+            ),
+            200,
+        )
     except Exception as e:
         return (jsonify({"status":"ERROR","message":str(e)}), 500)
