@@ -512,29 +512,61 @@ GROUP BY 1;
 
 CREATE OR REPLACE VIEW `qa_metrics.jira_active_bug_count_daily` AS
 WITH status_sets AS (
-  SELECT ARRAY_AGG(normalized_status) AS done_or_fixed_statuses
-  FROM `qa_metrics.jira_status_category_map`
-  WHERE status_category = 'done_or_fixed'
-),
-bug_lifecycle AS (
   SELECT
-    ji.issue_key,
-    DATE(ji.created) AS created_date,
-    DATE(MIN(sc.changed_at)) AS fixed_date
-  FROM `qa_metrics.jira_issues_latest` ji
+    ARRAY_AGG(IF(status_category = 'done_or_fixed', normalized_status, NULL) IGNORE NULLS) AS done_or_fixed_statuses,
+    ARRAY_AGG(IF(status_category = 'reopened_target', normalized_status, NULL) IGNORE NULLS) AS reopened_target_statuses
+  FROM `qa_metrics.jira_status_category_map`
+),
+bugs AS (
+  SELECT
+    issue_key,
+    DATE(created) AS created_date
+  FROM `qa_metrics.jira_issues_latest`
+  WHERE LOWER(TRIM(issue_type)) IN ('bug', 'defect')
+    AND created IS NOT NULL
+),
+status_transition_deltas AS (
+  SELECT
+    sc.issue_key,
+    DATE(sc.changed_at) AS metric_date,
+    CASE
+      WHEN LOWER(TRIM(COALESCE(sc.from_status, ''))) IN UNNEST(ss.done_or_fixed_statuses)
+       AND LOWER(TRIM(COALESCE(sc.to_status, ''))) IN UNNEST(ss.reopened_target_statuses) THEN 1
+      WHEN LOWER(TRIM(COALESCE(sc.to_status, ''))) IN UNNEST(ss.done_or_fixed_statuses)
+       AND LOWER(TRIM(COALESCE(sc.from_status, ''))) NOT IN UNNEST(ss.done_or_fixed_statuses) THEN -1
+      ELSE 0
+    END AS delta
+  FROM `qa_metrics.jira_status_changes` sc
   CROSS JOIN status_sets ss
-  LEFT JOIN `qa_metrics.jira_status_changes` sc
-    ON sc.issue_key = ji.issue_key
-   AND LOWER(TRIM(COALESCE(sc.to_status, ''))) IN UNNEST(ss.done_or_fixed_statuses)
-  WHERE LOWER(TRIM(ji.issue_type)) IN ('bug', 'defect')
-    AND ji.created IS NOT NULL
-  GROUP BY 1,2
+  JOIN bugs b
+    ON b.issue_key = sc.issue_key
+),
+all_deltas AS (
+  SELECT
+    created_date AS metric_date,
+    1 AS delta
+  FROM bugs
+
+  UNION ALL
+
+  SELECT
+    metric_date,
+    delta
+  FROM status_transition_deltas
+  WHERE delta != 0
+),
+daily_deltas AS (
+  SELECT
+    metric_date,
+    SUM(delta) AS net_delta
+  FROM all_deltas
+  GROUP BY 1
 ),
 date_spine AS (
   SELECT metric_date
   FROM UNNEST(
     GENERATE_DATE_ARRAY(
-      (SELECT MIN(created_date) FROM bug_lifecycle),
+      (SELECT MIN(created_date) FROM bugs),
       CURRENT_DATE(),
       INTERVAL 1 DAY
     )
@@ -542,13 +574,13 @@ date_spine AS (
 )
 SELECT
   d.metric_date,
-  COUNTIF(
-    b.created_date <= d.metric_date
-    AND (b.fixed_date IS NULL OR b.fixed_date > d.metric_date)
+  GREATEST(
+    SUM(COALESCE(dd.net_delta, 0)) OVER (ORDER BY d.metric_date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    0
   ) AS active_bug_count
 FROM date_spine d
-CROSS JOIN bug_lifecycle b
-GROUP BY 1;
+LEFT JOIN daily_deltas dd
+  ON dd.metric_date = d.metric_date;
 
 CREATE OR REPLACE VIEW `qa_metrics.testrail_bvt_latest` AS
 SELECT
