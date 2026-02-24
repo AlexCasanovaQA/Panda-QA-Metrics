@@ -7,7 +7,6 @@ view: gamebench_daily_metrics {
     # Source column is DATE; cast to TIMESTAMP so dashboard date_filter boundaries
     # (rendered as TIMESTAMP in BigQuery) compare with matching types.
     sql: TIMESTAMP(${TABLE}.metric_date) ;;
-    datatype: date
   }
 
   dimension: is_latest_metric_date {
