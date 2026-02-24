@@ -21,11 +21,11 @@ TABLE_ID = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_NAME}"
 bq = bigquery.Client(project=PROJECT_ID)
 sm = secretmanager.SecretManagerServiceClient()
 
-HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "30"))
+HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "900"))
 MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "6"))
 BASE_BACKOFF = float(os.environ.get("BASE_BACKOFF_SECONDS", "1.0"))
-MAX_BACKOFF = float(os.environ.get("MAX_BACKOFF_SECONDS", "30.0"))
-MAX_RETRY_TOTAL_SECONDS = float(os.environ.get("MAX_RETRY_TOTAL_SECONDS", "90"))
+MAX_BACKOFF = float(os.environ.get("MAX_BACKOFF_SECONDS", "60.0"))
+MAX_RETRY_TOTAL_SECONDS = float(os.environ.get("MAX_RETRY_TOTAL_SECONDS", "1200"))
 
 OVERLAP_DAYS = int(os.environ.get("OVERLAP_DAYS", "7"))
 

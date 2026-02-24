@@ -91,6 +91,20 @@ main:
           - payload_testrail:
               days: ${days}
 
+          - testrail_request_timeout_seconds: 600
+          - testrail_retry_max_retries: 4
+          - testrail_retry_initial_delay_seconds: 3
+          - testrail_retry_max_delay_seconds: 45
+          - testrail_retry_multiplier: 2
+          - testrail_retry_jitter: 0.25
+
+          - bugsnag_request_timeout_seconds: 900
+          - bugsnag_retry_max_retries: 5
+          - bugsnag_retry_initial_delay_seconds: 2
+          - bugsnag_retry_max_delay_seconds: 60
+          - bugsnag_retry_multiplier: 2
+          - bugsnag_retry_jitter: 0.3
+
           - payload_testrail_results:
               days: ${default(map.get(request_args, "testrail_results_days"), 1)}
               recovery_mode: ${default(map.get(request_args, "testrail_results_recovery_mode"), false)}
@@ -924,15 +938,24 @@ main:
                                 try:
                                   steps:
                                     - testrail_call:
-                                        call: http.post
-                                        args:
-                                          url: ${testrail_url}
-                                          timeout: 300
-                                          auth:
-                                            type: OIDC
-                                            audience: ${testrail_url}
-                                          body: ${payload_testrail}
-                                        result: tr_resp
+                                        try:
+                                          call: http.post
+                                          args:
+                                            url: ${testrail_url}
+                                            timeout: ${testrail_request_timeout_seconds}
+                                            auth:
+                                              type: OIDC
+                                              audience: ${testrail_url}
+                                            body: ${payload_testrail}
+                                          result: tr_resp
+                                        retry:
+                                          predicate: ${"TimeoutError" in e.tags or "ConnectionError" in e.tags or http.default_retry_predicate(e)}
+                                          max_retries: ${testrail_retry_max_retries}
+                                          backoff:
+                                            initial_delay: ${testrail_retry_initial_delay_seconds}
+                                            max_delay: ${testrail_retry_max_delay_seconds}
+                                            multiplier: ${testrail_retry_multiplier}
+                                            jitter: ${testrail_retry_jitter}
                                     - testrail_store:
                                         assign:
                                           - results.testrail: ${tr_resp.body}
@@ -941,7 +964,7 @@ main:
                                   steps:
                                     - tr_err:
                                         assign:
-                                          - errors: ${list.concat(errors, ["{\"service\":\"testrail\",\"type\":\"ingestion_error\",\"code\":\"testrail_call_failed\",\"message\":\"Failed to ingest TestRail metrics\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, ["{\"service\":\"testrail\",\"type\":\"ingestion_error\",\"code\":\"testrail_call_failed\",\"message\":\"Failed to ingest TestRail metrics\",\"retry_attempts\":" + text.decode(json.encode(testrail_retry_max_retries + 1)) + ",\"final_timeout_seconds\":" + text.decode(json.encode(testrail_request_timeout_seconds)) + ",\"detail\":" + text.decode(json.encode(e)) + "}"])}
                         - condition: ${not preflight_status.testrail.ready}
                           steps:
                             - testrail_skipped_log:
@@ -1090,15 +1113,24 @@ main:
                                 try:
                                   steps:
                                     - bugsnag_call:
-                                        call: http.post
-                                        args:
-                                          url: ${bugsnag_url}
-                                          timeout: 600
-                                          auth:
-                                            type: OIDC
-                                            audience: ${bugsnag_url}
-                                          body: ${payload_bugsnag}
-                                        result: bs_resp
+                                        try:
+                                          call: http.post
+                                          args:
+                                            url: ${bugsnag_url}
+                                            timeout: ${bugsnag_request_timeout_seconds}
+                                            auth:
+                                              type: OIDC
+                                              audience: ${bugsnag_url}
+                                            body: ${payload_bugsnag}
+                                          result: bs_resp
+                                        retry:
+                                          predicate: ${"TimeoutError" in e.tags or "ConnectionError" in e.tags or http.default_retry_predicate(e)}
+                                          max_retries: ${bugsnag_retry_max_retries}
+                                          backoff:
+                                            initial_delay: ${bugsnag_retry_initial_delay_seconds}
+                                            max_delay: ${bugsnag_retry_max_delay_seconds}
+                                            multiplier: ${bugsnag_retry_multiplier}
+                                            jitter: ${bugsnag_retry_jitter}
                                     - bugsnag_store:
                                         assign:
                                           - results.bugsnag: ${bs_resp.body}
@@ -1107,7 +1139,7 @@ main:
                                   steps:
                                     - bs_err:
                                         assign:
-                                          - errors: ${list.concat(errors, ["{\"service\":\"bugsnag\",\"type\":\"ingestion_error\",\"code\":\"bugsnag_call_failed\",\"message\":\"Failed to ingest Bugsnag metrics\",\"detail\":" + text.decode(json.encode(e)) + "}"])}
+                                          - errors: ${list.concat(errors, ["{\"service\":\"bugsnag\",\"type\":\"ingestion_error\",\"code\":\"bugsnag_call_failed\",\"message\":\"Failed to ingest Bugsnag metrics\",\"retry_attempts\":" + text.decode(json.encode(bugsnag_retry_max_retries + 1)) + ",\"final_timeout_seconds\":" + text.decode(json.encode(bugsnag_request_timeout_seconds)) + ",\"detail\":" + text.decode(json.encode(e)) + "}"])}
                         - condition: ${not preflight_status.bugsnag.ready}
                           steps:
                             - bugsnag_skipped_log:
