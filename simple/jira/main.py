@@ -299,7 +299,7 @@ def _compute_jira_kpis() -> None:
     kpi_table = table_ref("qa_executive_kpis")
 
     sql = f"""
-DECLARE today DATE DEFAULT CURRENT_DATE("Europe/Madrid");
+DECLARE today DATE DEFAULT CURRENT_DATE("UTC");
 DECLARE start7 DATE DEFAULT DATE_SUB(today, INTERVAL 6 DAY);
 DECLARE start30 DATE DEFAULT DATE_SUB(today, INTERVAL 29 DAY);
 DECLARE start180 DATE DEFAULT DATE_SUB(today, INTERVAL 179 DAY);
@@ -310,7 +310,7 @@ SELECT *
 FROM `{snap_table}`
 WHERE snapshot_timestamp = (SELECT MAX(snapshot_timestamp) FROM `{snap_table}`);
 
--- Status changelog for the last 30d (status changes only)
+-- Status changelog for the last 30d in UTC (status changes only)
 CREATE TEMP TABLE chlog AS
 SELECT
   change_timestamp,
@@ -319,15 +319,15 @@ SELECT
   to_value
 FROM `{chlog_table}`
 WHERE field = 'status'
-  AND DATE(change_timestamp, "Europe/Madrid") BETWEEN start30 AND today;
+  AND DATE(change_timestamp, "UTC") BETWEEN start30 AND today;
 
--- EXEC-01 Bugs entered today (overall)
+-- EXEC-01 Bugs entered today in UTC (overall)
 INSERT INTO `{kpi_table}`
   (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-01',
-  'Bugs entered today',
+  'Bugs entered today (UTC)',
   today,
   today,
   today,
@@ -338,14 +338,14 @@ SELECT
   'Jira'
 FROM snap
 WHERE issue_type = 'Bug'
-  AND DATE(created, "Europe/Madrid") = today;
+  AND DATE(created, "UTC") = today;
 
 -- EXEC-01 Breakdown by priority
 INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-01',
-  'Bugs entered today',
+  'Bugs entered today (UTC)',
   today,
   today,
   today,
@@ -356,7 +356,7 @@ SELECT
   'Jira'
 FROM snap
 WHERE issue_type = 'Bug'
-  AND DATE(created, "Europe/Madrid") = today
+  AND DATE(created, "UTC") = today
 GROUP BY priority;
 
 -- EXEC-01 Breakdown by severity
@@ -364,7 +364,7 @@ INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-01',
-  'Bugs entered today',
+  'Bugs entered today (UTC)',
   today,
   today,
   today,
@@ -375,21 +375,21 @@ SELECT
   'Jira'
 FROM snap
 WHERE issue_type = 'Bug'
-  AND DATE(created, "Europe/Madrid") = today
+  AND DATE(created, "UTC") = today
 GROUP BY severity;
 
--- EXEC-02 Fixes today (Closed)
+-- EXEC-02 Fixes today (Closed, UTC)
 CREATE TEMP TABLE fixes_today AS
 SELECT DISTINCT issue_key
 FROM chlog
 WHERE to_value = 'Closed'
-  AND DATE(change_timestamp, "Europe/Madrid") = today;
+  AND DATE(change_timestamp, "UTC") = today;
 
 INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-02',
-  'Fixes today (Closed)',
+  'Fixes today (Closed, UTC)',
   today,
   today,
   today,
@@ -405,7 +405,7 @@ INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-02',
-  'Fixes today (Closed)',
+  'Fixes today (Closed, UTC)',
   today,
   today,
   today,
@@ -496,12 +496,12 @@ SELECT
   'Jira'
 FROM awaiting_qa;
 
--- EXEC-05 Bugs entered (last 7d) by Severity
+-- EXEC-05 Bugs entered (last 7d, UTC) by Severity
 INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-05',
-  'Bugs entered (last 7d) by Severity',
+  'Bugs entered (last 7d, UTC) by Severity',
   today,
   start7,
   today,
@@ -512,15 +512,15 @@ SELECT
   'Jira'
 FROM snap
 WHERE issue_type = 'Bug'
-  AND DATE(created, "Europe/Madrid") BETWEEN start7 AND today
+  AND DATE(created, "UTC") BETWEEN start7 AND today
 GROUP BY severity;
 
--- EXEC-06 Bugs entered (last 30d) by Severity
+-- EXEC-06 Bugs entered (last 30d, UTC) by Severity
 INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-06',
-  'Bugs entered (last 30d) by Severity',
+  'Bugs entered (last 30d, UTC) by Severity',
   today,
   start30,
   today,
@@ -531,15 +531,15 @@ SELECT
   'Jira'
 FROM snap
 WHERE issue_type = 'Bug'
-  AND DATE(created, "Europe/Madrid") BETWEEN start30 AND today
+  AND DATE(created, "UTC") BETWEEN start30 AND today
 GROUP BY severity;
 
--- EXEC-07 Bugs fixed (last 7d) by Priority
+-- EXEC-07 Bugs fixed (last 7d, UTC) by Priority
 INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-07',
-  'Bugs fixed (last 7d) by Priority',
+  'Bugs fixed (last 7d, UTC) by Priority',
   today,
   start7,
   today,
@@ -551,16 +551,16 @@ SELECT
 FROM chlog c
 LEFT JOIN snap s USING(issue_key)
 WHERE c.to_value = 'Closed'
-  AND DATE(c.change_timestamp, "Europe/Madrid") BETWEEN start7 AND today
+  AND DATE(c.change_timestamp, "UTC") BETWEEN start7 AND today
 GROUP BY s.priority;
 
--- EXEC-08 Bugs entered by day (last 7d) — Priority
+-- EXEC-08 Bugs entered by day (last 7d, UTC) — Priority
 INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-08',
-  'Bugs entered by day (last 7d) — Priority',
-  DATE(created, "Europe/Madrid") AS metric_date,
+  'Bugs entered by day (last 7d, UTC) — Priority',
+  DATE(created, "UTC") AS metric_date,
   start7,
   today,
   TO_JSON_STRING(STRUCT(COALESCE(priority, 'Unknown') AS priority)),
@@ -570,7 +570,7 @@ SELECT
   'Jira'
 FROM snap
 WHERE issue_type = 'Bug'
-  AND DATE(created, "Europe/Madrid") BETWEEN start7 AND today
+  AND DATE(created, "UTC") BETWEEN start7 AND today
 GROUP BY metric_date, priority;
 
 -- EXEC-09 Active bugs by POD
@@ -610,10 +610,10 @@ GROUP BY status;
 -- EXEC-11 Active bug count over time (last 180d)
 CREATE TEMP TABLE daily_latest AS
 SELECT
-  DATE(snapshot_timestamp, "Europe/Madrid") AS d,
+  DATE(snapshot_timestamp, "UTC") AS d,
   MAX(snapshot_timestamp) AS ts
 FROM `{snap_table}`
-WHERE DATE(snapshot_timestamp, "Europe/Madrid") BETWEEN start180 AND today
+WHERE DATE(snapshot_timestamp, "UTC") BETWEEN start180 AND today
 GROUP BY d;
 
 INSERT INTO `{kpi_table}`
@@ -634,13 +634,13 @@ JOIN `{snap_table}` s
   ON s.snapshot_timestamp = dl.ts
 GROUP BY metric_date;
 
--- EXEC-12 Reopened over time (30d)
+-- EXEC-12 Reopened over time (30d, UTC)
 INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-12',
-  'Reopened over time (30d)',
-  DATE(change_timestamp, "Europe/Madrid") AS metric_date,
+  'Reopened over time (30d, UTC)',
+  DATE(change_timestamp, "UTC") AS metric_date,
   start30,
   today,
   '{{}}',
@@ -652,10 +652,10 @@ FROM chlog
 WHERE to_value = 'Reopened'
 GROUP BY metric_date;
 
--- EXEC-13 Reopen rate over final statuses (30d)
+-- EXEC-13 Fix fail rate over time (30d, UTC)
 CREATE TEMP TABLE closed_by_day AS
 SELECT
-  DATE(change_timestamp, "Europe/Madrid") AS d,
+  DATE(change_timestamp, "UTC") AS d,
   COUNT(DISTINCT issue_key) AS closed_count
 FROM chlog
 WHERE to_value IN ('Closed', 'Resolved', 'Verified')
@@ -663,7 +663,7 @@ GROUP BY d;
 
 CREATE TEMP TABLE reopened_by_day AS
 SELECT
-  DATE(change_timestamp, "Europe/Madrid") AS d,
+  DATE(change_timestamp, "UTC") AS d,
   COUNT(DISTINCT issue_key) AS reopened_count
 FROM chlog
 WHERE from_value IN ('Closed', 'Resolved', 'Verified')
@@ -674,7 +674,7 @@ INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-13',
-  'Reopen rate from final statuses over time (30d)',
+  'Fix fail rate over time (30d, UTC)',
   d,
   start30,
   today,

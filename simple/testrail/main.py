@@ -198,16 +198,16 @@ def _compute_testrail_kpis(bvt_suite_name: str, lookback_days: int) -> None:
     suite_lit = bvt_suite_name.replace('"', '\"')
 
     sql = f"""
-DECLARE today DATE DEFAULT CURRENT_DATE("Europe/Madrid");
+DECLARE today DATE DEFAULT CURRENT_DATE("UTC");
 DECLARE start7 DATE DEFAULT DATE_SUB(today, INTERVAL 6 DAY);
 
--- EXEC-15: test cases executed by day (last 7d)
+-- EXEC-15: test cases executed by day (last 7d, UTC)
 INSERT INTO `{kpi_table}`
   (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 SELECT
   CURRENT_TIMESTAMP(),
   "EXEC-15",
-  "Test cases executed by day (last 7d)",
+  "Test cases executed by day (last 7d, UTC)",
   d AS metric_date,
   start7,
   today,
@@ -218,15 +218,15 @@ SELECT
   "TestRail"
 FROM (
   SELECT
-    DATE(created_on, "Europe/Madrid") AS d,
+    DATE(created_on, "UTC") AS d,
     COUNT(DISTINCT IF(status_id IN ({",".join(map(str, EXECUTED_STATUS_IDS))}), result_id, NULL)) AS executed_cnt
   FROM `{tr_table}`
   WHERE created_on IS NOT NULL
-    AND DATE(created_on, "Europe/Madrid") BETWEEN start7 AND today
+    AND DATE(created_on, "UTC") BETWEEN start7 AND today
   GROUP BY d
 );
 
--- EXEC-16: pass rate (last 7d)
+-- EXEC-16: pass rate (last 7d, UTC)
 INSERT INTO `{kpi_table}`
   (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 WITH agg AS (
@@ -235,12 +235,12 @@ WITH agg AS (
     COUNT(DISTINCT IF(status_id IN ({",".join(map(str, EXECUTED_STATUS_IDS))}), result_id, NULL)) AS executed
   FROM `{tr_table}`
   WHERE created_on IS NOT NULL
-    AND DATE(created_on, "Europe/Madrid") BETWEEN start7 AND today
+    AND DATE(created_on, "UTC") BETWEEN start7 AND today
 )
 SELECT
   CURRENT_TIMESTAMP(),
   "EXEC-16",
-  "Pass rate (last 7d)",
+  "Pass rate (last 7d, UTC)",
   today,
   start7,
   today,

@@ -10,8 +10,8 @@ This Cloud Run/Cloud Function (2nd gen) service:
    and computes median FPS & median FPS stability %.
 3) Inserts rows into BigQuery table `gamebench_sessions`.
 4) Computes GameBench-driven executive KPIs:
-   - EXEC-22 Median FPS over time (last 7d) by platform (dev/prod inferred from package)
-   - EXEC-23 FPS stability % over time (last 7d) by platform
+   - EXEC-22 Median FPS over time (last 7d, UTC) by platform (dev/prod inferred from package)
+   - EXEC-23 FPS stability % over time (last 7d, UTC) by platform
    - EXEC-24 Current build size by platform (manual table)
 
 Required env vars / secrets:
@@ -439,16 +439,16 @@ def _compute_gamebench_kpis() -> None:
     kpi_table = table_ref("qa_executive_kpis")
 
     sql = f"""
-DECLARE today DATE DEFAULT CURRENT_DATE("Europe/Madrid");
+DECLARE today DATE DEFAULT CURRENT_DATE("UTC");
 DECLARE start7 DATE DEFAULT DATE_SUB(today, INTERVAL 6 DAY);
 
--- EXEC-22 Median FPS over time (last 7d) by platform
+-- EXEC-22 Median FPS over time (last 7d, UTC) by platform
 INSERT INTO `{kpi_table}`
   (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-22',
-  'Median FPS over time (last 7d) by platform',
+  'Median FPS over time (last 7d, UTC) by platform',
   d AS metric_date,
   start7,
   today,
@@ -458,19 +458,19 @@ SELECT
   NULL,
   'GameBench'
 FROM (
-  SELECT DATE(time_pushed, "Europe/Madrid") AS d, platform, median_fps
+  SELECT DATE(time_pushed, "UTC") AS d, platform, median_fps
   FROM `{gb_table}`
-  WHERE DATE(time_pushed, "Europe/Madrid") BETWEEN start7 AND today
+  WHERE DATE(time_pushed, "UTC") BETWEEN start7 AND today
     AND median_fps IS NOT NULL
 )
 GROUP BY d, platform;
 
--- EXEC-23 FPS stability % over time (last 7d) by platform
+-- EXEC-23 FPS stability % over time (last 7d, UTC) by platform
 INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-23',
-  'FPS stability % over time (last 7d) by platform',
+  'FPS stability % over time (last 7d, UTC) by platform',
   d AS metric_date,
   start7,
   today,
@@ -480,9 +480,9 @@ SELECT
   NULL,
   'GameBench'
 FROM (
-  SELECT DATE(time_pushed, "Europe/Madrid") AS d, platform, fps_stability_pct
+  SELECT DATE(time_pushed, "UTC") AS d, platform, fps_stability_pct
   FROM `{gb_table}`
-  WHERE DATE(time_pushed, "Europe/Madrid") BETWEEN start7 AND today
+  WHERE DATE(time_pushed, "UTC") BETWEEN start7 AND today
     AND fps_stability_pct IS NOT NULL
 )
 GROUP BY d, platform;

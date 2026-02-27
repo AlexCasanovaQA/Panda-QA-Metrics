@@ -137,7 +137,7 @@ def _compute_bugsnag_kpis() -> None:
     kpi_table = table_ref("qa_executive_kpis")
 
     sql = f"""
-DECLARE today DATE DEFAULT CURRENT_DATE("Europe/Madrid");
+DECLARE today DATE DEFAULT CURRENT_DATE("UTC");
 DECLARE start7 DATE DEFAULT DATE_SUB(today, INTERVAL 6 DAY);
 
 CREATE TEMP TABLE snap AS
@@ -218,12 +218,12 @@ FROM snap
 WHERE LOWER(status) = "open"
 GROUP BY severity;
 
--- EXEC-21: New errors (last 7d) by first_seen
+-- EXEC-21: New errors (last 7d, UTC) by first_seen
 INSERT INTO `{kpi_table}` (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 SELECT
   CURRENT_TIMESTAMP(),
   "EXEC-21",
-  "New errors (last 7d)",
+  "New errors (last 7d, UTC)",
   today,
   start7,
   today,
@@ -233,7 +233,7 @@ SELECT
   NULL,
   "BugSnag"
 FROM snap
-WHERE DATE(first_seen, "Europe/Madrid") BETWEEN start7 AND today;
+WHERE DATE(first_seen, "UTC") BETWEEN start7 AND today;
 """
 
     run_query(client, sql, job_labels={"pipeline": "qa-metrics", "source": "bugsnag"})
