@@ -94,13 +94,19 @@ view: qa_executive_kpis {
     ) ;;
   }
 
-  dimension: priority_label {
+  dimension: priority {
     label: "Priority"
     type: string
     sql: COALESCE(
-      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.priority_label'),
-      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.priority')
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.priority'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.priority_label')
     ) ;;
+  }
+
+  dimension: priority_label {
+    hidden: yes
+    type: string
+    sql: ${priority} ;;
   }
 
   dimension: privacy_level {
@@ -122,6 +128,13 @@ view: qa_executive_kpis {
       JSON_EXTRACT_SCALAR(${dimensions_json}, '$.fix_version'),
       JSON_EXTRACT_SCALAR(${dimensions_json}, '$.fix_versions')
     ) ;;
+  }
+
+
+  dimension: is_latest_metric_ts_for_metric {
+    hidden: yes
+    type: yesno
+    sql: ${metric_ts_raw} = MAX(${metric_ts_raw}) OVER (PARTITION BY ${metric_id}) ;;
   }
 
   dimension: run_id { type: number sql: CAST(JSON_EXTRACT_SCALAR(${dimensions_json}, '$.run_id') AS INT64) ;; }
