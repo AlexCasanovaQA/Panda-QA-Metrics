@@ -33,6 +33,20 @@ def _split_csv(s: str) -> List[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
 
 
+def _get_project_ids() -> List[int]:
+    """Accept both TESTRAIL_PROJECT_IDS (CSV) and legacy TESTRAIL_PROJECT_ID."""
+    ids_csv = os.environ.get("TESTRAIL_PROJECT_IDS", "").strip()
+    legacy_id = os.environ.get("TESTRAIL_PROJECT_ID", "").strip()
+
+    if ids_csv:
+        return [int(x) for x in _split_csv(ids_csv)]
+
+    if legacy_id:
+        return [int(legacy_id)]
+
+    raise RuntimeError("Missing required env var: TESTRAIL_PROJECT_IDS/TESTRAIL_PROJECT_ID")
+
+
 def _api_base(base_url: str) -> str:
     b = base_url.rstrip("/")
     if "index.php?/api/v2" in b:
@@ -329,7 +343,7 @@ def hello_http(request):
             raise RuntimeError("Missing required env var: TESTRAIL_EMAIL/TESTRAIL_USER")
 
         api_key = _env("TESTRAIL_API_KEY")
-        project_ids = [int(x) for x in _split_csv(_env("TESTRAIL_PROJECT_IDS"))]
+        project_ids = _get_project_ids()
 
         lookback_days = int(os.environ.get("TESTRAIL_LOOKBACK_DAYS", "30").strip() or "30")
         lookback_days = max(1, min(lookback_days, 365))
