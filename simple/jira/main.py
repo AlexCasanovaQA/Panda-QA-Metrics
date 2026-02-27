@@ -477,8 +477,9 @@ GROUP BY priority;
 -- EXEC-04 Awaiting QA verification (Resolved)
 CREATE TEMP TABLE awaiting_qa AS
 SELECT *
-FROM active_now
-WHERE status = 'Resolved';
+FROM snap
+WHERE issue_type = 'Bug'
+  AND status = 'Resolved';
 
 INSERT INTO `{kpi_table}`
 SELECT
