@@ -1,0 +1,14 @@
+Item,Value,Notes
+Jira Project Key,PC,Used for Panda
+Active bug definition,statusCategory != Done,As per Alex request
+Status mapping: Reopened,Reopened,Exact status name
+Status mapping: Resolved (ready for QA),Resolved,Used for awaiting QA verification
+Status mapping: Verified,Verified,QA verified
+Status mapping: Closed,Closed,Final closed status
+Priority values,P0 / Blocker; P1 / Important; P2 / Normal; P3 / Minor; P4 / Trivial,Used for pivots/filters
+Severity values,(S0) Blocker; (S1) Critical; (S2) Major; (S3) Minor; (S4) Trivial,Used for pivots/filters
+POD source,Jira field Team,Used as POD
+TestRail BVT identification,Suite name = Basic BVT,Preferred for BVT pass rate
+GameBench companyId,AWGaWNjXBxsUazsJuoUp,From URLs
+GameBench collectionId,7cf80f11-6915-4e6c-b70c-4ad7ed44aaf9,From URLs
+GameBench app packages,com.scopely.internal.wwedomination (dev); com.scopely.wwedomination (prod),Filter in ingest
