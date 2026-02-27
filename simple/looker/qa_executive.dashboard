@@ -87,7 +87,7 @@
       type: field_filter
       model: panda_qa_metrics
       explore: qa_executive_kpis
-      field: qa_executive_kpis.priority_label
+      field: qa_executive_kpis.priority
       allow_multiple_values: true
       required: false
 
@@ -130,7 +130,7 @@
       height: 1
 
     - name: exec01_bugs_entered_today
-      title: "EXEC-01 — Bugs entered ⓘ"
+      title: "EXEC-01 — Bugs entered today ⓘ"
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -168,7 +168,7 @@
       height: 2
 
     - name: exec03_active_bugs_now
-      title: "EXEC-03 — Active bugs now ⓘ"
+      title: "EXEC-03 — Active bugs now (statusCategory != Done) ⓘ"
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -187,7 +187,7 @@
       height: 2
 
     - name: exec04_awaiting_qa_resolved
-      title: "EXEC-04 — Awaiting QA verification ⓘ"
+      title: "EXEC-04 — Awaiting QA verification (Resolved) ⓘ"
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -237,7 +237,7 @@
       height: 2
 
     - name: exec19_high_critical_active_errors
-      title: "EXEC-19 — High/Critical errors ⓘ"
+      title: "EXEC-19 — High/Critical active errors ⓘ"
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -275,7 +275,7 @@
       height: 2
 
     - name: exec17_bvt_pass_rate_latest
-      title: "EXEC-17 — BVT pass rate (latest) ⓘ"
+      title: "EXEC-17 — BVT pass rate (latest Basic BVT run) ⓘ"
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -314,7 +314,7 @@
       pivots: [qa_executive_kpis.metric_id]
       filters:
         qa_executive_kpis.metric_id: "EXEC-05,EXEC-06"
-        qa_executive_kpis.metric_date: "today"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.severity: "-NULL"
       sorts: [qa_executive_kpis.kpi_value desc]
       limit: 500
@@ -331,12 +331,12 @@
       height: 4
 
     - name: exec08_bugs_by_day_priority
-      title: "EXEC-08 — Bugs entered by day (last 7d), pivoted by priority ⓘ"
+      title: "EXEC-08 — Bugs entered by day (last 7d) — Priority ⓘ"
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
-      fields: [qa_executive_kpis.metric_date, qa_executive_kpis.priority_label, qa_executive_kpis.kpi_value]
-      pivots: [qa_executive_kpis.priority_label]
+      fields: [qa_executive_kpis.metric_date, qa_executive_kpis.priority, qa_executive_kpis.kpi_value]
+      pivots: [qa_executive_kpis.priority]
       fill_fields: [qa_executive_kpis.metric_date]
       filters:
         qa_executive_kpis.metric_id: "EXEC-08"
@@ -375,7 +375,7 @@
       fields: [qa_executive_kpis.pod, qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-09"
-        qa_executive_kpis.metric_date: "today"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.pod: "-NULL"
       sorts: [qa_executive_kpis.kpi_value desc]
       limit: 100
@@ -385,7 +385,7 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Severity: qa_executive_kpis.severity
-        Priority: qa_executive_kpis.priority_label
+        Priority: qa_executive_kpis.priority
         Privacy: qa_executive_kpis.privacy_level
       row: 20
       col: 0
@@ -400,7 +400,7 @@
       fields: [qa_executive_kpis.status, qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-10"
-        qa_executive_kpis.metric_date: "today"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.status: "-NULL"
       sorts: [qa_executive_kpis.kpi_value desc]
       limit: 100
@@ -411,7 +411,7 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Severity: qa_executive_kpis.severity
-        Priority: qa_executive_kpis.priority_label
+        Priority: qa_executive_kpis.priority
         Privacy: qa_executive_kpis.privacy_level
       row: 20
       col: 12
@@ -426,7 +426,7 @@
       fields: [qa_executive_kpis.fix_version, qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-14"
-        qa_executive_kpis.metric_date: "today"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.fix_version: "-NULL"
       sorts: [qa_executive_kpis.kpi_value desc]
       limit: 100
@@ -437,7 +437,7 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Severity: qa_executive_kpis.severity
-        Priority: qa_executive_kpis.priority_label
+        Priority: qa_executive_kpis.priority
         Privacy: qa_executive_kpis.privacy_level
       row: 24
       col: 0
@@ -474,7 +474,7 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Severity: qa_executive_kpis.severity
-        Priority: qa_executive_kpis.priority_label
+        Priority: qa_executive_kpis.priority
         Privacy: qa_executive_kpis.privacy_level
       row: 29
       col: 0
@@ -486,11 +486,11 @@
       type: looker_bar
       model: panda_qa_metrics
       explore: qa_executive_kpis
-      fields: [qa_executive_kpis.priority_label, qa_executive_kpis.kpi_value]
+      fields: [qa_executive_kpis.priority, qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-07"
-        qa_executive_kpis.metric_date: "today"
-        qa_executive_kpis.priority_label: "-NULL"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
+        qa_executive_kpis.priority: "-NULL"
       sorts: [qa_executive_kpis.kpi_value desc]
       limit: 50
       listen:
@@ -506,7 +506,7 @@
       height: 4
 
     - name: exec12_reopened_over_time_30d
-      title: "EXEC-12 — Reopened over time ⓘ"
+      title: "EXEC-12 — Reopened over time (30d) ⓘ"
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -529,7 +529,7 @@
       height: 4
 
     - name: exec13_fix_fail_rate_over_time
-      title: "EXEC-13 — Fix fail rate over time ⓘ"
+      title: "EXEC-13 — Fix fail rate over time (30d) ⓘ"
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -564,7 +564,7 @@
       height: 1
 
     - name: exec15_test_cases_executed_by_day
-      title: "EXEC-15 — Test cases executed by day ⓘ"
+      title: "EXEC-15 — Test cases executed by day (last 7d) ⓘ"
       type: looker_column
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -585,7 +585,7 @@
       height: 4
 
     - name: exec16_pass_rate_trend
-      title: "EXEC-16 — Pass rate trend (rolling 7d) ⓘ"
+      title: "EXEC-16 — Pass rate (last 7d) ⓘ"
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -618,7 +618,7 @@
       height: 1
 
     - name: exec18_20_errors_by_severity_pivot
-      title: "EXEC-18/20 — Active errors by severity (Prod vs Total) ⓘ"
+      title: "EXEC-18/20 — Active production errors / Active errors by severity ⓘ"
       type: looker_grid
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -626,7 +626,7 @@
       pivots: [qa_executive_kpis.metric_id]
       filters:
         qa_executive_kpis.metric_id: "EXEC-18,EXEC-20"
-        qa_executive_kpis.metric_date: "today"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.severity: "-NULL"
       sorts: [qa_executive_kpis.kpi_value desc]
       limit: 500
@@ -671,7 +671,7 @@
       height: 1
 
     - name: exec22_median_fps_last_7d
-      title: "EXEC-22 — Median FPS over time, pivoted by platform ⓘ"
+      title: "EXEC-22 — Median FPS over time (last 7d) by platform ⓘ"
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -692,7 +692,7 @@
       height: 4
 
     - name: exec23_fps_stability_last_7d
-      title: "EXEC-23 — FPS stability % over time, pivoted by platform ⓘ"
+      title: "EXEC-23 — FPS stability % over time (last 7d) by platform ⓘ"
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -713,14 +713,14 @@
       height: 4
 
     - name: exec24_build_size_by_platform
-      title: "EXEC-24 — Current build size by platform ⓘ"
+      title: "EXEC-24 — Current build size by platform (manual) ⓘ"
       type: looker_grid
       model: panda_qa_metrics
       explore: qa_executive_kpis
       fields: [qa_executive_kpis.platform, qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-24"
-        qa_executive_kpis.metric_date: "today"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
       sorts: [qa_executive_kpis.platform]
       limit: 50
       listen:
