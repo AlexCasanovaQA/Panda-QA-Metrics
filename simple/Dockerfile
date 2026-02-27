@@ -15,7 +15,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /opt/build
 
-COPY simple /opt/simple
+# Copiamos todo el contexto para soportar dos modos de build:
+# 1) Contexto en raíz del repo (existe /opt/src/simple)
+# 2) Contexto en carpeta simple/ (el código queda directo en /opt/src)
+COPY . /opt/src
 
 # Nombre esperado de servicio/función para mapearlo a la subcarpeta correcta dentro de simple/.
 ARG SIMPLE_FUNCTION=bugsnag-ingest-function
@@ -28,9 +31,13 @@ RUN case "${SIMPLE_FUNCTION}" in \
       *) echo "SIMPLE_FUNCTION inválida: ${SIMPLE_FUNCTION}" >&2; exit 1 ;; \
     esac
 
-RUN pip install --no-cache-dir -r "/opt/simple/$(cat /tmp/simple_function_dir)/requirements.txt"
+RUN dir="$(cat /tmp/simple_function_dir)" && \
+    if [ -d "/opt/src/simple" ]; then base="/opt/src/simple"; else base="/opt/src"; fi && \
+    pip install --no-cache-dir -r "${base}/${dir}/requirements.txt"
 
 WORKDIR /app
-RUN dir="$(cat /tmp/simple_function_dir)" && cp "/opt/simple/${dir}"/*.py /app/
+RUN dir="$(cat /tmp/simple_function_dir)" && \
+    if [ -d "/opt/src/simple" ]; then base="/opt/src/simple"; else base="/opt/src"; fi && \
+    cp "${base}/${dir}"/*.py /app/
 
 CMD ["sh", "-c", "functions-framework --target=${FUNCTION_TARGET} --source=main.py --port=${PORT}"]
