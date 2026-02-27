@@ -134,7 +134,11 @@ view: qa_executive_kpis {
   dimension: is_latest_metric_ts_for_metric {
     hidden: yes
     type: yesno
-    sql: ${metric_ts_raw} = MAX(${metric_ts_raw}) OVER (PARTITION BY ${metric_id}) ;;
+    sql: ${TABLE}.computed_at = (
+      SELECT MAX(t.computed_at)
+      FROM ${TABLE} AS t
+      WHERE t.metric_id = ${TABLE}.metric_id
+    ) ;;
   }
 
   dimension: run_id { type: number sql: CAST(JSON_EXTRACT_SCALAR(${dimensions_json}, '$.run_id') AS INT64) ;; }
