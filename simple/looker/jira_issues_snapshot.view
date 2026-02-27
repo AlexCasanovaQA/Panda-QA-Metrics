@@ -1,0 +1,56 @@
+view: jira_issues_snapshot {
+  sql_table_name: `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ;;
+
+  dimension_group: snapshot_timestamp {
+    type: time
+    timeframes: [raw, time, date, week, month, year]
+    sql: ${TABLE}.snapshot_timestamp ;;
+  }
+
+  dimension: issue_id { type: string sql: ${TABLE}.issue_id ;; }
+  dimension: issue_key { type: string sql: ${TABLE}.issue_key ;; }
+  dimension: issue_type { type: string sql: ${TABLE}.issue_type ;; }
+  dimension: summary { type: string sql: ${TABLE}.summary ;; }
+  dimension: status { type: string sql: ${TABLE}.status ;; }
+  dimension: status_category { type: string sql: ${TABLE}.status_category ;; }
+  dimension: priority { type: string sql: ${TABLE}.priority ;; }
+  dimension: severity { type: string sql: ${TABLE}.severity ;; }
+  dimension: pod_team { label: "POD/Team" type: string sql: ${TABLE}.pod_team ;; }
+
+  dimension: is_done {
+    type: yesno
+    sql: LOWER(COALESCE(${TABLE}.status_category, '')) = 'done' ;;
+  }
+
+  dimension: fix_versions {
+    type: string
+    sql: ARRAY_TO_STRING(${TABLE}.fix_versions, ', ') ;;
+  }
+
+  dimension: assignee_email { type: string sql: ${TABLE}.assignee_email ;; }
+  dimension: reporter_email { type: string sql: ${TABLE}.reporter_email ;; }
+
+  dimension_group: created {
+    type: time
+    timeframes: [raw, date, week, month, year]
+    sql: ${TABLE}.created ;;
+  }
+
+  dimension_group: updated {
+    type: time
+    timeframes: [raw, date, week, month, year]
+    sql: ${TABLE}.updated ;;
+  }
+
+  measure: issues { type: count }
+
+  measure: bugs { 
+    type: count
+    filters: [issue_type: "Bug"]
+  }
+
+  measure: active_bugs {
+    type: count
+    filters: [issue_type: "Bug", is_done: "no"]
+  }
+}

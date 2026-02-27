@@ -1,0 +1,26 @@
+view: manual_build_size {
+  sql_table_name: `qa-panda-metrics.qa_metrics_simple.manual_build_size` ;;
+
+  dimension_group: metric_date {
+    type: time
+    timeframes: [date, week, month, year]
+    sql: TIMESTAMP(${TABLE}.metric_date) ;;
+  }
+
+  dimension: platform { type: string sql: ${TABLE}.platform ;; }
+  dimension: build_size_mb { type: number sql: ${TABLE}.build_size_mb ;; }
+
+  dimension_group: updated_at {
+    type: time
+    timeframes: [raw, time, date]
+    sql: ${TABLE}.updated_at ;;
+  }
+
+  measure: rows { type: count }
+
+  measure: latest_build_size_mb {
+    label: "Latest Build Size (MB)"
+    type: number
+    sql: ANY_VALUE(${build_size_mb}) ;;
+  }
+}

@@ -1,0 +1,20 @@
+view: jira_changelog {
+  sql_table_name: `qa-panda-metrics.qa_metrics_simple.jira_changelog` ;;
+
+  dimension_group: change_timestamp {
+    type: time
+    timeframes: [raw, time, date, week, month, year]
+    sql: ${TABLE}.change_timestamp ;;
+  }
+
+  dimension: issue_id { type: string sql: ${TABLE}.issue_id ;; }
+  dimension: issue_key { type: string sql: ${TABLE}.issue_key ;; }
+  dimension: field { type: string sql: ${TABLE}.field ;; }
+  dimension: from_value { type: string sql: ${TABLE}.from_value ;; }
+  dimension: to_value { type: string sql: ${TABLE}.to_value ;; }
+  dimension: author_email { type: string sql: ${TABLE}.author_email ;; }
+
+  measure: changes { type: count }
+
+  measure: issues_changed { type: count_distinct sql: ${issue_key} ;; }
+}

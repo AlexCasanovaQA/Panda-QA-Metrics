@@ -1,0 +1,43 @@
+view: bugsnag_errors {
+  sql_table_name: `qa-panda-metrics.qa_metrics_simple.bugsnag_errors` ;;
+
+  dimension_group: ingest_timestamp {
+    type: time
+    timeframes: [raw, time, date]
+    sql: ${TABLE}.ingest_timestamp ;;
+  }
+
+  dimension: project_id { type: string sql: ${TABLE}.project_id ;; }
+  dimension: error_id { type: string sql: ${TABLE}.error_id ;; }
+  dimension: error_class { type: string sql: ${TABLE}.error_class ;; }
+  dimension: message { type: string sql: ${TABLE}.message ;; }
+  dimension: severity { type: string sql: ${TABLE}.severity ;; }
+  dimension: status { type: string sql: ${TABLE}.status ;; }
+
+  dimension_group: first_seen {
+    type: time
+    timeframes: [raw, date, week, month, year]
+    sql: ${TABLE}.first_seen ;;
+  }
+
+  dimension_group: last_seen {
+    type: time
+    timeframes: [raw, date, week, month, year]
+    sql: ${TABLE}.last_seen ;;
+  }
+
+  dimension: events { type: number sql: ${TABLE}.events ;; }
+  dimension: users { type: number sql: ${TABLE}.users ;; }
+
+  dimension: release_stages {
+    type: string
+    sql: ARRAY_TO_STRING(${TABLE}.release_stages, ', ') ;;
+  }
+
+  measure: error_groups { type: count }
+
+  measure: active_error_groups {
+    type: count
+    filters: [status: "open"]
+  }
+}

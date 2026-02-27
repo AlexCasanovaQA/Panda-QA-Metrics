@@ -1,0 +1,145 @@
+# Normalized KPI output (computed by ingestion functions)
+# BigQuery view: qa_executive_kpis_latest
+#
+# Legacy LookML runtime friendly:
+# - No view-level description property.
+# - Expose metric_date as DATE to avoid DATE >= TIMESTAMP BigQuery errors.
+
+view: qa_executive_kpis {
+  sql_table_name: `qa-panda-metrics.qa_metrics_simple.qa_executive_kpis_latest` ;;
+
+  dimension: kpi_key {
+    primary_key: yes
+    hidden: yes
+    type: string
+    sql: CONCAT(${metric_id}, '|', CAST(${metric_date_raw} AS STRING), '|', IFNULL(${dimensions_json}, '{}')) ;;
+  }
+
+  dimension_group: metric_ts {
+    label: "Metric Timestamp"
+    type: time
+    timeframes: [raw, time, date, week, month, quarter, year]
+    sql: ${TABLE}.computed_at ;;
+  }
+
+  dimension_group: computed_at {
+    type: time
+    timeframes: [raw, time, date, week, month, quarter, year]
+    sql: ${TABLE}.computed_at ;;
+  }
+
+  # IMPORTANT: DATE (not dimension_group) to prevent DATE >= TIMESTAMP errors
+  dimension: metric_date {
+    type: date
+    sql: TIMESTAMP(${TABLE}.metric_date) ;;
+  }
+
+  dimension: metric_date_raw {
+    hidden: yes
+    type: date
+    sql: TIMESTAMP(${TABLE}.metric_date) ;;
+  }
+
+  dimension: metric_id {
+    type: string
+    sql: ${TABLE}.metric_id ;;
+  }
+
+  dimension: metric_name {
+    type: string
+    sql: ${TABLE}.metric_name ;;
+  }
+
+  dimension: source {
+    type: string
+    sql: ${TABLE}.source ;;
+  }
+
+  dimension: window_start {
+    type: date
+    sql: ${TABLE}.window_start ;;
+  }
+
+  dimension: window_end {
+    type: date
+    sql: ${TABLE}.window_end ;;
+  }
+
+  dimension: dimensions_json {
+    label: "Dimensions (JSON)"
+    type: string
+    sql: COALESCE(${TABLE}.dimensions, '{}') ;;
+  }
+
+  dimension: pod {
+    label: "POD"
+    type: string
+    sql: COALESCE(
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.pod'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.pod_team'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.team')
+    ) ;;
+  }
+
+  dimension: feature { type: string sql: JSON_EXTRACT_SCALAR(${dimensions_json}, '$.feature') ;; }
+  dimension: release { type: string sql: JSON_EXTRACT_SCALAR(${dimensions_json}, '$.release') ;; }
+  dimension: sprint  { type: string sql: JSON_EXTRACT_SCALAR(${dimensions_json}, '$.sprint') ;; }
+  dimension: platform { type: string sql: JSON_EXTRACT_SCALAR(${dimensions_json}, '$.platform') ;; }
+
+  dimension: severity {
+    type: string
+    sql: COALESCE(
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.severity'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.bugsnag_severity')
+    ) ;;
+  }
+
+  dimension: priority_label {
+    label: "Priority"
+    type: string
+    sql: COALESCE(
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.priority_label'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.priority')
+    ) ;;
+  }
+
+  dimension: privacy_level {
+    label: "Privacy"
+    type: string
+    sql: COALESCE(
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.privacy_level'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.privacy')
+    ) ;;
+  }
+
+  dimension: status { type: string sql: JSON_EXTRACT_SCALAR(${dimensions_json}, '$.status') ;; }
+
+  dimension: fix_version {
+    label: "Fix Version / Milestone"
+    type: string
+    sql: COALESCE(
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.fixVersion'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.fix_version'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.fix_versions')
+    ) ;;
+  }
+
+  dimension: run_id { type: number sql: CAST(JSON_EXTRACT_SCALAR(${dimensions_json}, '$.run_id') AS INT64) ;; }
+  dimension: run_name { type: string sql: JSON_EXTRACT_SCALAR(${dimensions_json}, '$.run_name') ;; }
+  dimension: suite_name { type: string sql: JSON_EXTRACT_SCALAR(${dimensions_json}, '$.suite_name') ;; }
+
+  dimension: is_overall { type: yesno sql: ${dimensions_json} = '{}' ;; }
+
+  measure: kpi_value { label: "KPI Value" type: max sql: ${TABLE}.value ;; }
+
+  measure: kpi_value_percent {
+    label: "KPI Value (%)"
+    type: max
+    sql: ${TABLE}.value ;;
+    value_format_name: "percent_2"
+  }
+
+  measure: numerator { type: max sql: ${TABLE}.numerator ;; }
+  measure: denominator { type: max sql: ${TABLE}.denominator ;; }
+  measure: records { type: count }
+}

@@ -1,0 +1,65 @@
+connection: "qa-panda-metrics-exp"
+
+include: "/scopely_panda/views/qa_metrics/*.view.lkml"
+include: "/scopely_panda/views/qa_metrics/simple/*.view.lkml"
+include: "/scopely_panda/dashboards/qa_metrics/*.dashboard.lookml"
+
+
+explore: qa_executive_kpis {
+  label: "QA Executive KPIs"
+  description: "Normalized executive KPIs (EXEC-01..EXEC-24). Base table is qa_executive_kpis_latest in BigQuery."
+}
+
+# Optional raw explores (for drill-down)
+explore: jira_issues_snapshot {
+  label: "Jira Issues Snapshot (raw)"
+}
+
+explore: jira_changelog {
+  label: "Jira Changelog (raw)"
+}
+
+explore: testrail_results {
+  label: "TestRail Results (raw)"
+}
+
+explore: bugsnag_errors {
+  label: "BugSnag Errors (raw)"
+}
+
+explore: gamebench_sessions {
+  label: "GameBench Sessions (raw)"
+}
+
+explore: manual_build_size {
+  label: "Manual Build Size (raw)"
+}
+
+
+# Primary KPI explore
+
+explore: qa_kpi_facts {
+  label: "QA KPIs"
+  description: "Unified KPI fact table (public + private)."
+  from: qa_kpi_facts
+}
+
+# Alias explore (some dashboards/listeners reference this name)
+explore: panda_qa_kpi_facts {
+  label: "QA KPIs (alias)"
+  description: "Alias explore for dashboards that reference panda_qa_kpi_facts.* fields."
+  from: qa_kpi_facts
+}
+
+# Dashboard-specific explores
+explore: jira_issues_latest { from: jira_issues_latest }
+explore: jira_bug_events_daily { from: jira_bug_events_daily }
+explore: jira_fix_fail_rate_daily { from: jira_fix_fail_rate_daily }
+explore: jira_mttr_fixed_daily { from: jira_mttr_fixed_daily }
+explore: jira_mttr_claimed_fixed_daily { from: jira_mttr_claimed_fixed_daily }
+explore: jira_active_bug_count_daily { from: jira_active_bug_count_daily }
+explore: build_size_manual { from: build_size_manual }
+explore: testrail_runs_latest { from: testrail_runs_latest }
+explore: testrail_bvt_latest { from: testrail_bvt_latest }
+explore: bugsnag_errors_latest { from: bugsnag_errors_latest }
+explore: gamebench_daily_metrics { from: gamebench_daily_metrics }

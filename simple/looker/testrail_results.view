@@ -1,0 +1,43 @@
+view: testrail_results {
+  sql_table_name: `qa-panda-metrics.qa_metrics_simple.testrail_results` ;;
+
+  dimension_group: created_on {
+    type: time
+    timeframes: [raw, time, date, week, month, year]
+    sql: ${TABLE}.created_on ;;
+  }
+
+  dimension_group: ingest_timestamp {
+    type: time
+    timeframes: [raw, time, date]
+    sql: ${TABLE}.ingest_timestamp ;;
+  }
+
+  dimension: project_id { type: number sql: ${TABLE}.project_id ;; }
+  dimension: run_id { type: number sql: ${TABLE}.run_id ;; }
+  dimension: run_name { type: string sql: ${TABLE}.run_name ;; }
+  dimension: suite_id { type: number sql: ${TABLE}.suite_id ;; }
+  dimension: suite_name { type: string sql: ${TABLE}.suite_name ;; }
+  dimension: test_id { type: number sql: ${TABLE}.test_id ;; }
+  dimension: case_id { type: number sql: ${TABLE}.case_id ;; }
+  dimension: status_id { type: number sql: ${TABLE}.status_id ;; }
+  dimension: status { type: string sql: ${TABLE}.status ;; }
+
+  measure: results { type: count }
+
+  measure: executed_results {
+    type: count
+    filters: [status: "-Untested"]
+  }
+
+  measure: passed_results {
+    type: count
+    filters: [status: "Passed"]
+  }
+
+  measure: pass_rate {
+    type: number
+    sql: SAFE_DIVIDE(${passed_results}, NULLIF(${executed_results}, 0)) ;;
+    value_format_name: percent_2
+  }
+}

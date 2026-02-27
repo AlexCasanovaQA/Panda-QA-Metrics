@@ -1,0 +1,41 @@
+view: gamebench_sessions {
+  sql_table_name: `qa-panda-metrics.qa_metrics_simple.gamebench_sessions` ;;
+
+  dimension_group: time_pushed {
+    type: time
+    timeframes: [raw, time, date, week, month, year]
+    sql: ${TABLE}.time_pushed ;;
+  }
+
+  dimension_group: ingest_timestamp {
+    type: time
+    timeframes: [raw, time, date]
+    sql: ${TABLE}.ingest_timestamp ;;
+  }
+
+  dimension: session_id { type: string sql: ${TABLE}.session_id ;; }
+  dimension: user_email { type: string sql: ${TABLE}.user_email ;; }
+  dimension: app_name { type: string sql: ${TABLE}.app_name ;; }
+  dimension: app_package { type: string sql: ${TABLE}.app_package ;; }
+  dimension: device_model { type: string sql: ${TABLE}.device_model ;; }
+  dimension: platform { type: string sql: ${TABLE}.platform ;; }
+
+  dimension: median_fps { type: number sql: ${TABLE}.median_fps ;; }
+  dimension: fps_stability_pct { type: number sql: ${TABLE}.fps_stability_pct ;; value_format_name: percent_2 }
+
+  measure: sessions { type: count }
+
+  # Median across sessions per group (approximate)
+  measure: median_fps_p50 {
+    label: "Median FPS (p50)"
+    type: number
+    sql: APPROX_QUANTILES(${median_fps}, 2)[OFFSET(1)] ;;
+  }
+
+  measure: fps_stability_p50 {
+    label: "FPS Stability % (p50)"
+    type: number
+    sql: APPROX_QUANTILES(${fps_stability_pct}, 2)[OFFSET(1)] ;;
+    value_format_name: percent_2
+  }
+}
