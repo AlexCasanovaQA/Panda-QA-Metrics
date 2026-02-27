@@ -1,5 +1,9 @@
 # QA Executive Dashboard (EXEC-01..EXEC-24)
 # Explore: qa_executive_kpis
+# Newspaper layout uses a 24-column grid in Dashboards Next:
+#   - Full width = 24
+#   - Half width = 12
+#   - Quarter width = 6
 
 - dashboard: qa_executive
   title: "QA Executive"
@@ -97,6 +101,9 @@
       required: false
 
   elements:
+    # -------------------------------------------------------------------------
+    # Intro
+    # -------------------------------------------------------------------------
     - name: intro
       type: text
       title_text: "QA Executive"
@@ -107,16 +114,19 @@
         - Each tile includes a hover note (ⓘ) describing the metric and how it is calculated.
       row: 0
       col: 0
-      width: 12
+      width: 24
       height: 3
 
+    # -------------------------------------------------------------------------
+    # Scoreboard
+    # -------------------------------------------------------------------------
     - name: section_scoreboard
       type: text
       title_text: "Scoreboard"
       body_text: ""
       row: 3
       col: 0
-      width: 12
+      width: 24
       height: 1
 
     - name: exec01_bugs_entered_today
@@ -133,14 +143,9 @@
       listen:
         As Of Date: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Count of new bugs created on the selected *As Of Date*.
-        **How:** Precomputed upstream; tile queries the latest row for `metric_id=EXEC-01` (overall scope, `dimensions_json={}`).
       row: 4
       col: 0
-      width: 3
+      width: 6
       height: 2
 
     - name: exec02_fixes_today_closed
@@ -157,14 +162,9 @@
       listen:
         As Of Date: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Count of bugs moved to *Closed* on the selected *As Of Date*.
-        **How:** Precomputed from issue state transitions; `metric_id=EXEC-02` (overall scope).
       row: 4
-      col: 3
-      width: 3
+      col: 6
+      width: 6
       height: 2
 
     - name: exec03_active_bugs_now
@@ -181,14 +181,9 @@
       listen:
         As Of Date: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Current active/open bug backlog as of the selected *As Of Date*.
-        **How:** Snapshot count of issues in active states; `metric_id=EXEC-03` (overall scope).
       row: 4
-      col: 6
-      width: 3
+      col: 12
+      width: 6
       height: 2
 
     - name: exec04_awaiting_qa_resolved
@@ -205,23 +200,21 @@
       listen:
         As Of Date: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Bugs in *Resolved* (or equivalent) waiting on QA verification as of *As Of Date*.
-        **How:** Snapshot count in the “Awaiting QA” stage; `metric_id=EXEC-04` (overall scope).
       row: 4
-      col: 9
-      width: 3
+      col: 18
+      width: 6
       height: 2
 
+    # -------------------------------------------------------------------------
+    # Health / Quality
+    # -------------------------------------------------------------------------
     - name: section_health
       type: text
       title_text: "Health & Quality — quick stats"
       body_text: ""
       row: 6
       col: 0
-      width: 12
+      width: 24
       height: 1
 
     - name: exec18_active_prod_errors
@@ -238,14 +231,9 @@
       listen:
         As Of Date: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Count of currently active production errors (BugSnag).
-        **How:** Active errors as of *As Of Date*; `metric_id=EXEC-18` (overall scope).
       row: 7
       col: 0
-      width: 3
+      width: 6
       height: 2
 
     - name: exec19_high_critical_active_errors
@@ -262,14 +250,9 @@
       listen:
         As Of Date: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Active production errors tagged High/Critical (BugSnag).
-        **How:** Subset of EXEC-18 filtered to High/Critical severities; `metric_id=EXEC-19`.
       row: 7
-      col: 3
-      width: 3
+      col: 6
+      width: 6
       height: 2
 
     - name: exec16_pass_rate_last_7d
@@ -286,14 +269,9 @@
       listen:
         As Of Date: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Overall test pass rate for the rolling last 7 days.
-        **How:** `pass_rate = numerator / denominator`. Rendered as a percent from `kpi_value_percent`; `metric_id=EXEC-16` (overall scope).
       row: 7
-      col: 6
-      width: 3
+      col: 12
+      width: 6
       height: 2
 
     - name: exec17_bvt_pass_rate_latest
@@ -310,23 +288,21 @@
       listen:
         As Of Date: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Pass rate of the latest Basic BVT run.
-        **How:** `pass_rate = passed / executed` for the latest run ingested; `metric_id=EXEC-17` (overall scope).
       row: 7
-      col: 9
-      width: 3
+      col: 18
+      width: 6
       height: 2
 
+    # -------------------------------------------------------------------------
+    # Incoming bugs
+    # -------------------------------------------------------------------------
     - name: section_incoming
       type: text
       title_text: "Incoming bugs"
       body_text: ""
       row: 9
       col: 0
-      width: 12
+      width: 24
       height: 1
 
     - name: exec05_06_bugs_by_severity_pivot
@@ -349,14 +325,9 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Bugs entered grouped by severity for 7-day and 30-day rolling windows.
-        **How:** Two precomputed metrics pivoted into columns: `EXEC-05` (last 7d) and `EXEC-06` (last 30d). As-of date uses *today*.
       row: 10
       col: 0
-      width: 12
+      width: 24
       height: 4
 
     - name: exec08_bugs_by_day_priority
@@ -379,23 +350,21 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Daily bug intake trend, broken out by priority.
-        **How:** One row per day + priority with `metric_id=EXEC-08`. We pivot priority so each priority is its own series.
       row: 14
       col: 0
-      width: 12
+      width: 24
       height: 5
 
+    # -------------------------------------------------------------------------
+    # Active composition
+    # -------------------------------------------------------------------------
     - name: section_active
       type: text
       title_text: "Active composition"
       body_text: ""
       row: 19
       col: 0
-      width: 12
+      width: 24
       height: 1
 
     - name: exec09_active_bugs_by_pod
@@ -418,14 +387,9 @@
         Severity: qa_executive_kpis.severity
         Priority: qa_executive_kpis.priority_label
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Active bug backlog split by POD.
-        **How:** Precomputed backlog grouped by POD (`metric_id=EXEC-09`) as of *today*.
       row: 20
       col: 0
-      width: 6
+      width: 12
       height: 4
 
     - name: exec10_active_bugs_by_status
@@ -449,14 +413,9 @@
         Severity: qa_executive_kpis.severity
         Priority: qa_executive_kpis.priority_label
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Active bug backlog split by workflow status.
-        **How:** Precomputed backlog grouped by status (`metric_id=EXEC-10`) as of *today*.
       row: 20
-      col: 6
-      width: 6
+      col: 12
+      width: 12
       height: 4
 
     - name: exec14_active_bugs_by_milestone
@@ -480,23 +439,21 @@
         Severity: qa_executive_kpis.severity
         Priority: qa_executive_kpis.priority_label
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Active bug backlog split by target milestone (`fixVersion`).
-        **How:** Precomputed backlog grouped by fixVersion (`metric_id=EXEC-14`) as of *today*.
       row: 24
       col: 0
-      width: 12
+      width: 24
       height: 4
 
+    # -------------------------------------------------------------------------
+    # Trends & fix quality
+    # -------------------------------------------------------------------------
     - name: section_trends
       type: text
       title_text: "Trends & fix quality"
       body_text: ""
       row: 28
       col: 0
-      width: 12
+      width: 24
       height: 1
 
     - name: exec11_active_bug_count_over_time
@@ -519,14 +476,9 @@
         Severity: qa_executive_kpis.severity
         Priority: qa_executive_kpis.priority_label
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Time series of active bug backlog.
-        **How:** Daily snapshot metric (`metric_id=EXEC-11`) over the selected *Trend Range*.
       row: 29
       col: 0
-      width: 12
+      width: 24
       height: 5
 
     - name: exec07_bugs_fixed_last_7d_by_priority
@@ -548,14 +500,9 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Bugs fixed in the rolling last 7 days, split by priority.
-        **How:** Precomputed “fixed” events rolled up by priority (`metric_id=EXEC-07`) as of *today*.
       row: 34
       col: 0
-      width: 6
+      width: 12
       height: 4
 
     - name: exec12_reopened_over_time_30d
@@ -576,14 +523,9 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Reopened count over time.
-        **How:** Time series metric (`metric_id=EXEC-12`) over the selected *Trend Range*.
       row: 34
-      col: 6
-      width: 6
+      col: 12
+      width: 12
       height: 4
 
     - name: exec13_fix_fail_rate_over_time
@@ -604,23 +546,21 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Fix-fail rate over time (higher = more failed verifications / regressions).
-        **How:** `fix_fail_rate = numerator / denominator` and rendered as `kpi_value_percent` for `metric_id=EXEC-13`.
       row: 38
       col: 0
-      width: 12
+      width: 24
       height: 4
 
+    # -------------------------------------------------------------------------
+    # Testing
+    # -------------------------------------------------------------------------
     - name: section_testing
       type: text
       title_text: "Testing"
       body_text: ""
       row: 42
       col: 0
-      width: 12
+      width: 24
       height: 1
 
     - name: exec15_test_cases_executed_by_day
@@ -639,14 +579,9 @@
         Feature: qa_executive_kpis.feature
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Daily volume of executed test cases.
-        **How:** `metric_id=EXEC-15` time series over the selected *Trend Range*.
       row: 43
       col: 0
-      width: 6
+      width: 12
       height: 4
 
     - name: exec16_pass_rate_trend
@@ -665,23 +600,21 @@
         Feature: qa_executive_kpis.feature
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Rolling 7-day pass-rate over time.
-        **How:** Each point is `passed / executed` for the trailing 7 days ending on that date (`metric_id=EXEC-16`).
       row: 43
-      col: 6
-      width: 6
+      col: 12
+      width: 12
       height: 4
 
+    # -------------------------------------------------------------------------
+    # BugSnag
+    # -------------------------------------------------------------------------
     - name: section_bugsnag
       type: text
       title_text: "BugSnag"
       body_text: ""
       row: 47
       col: 0
-      width: 12
+      width: 24
       height: 1
 
     - name: exec18_20_errors_by_severity_pivot
@@ -700,14 +633,9 @@
       listen:
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Active errors by severity, comparing Production-only vs Total.
-        **How:** Pivot two metrics into columns: `EXEC-18` (prod) and `EXEC-20` (all). As-of date uses *today*.
       row: 48
       col: 0
-      width: 12
+      width: 24
       height: 4
 
     - name: exec21_new_errors_last_7d
@@ -725,23 +653,21 @@
         As Of Date: qa_executive_kpis.metric_date
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Count of new errors observed in the rolling last 7 days.
-        **How:** Precomputed 7-day window as of *As Of Date* (`metric_id=EXEC-21`, overall scope).
       row: 52
       col: 0
-      width: 3
+      width: 24
       height: 2
 
+    # -------------------------------------------------------------------------
+    # GameBench
+    # -------------------------------------------------------------------------
     - name: section_gamebench
       type: text
       title_text: "GameBench"
       body_text: ""
       row: 54
       col: 0
-      width: 12
+      width: 24
       height: 1
 
     - name: exec22_median_fps_last_7d
@@ -760,14 +686,9 @@
       listen:
         Trend Range: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Median FPS trend from GameBench, split by platform.
-        **How:** Time series `metric_id=EXEC-22` with platform pivot so each platform is a series.
       row: 55
       col: 0
-      width: 6
+      width: 12
       height: 4
 
     - name: exec23_fps_stability_last_7d
@@ -786,14 +707,9 @@
       listen:
         Trend Range: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** FPS stability (percent) trend from GameBench, split by platform.
-        **How:** Time series `metric_id=EXEC-23`; `kpi_value_percent` represents the stability %.
       row: 55
-      col: 6
-      width: 6
+      col: 12
+      width: 12
       height: 4
 
     - name: exec24_build_size_by_platform
@@ -809,12 +725,7 @@
       limit: 50
       listen:
         Privacy: qa_executive_kpis.privacy_level
-      note_display: hover
-      note_state: collapsed
-      note_text: |
-        **What:** Current build size by platform (manual input).
-        **How:** Table-backed metric (`metric_id=EXEC-24`) keyed by platform for *today*.
       row: 59
       col: 0
-      width: 12
+      width: 24
       height: 4
