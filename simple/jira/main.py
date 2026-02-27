@@ -477,8 +477,9 @@ GROUP BY priority;
 -- EXEC-04 Awaiting QA verification (Resolved)
 CREATE TEMP TABLE awaiting_qa AS
 SELECT *
-FROM active_now
-WHERE status = 'Resolved';
+FROM snap
+WHERE issue_type = 'Bug'
+  AND status = 'Resolved';
 
 INSERT INTO `{kpi_table}`
 SELECT
@@ -657,7 +658,7 @@ SELECT
   DATE(change_timestamp, "UTC") AS d,
   COUNT(DISTINCT issue_key) AS closed_count
 FROM chlog
-WHERE to_value = 'Closed'
+WHERE to_value IN ('Closed', 'Resolved', 'Verified')
 GROUP BY d;
 
 CREATE TEMP TABLE reopened_by_day AS
@@ -665,7 +666,8 @@ SELECT
   DATE(change_timestamp, "UTC") AS d,
   COUNT(DISTINCT issue_key) AS reopened_count
 FROM chlog
-WHERE from_value = 'Closed' AND to_value = 'Reopened'
+WHERE from_value IN ('Closed', 'Resolved', 'Verified')
+  AND to_value = 'Reopened'
 GROUP BY d;
 
 INSERT INTO `{kpi_table}`

@@ -259,7 +259,8 @@ WITH candidates AS (
     run_id,
     ANY_VALUE(run_name) AS run_name,
     ANY_VALUE(suite_name) AS suite_name,
-    MAX(created_on) AS last_result_ts
+    MAX(created_on) AS last_result_ts,
+    LOGICAL_OR(LOWER(IFNULL(suite_name, "")) = LOWER("{suite_lit}")) AS is_exact_suite
   FROM `{tr_table}`
   WHERE created_on IS NOT NULL
     AND created_on >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {lookback_days} DAY)
@@ -269,8 +270,19 @@ WITH candidates AS (
     )
   GROUP BY run_id
 ),
+selected_candidates AS (
+  SELECT *
+  FROM candidates
+  WHERE is_exact_suite
+
+  UNION ALL
+
+  SELECT *
+  FROM candidates
+  WHERE NOT EXISTS (SELECT 1 FROM candidates WHERE is_exact_suite)
+),
 latest_run AS (
-  SELECT * FROM candidates ORDER BY last_result_ts DESC LIMIT 1
+  SELECT * FROM selected_candidates ORDER BY last_result_ts DESC LIMIT 1
 ),
 agg AS (
   SELECT
