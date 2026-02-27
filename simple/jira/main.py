@@ -652,13 +652,13 @@ FROM chlog
 WHERE to_value = 'Reopened'
 GROUP BY metric_date;
 
--- EXEC-13 Fix fail rate over time (30d)
+-- EXEC-13 Reopen rate over final statuses (30d)
 CREATE TEMP TABLE closed_by_day AS
 SELECT
   DATE(change_timestamp, "Europe/Madrid") AS d,
   COUNT(DISTINCT issue_key) AS closed_count
 FROM chlog
-WHERE to_value = 'Closed'
+WHERE to_value IN ('Closed', 'Resolved', 'Verified')
 GROUP BY d;
 
 CREATE TEMP TABLE reopened_by_day AS
@@ -666,14 +666,15 @@ SELECT
   DATE(change_timestamp, "Europe/Madrid") AS d,
   COUNT(DISTINCT issue_key) AS reopened_count
 FROM chlog
-WHERE from_value = 'Closed' AND to_value = 'Reopened'
+WHERE from_value IN ('Closed', 'Resolved', 'Verified')
+  AND to_value = 'Reopened'
 GROUP BY d;
 
 INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-13',
-  'Fix fail rate over time (30d)',
+  'Reopen rate from final statuses over time (30d)',
   d,
   start30,
   today,
