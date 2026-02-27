@@ -42,6 +42,7 @@ Deploy settings:
 from __future__ import annotations
 
 import datetime
+import logging
 import os
 import statistics
 import time
@@ -52,6 +53,9 @@ from flask import jsonify
 
 from bq import get_client, insert_rows, run_query, table_ref
 from time_utils import to_rfc3339, utc_now
+
+
+logger = logging.getLogger(__name__)
 
 
 # -----------------------------
@@ -214,30 +218,45 @@ class GameBenchClient:
                 if scoped_company:
                     params["company"] = scoped_company
 
-                body: Dict[str, Any] = {
-                    "sessionInfo": {
-                        "dateStart": start_ms,
-                        "dateEnd": end_ms,
-                    },
-                    "appInfo": {
-                        "package": packages,
-                    },
-                }
+                env_filters = [environment]
                 if environment:
-                    body["appInfo"]["environment"] = environment
-                if collection_id:
-                    body["appInfo"]["collectionId"] = collection_id
+                    # Some GameBench tenants fail on strict `environment` filtering.
+                    # Fallback without environment to avoid full-ingestion failures.
+                    env_filters.append(None)
 
-                resp = _request_with_backoff(
-                    "POST",
-                    url,
-                    auth_mode=self.auth_mode,
-                    user=self.user,
-                    token=self.token,
-                    params=params,
-                    json_body=body,
-                    timeout=30,
-                )
+                resp: Optional[requests.Response] = None
+                for env_filter in env_filters:
+                    body: Dict[str, Any] = {
+                        "sessionInfo": {
+                            "dateStart": start_ms,
+                            "dateEnd": end_ms,
+                        },
+                        "appInfo": {
+                            "package": packages,
+                        },
+                    }
+                    if env_filter:
+                        body["appInfo"]["environment"] = env_filter
+                    if collection_id:
+                        body["appInfo"]["collectionId"] = collection_id
+
+                    resp = _request_with_backoff(
+                        "POST",
+                        url,
+                        auth_mode=self.auth_mode,
+                        user=self.user,
+                        token=self.token,
+                        params=params,
+                        json_body=body,
+                        timeout=30,
+                    )
+
+                    # Fallback for invalid/unsupported environment filter.
+                    if resp.ok or env_filter is None or resp.status_code not in (400, 422, 500):
+                        break
+
+                if resp is None:
+                    raise RuntimeError("GameBench session search did not return a response")
 
                 if resp.status_code in (401, 403) and scoped_company and attempt_company:
                     # Retry whole search without company scope.
@@ -322,7 +341,7 @@ def _existing_session_ids(client, lookback_days: int) -> set:
     return existing
 
 
-def ingest_gamebench() -> int:
+def ingest_gamebench() -> Tuple[int, int]:
     user = _env("GAMEBENCH_USER")
     token = _env("GAMEBENCH_TOKEN")
 
@@ -375,6 +394,7 @@ def ingest_gamebench() -> int:
 
     rows: List[Dict[str, Any]] = []
     inserted = 0
+    skipped_sessions = 0
 
     for s in sessions:
         session_id = s.get("sessionId") or s.get("id")
@@ -396,11 +416,16 @@ def ingest_gamebench() -> int:
         if not time_pushed_dt:
             time_pushed_dt = end_dt
 
-        fps_values = gb.get_fps(session_id)
-        median_fps = statistics.median(fps_values) if fps_values else None
+        try:
+            fps_values = gb.get_fps(session_id)
+            median_fps = statistics.median(fps_values) if fps_values else None
 
-        stab_values = gb.get_fps_stability(session_id)
-        fps_stability = statistics.median(stab_values) if stab_values else None
+            stab_values = gb.get_fps_stability(session_id)
+            fps_stability = statistics.median(stab_values) if stab_values else None
+        except Exception as e:
+            skipped_sessions += 1
+            logger.warning("Skipping session %s due to metric fetch failure: %s", session_id, e)
+            continue
 
         rows.append(
             {
@@ -424,7 +449,7 @@ def ingest_gamebench() -> int:
     if rows:
         inserted += insert_rows(client, "gamebench_sessions", rows)
 
-    return inserted
+    return inserted, skipped_sessions
 
 
 # -----------------------------
@@ -518,8 +543,22 @@ FROM latest_build;
 
 def hello_http(request):
     try:
-        inserted = ingest_gamebench()
-        _compute_gamebench_kpis()
-        return jsonify({"status": "ok", "inserted_session_rows": inserted})
+        inserted, skipped_sessions = ingest_gamebench()
+        kpi_status = "ok"
+        try:
+            _compute_gamebench_kpis()
+        except Exception as e:
+            kpi_status = f"error: {e}"
+            logger.exception("GameBench KPI computation failed")
+
+        return jsonify(
+            {
+                "status": "ok" if kpi_status == "ok" else "partial_ok",
+                "inserted_session_rows": inserted,
+                "skipped_sessions": skipped_sessions,
+                "kpi_status": kpi_status,
+            }
+        )
     except Exception as e:
+        logger.exception("GameBench ingestion failed")
         return jsonify({"status": "error", "error": str(e)}), 500
