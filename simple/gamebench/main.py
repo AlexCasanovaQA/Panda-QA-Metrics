@@ -17,12 +17,19 @@ This Cloud Run/Cloud Function (2nd gen) service:
 Required env vars / secrets:
 - GAMEBENCH_USER         (email)
 - GAMEBENCH_TOKEN        (API token)
-- GAMEBENCH_APP_PACKAGES CSV of package names
 
 Optional:
-- GAMEBENCH_COMPANY_ID       if you have company-wide permission (if unauthorized, we fall back to user-scope)
+- GAMEBENCH_COMPANY_ID       defaults to AWGaWNjXBxsUazsJuoUp
+- GAMEBENCH_COLLECTION_ID    defaults to 7cf80f11-6915-4e6c-b70c-4ad7ed44aaf9
+- GAMEBENCH_APP_PACKAGES     CSV defaults to
+                              com.scopely.internal.wwedomination,
+                              com.scopely.wwedomination
 - GAMEBENCH_LOOKBACK_DAYS    default 7
 - GAMEBENCH_AUTH_MODE        'basic' (default) or 'bearer'
+
+Package/environment filtering:
+- Searches are split by inferred environment to match `_infer_platform_from_package`:
+  `*.internal.*` -> `dev`, otherwise `prod`.
 
 BigQuery dataset defaults:
 - BQ_PROJECT = GOOGLE_CLOUD_PROJECT
@@ -183,8 +190,10 @@ class GameBenchClient:
         self,
         *,
         packages: List[str],
+        environment: Optional[str],
         start_ms: int,
         end_ms: int,
+        collection_id: Optional[str] = None,
         page_size: int = 50,
         max_pages: int = 10,
     ) -> List[Dict[str, Any]]:
@@ -214,6 +223,10 @@ class GameBenchClient:
                         "package": packages,
                     },
                 }
+                if environment:
+                    body["appInfo"]["environment"] = environment
+                if collection_id:
+                    body["appInfo"]["collectionId"] = collection_id
 
                 resp = _request_with_backoff(
                     "POST",
@@ -314,11 +327,13 @@ def ingest_gamebench() -> int:
     token = _env("GAMEBENCH_TOKEN")
 
     auth_mode = os.environ.get("GAMEBENCH_AUTH_MODE", "basic").strip().lower() or "basic"
-    packages = _split_csv(_env("GAMEBENCH_APP_PACKAGES"))
+    packages_default = "com.scopely.internal.wwedomination,com.scopely.wwedomination"
+    packages = _split_csv(_env("GAMEBENCH_APP_PACKAGES", packages_default))
     if not packages:
         raise ValueError("GAMEBENCH_APP_PACKAGES must contain at least one package")
 
-    company_id = os.environ.get("GAMEBENCH_COMPANY_ID") or None
+    company_id = os.environ.get("GAMEBENCH_COMPANY_ID", "AWGaWNjXBxsUazsJuoUp") or None
+    collection_id = os.environ.get("GAMEBENCH_COLLECTION_ID", "7cf80f11-6915-4e6c-b70c-4ad7ed44aaf9") or None
     lookback_days = int(os.environ.get("GAMEBENCH_LOOKBACK_DAYS", "7"))
 
     end_dt = utc_now()
@@ -332,13 +347,29 @@ def ingest_gamebench() -> int:
     client = get_client()
 
     existing = _existing_session_ids(client, lookback_days=lookback_days)
-    sessions = gb.advanced_search_sessions(
-        packages=packages,
-        start_ms=start_ms,
-        end_ms=end_ms,
-        page_size=50,
-        max_pages=10,
-    )
+    package_groups: Dict[str, List[str]] = {"dev": [], "prod": []}
+    for pkg in packages:
+        package_groups.setdefault(_infer_platform_from_package(pkg), []).append(pkg)
+
+    sessions_by_id: Dict[str, Dict[str, Any]] = {}
+    for environment, grouped_packages in package_groups.items():
+        if not grouped_packages:
+            continue
+        grouped_sessions = gb.advanced_search_sessions(
+            packages=grouped_packages,
+            environment=environment,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            collection_id=collection_id,
+            page_size=50,
+            max_pages=10,
+        )
+        for session in grouped_sessions:
+            session_id = session.get("sessionId") or session.get("id")
+            if session_id:
+                sessions_by_id[session_id] = session
+
+    sessions = list(sessions_by_id.values())
 
     ingest_ts = to_rfc3339(end_dt)
 
