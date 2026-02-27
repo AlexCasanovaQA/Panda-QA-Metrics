@@ -49,6 +49,16 @@ def _env(name: str, default: Optional[str] = None) -> str:
     return str(v).strip()
 
 
+def _env_any(*names: str, default: Optional[str] = None) -> str:
+    for name in names:
+        v = os.environ.get(name)
+        if v is not None and str(v).strip() != "":
+            return str(v).strip()
+    if default is not None and str(default).strip() != "":
+        return str(default).strip()
+    raise KeyError(" | ".join(names))
+
+
 def _split_csv(value: str) -> List[str]:
     return [x.strip() for x in value.split(",") if x.strip()]
 
@@ -224,11 +234,11 @@ def ingest_jira() -> Tuple[int, int]:
     Returns: (snapshot_rows_inserted, changelog_rows_inserted)
     """
 
-    site = _jira_base_url(_env("JIRA_SITE"))
-    user = _env("JIRA_USER")
+    site = _jira_base_url(_env_any("JIRA_SITE", "JIRA_BASE_URL"))
+    user = _env_any("JIRA_USER", "JIRA_EMAIL")
     api_token = _env("JIRA_API_TOKEN")
 
-    project_keys = _split_csv(_env("JIRA_PROJECT_KEYS"))
+    project_keys = _split_csv(_env_any("JIRA_PROJECT_KEYS", "JIRA_PROJECT_KEYS_CSV", "JIRA_PROJECT_KEY"))
     lookback_days = int(os.environ.get("JIRA_LOOKBACK_DAYS", "30"))
 
     severity_field = os.environ.get("JIRA_SEVERITY_FIELD", "customfield_10074").strip() or "customfield_10074"
@@ -731,5 +741,9 @@ def hello_http(request):
                 "inserted_changelog_rows": inserted_chg,
             }
         )
+    except KeyError as e:
+        return jsonify({"status": "error", "error": f"Missing required env var: {e}"}), 400
+    except ValueError as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
