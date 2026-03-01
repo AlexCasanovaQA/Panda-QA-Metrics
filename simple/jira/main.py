@@ -46,6 +46,10 @@ class JiraAPIError(RuntimeError):
         self.status_code = status_code
 
 
+class ConfigError(ValueError):
+    """Raised when required service configuration is missing/invalid."""
+
+
 # -----------------------------
 # Helpers
 # -----------------------------
@@ -69,6 +73,35 @@ def _env_any(*names: str, default: Optional[str] = None) -> str:
 
 def _split_csv(value: str) -> List[str]:
     return [x.strip() for x in value.split(",") if x.strip()]
+
+
+def _first_non_empty(*names: str) -> Optional[str]:
+    for name in names:
+        value = os.environ.get(name)
+        if value is not None and str(value).strip() != "":
+            return str(value).strip()
+    return None
+
+
+def _validate_jira_config() -> Dict[str, str]:
+    """Fail fast with a precise configuration error before hitting integrations."""
+    required_groups = {
+        "JIRA site/base URL": ("JIRA_SITE", "JIRA_BASE_URL"),
+        "JIRA user/email": ("JIRA_USER", "JIRA_EMAIL"),
+        "JIRA API token": ("JIRA_API_TOKEN",),
+        "JIRA project keys": ("JIRA_PROJECT_KEYS", "JIRA_PROJECT_KEYS_CSV", "JIRA_PROJECT_KEY"),
+    }
+
+    missing = [f"{label}: {' | '.join(names)}" for label, names in required_groups.items() if _first_non_empty(*names) is None]
+    if missing:
+        raise ConfigError("Missing Jira configuration: " + "; ".join(missing))
+
+    return {
+        "site": _first_non_empty("JIRA_SITE", "JIRA_BASE_URL") or "",
+        "user": _first_non_empty("JIRA_USER", "JIRA_EMAIL") or "",
+        "api_token": _first_non_empty("JIRA_API_TOKEN") or "",
+        "project_keys": _first_non_empty("JIRA_PROJECT_KEYS", "JIRA_PROJECT_KEYS_CSV", "JIRA_PROJECT_KEY") or "",
+    }
 
 
 def _jira_base_url(site: str) -> str:
@@ -242,14 +275,15 @@ def ingest_jira() -> Tuple[int, int]:
     Returns: (snapshot_rows_inserted, changelog_rows_inserted)
     """
 
-    site = _jira_base_url(_env_any("JIRA_SITE", "JIRA_BASE_URL"))
-    user = _env_any("JIRA_USER", "JIRA_EMAIL")
-    api_token = _env("JIRA_API_TOKEN")
+    config = _validate_jira_config()
+    site = _jira_base_url(config["site"])
+    user = config["user"]
+    api_token = config["api_token"]
 
-    project_keys = _split_csv(_env_any("JIRA_PROJECT_KEYS", "JIRA_PROJECT_KEYS_CSV", "JIRA_PROJECT_KEY"))
+    project_keys = _split_csv(config["project_keys"])
     lookback_days = int(os.environ.get("JIRA_LOOKBACK_DAYS", "30"))
 
-    severity_field = os.environ.get("JIRA_SEVERITY_FIELD", "customfield_10074").strip() or "customfield_10074"
+    severity_field = _first_non_empty("JIRA_SEVERITY_FIELD_ID", "JIRA_SEVERITY_FIELD") or "customfield_10074"
     pod_field = os.environ.get("JIRA_POD_FIELD", "customfield_10001").strip() or "customfield_10001"
 
     # Only Bugs; include all active + anything updated recently to catch fixes.
@@ -749,6 +783,8 @@ def hello_http(request):
                 "inserted_changelog_rows": inserted_chg,
             }
         )
+    except ConfigError as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
     except KeyError as e:
         return jsonify({"status": "error", "error": f"Missing required env var: {e}"}), 400
     except ValueError as e:

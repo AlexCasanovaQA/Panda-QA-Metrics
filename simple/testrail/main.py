@@ -22,6 +22,10 @@ STATUS_ID_TO_NAME = {
 EXECUTED_STATUS_IDS = (1, 2, 4, 5)
 
 
+class ConfigError(ValueError):
+    """Raised when required service configuration is missing/invalid."""
+
+
 def _env_any(*names: str, default: Optional[str] = None) -> str:
     """Return the first non-empty env var from *names, with optional default."""
     for name in names:
@@ -37,6 +41,29 @@ def _env_any(*names: str, default: Optional[str] = None) -> str:
 
 def _split_csv(s: str) -> List[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
+
+
+def _validate_testrail_config() -> Dict[str, str]:
+    required_groups = {
+        "TestRail base URL": ("TESTRAIL_BASE_URL", "TESTRAIL_URL"),
+        "TestRail user/email": ("TESTRAIL_EMAIL", "TESTRAIL_USER", "TESTRAIL_USERNAME"),
+        "TestRail API key": ("TESTRAIL_API_KEY", "TESTRAIL_TOKEN", "TESTRAIL_API_TOKEN"),
+        "TestRail project ids": ("TESTRAIL_PROJECT_IDS", "TESTRAIL_PROJECTS", "TESTRAIL_PROJECT_ID", "TESTRAIL_PROJECT"),
+    }
+
+    missing = []
+    for label, names in required_groups.items():
+        if not any(os.environ.get(name, "").strip() for name in names):
+            missing.append(f"{label}: {' | '.join(names)}")
+
+    if missing:
+        raise ConfigError("Missing TestRail configuration: " + "; ".join(missing))
+
+    return {
+        "base_url": _env_any("TESTRAIL_BASE_URL", "TESTRAIL_URL"),
+        "email": _env_any("TESTRAIL_EMAIL", "TESTRAIL_USER", "TESTRAIL_USERNAME"),
+        "api_key": _env_any("TESTRAIL_API_KEY", "TESTRAIL_TOKEN", "TESTRAIL_API_TOKEN"),
+    }
 
 
 def _get_project_ids() -> List[int]:
@@ -340,15 +367,14 @@ def hello_http(request):
         return ("Method not allowed", 405)
 
     try:
+        config = _validate_testrail_config()
+
         # Make schema resilient for older tables.
         _ensure_testrail_schema()
 
-        base_url = _env_any("TESTRAIL_BASE_URL", "TESTRAIL_URL")
-
-        # Prefer TESTRAIL_EMAIL, but allow old deployments that only have TESTRAIL_USER.
-        email = _env_any("TESTRAIL_EMAIL", "TESTRAIL_USER", "TESTRAIL_USERNAME")
-
-        api_key = _env_any("TESTRAIL_API_KEY", "TESTRAIL_TOKEN", "TESTRAIL_API_TOKEN")
+        base_url = config["base_url"]
+        email = config["email"]
+        api_key = config["api_key"]
         project_ids = _get_project_ids()
 
         lookback_days = int(os.environ.get("TESTRAIL_LOOKBACK_DAYS", "30").strip() or "30")
@@ -402,5 +428,7 @@ def hello_http(request):
 
         return jsonify({"status": "ok", "inserted_rows": total_inserted})
 
+    except ConfigError as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500

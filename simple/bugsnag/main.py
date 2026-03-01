@@ -11,6 +11,10 @@ from bq import get_client, insert_rows, run_query, table_ref
 from time_utils import to_rfc3339, utc_now
 
 
+class ConfigError(ValueError):
+    """Raised when required service configuration is missing/invalid."""
+
+
 def _env(name: str, default: Optional[str] = None) -> str:
     v = os.environ.get(name, default)
     if v is None or str(v).strip() == "":
@@ -20,6 +24,27 @@ def _env(name: str, default: Optional[str] = None) -> str:
 
 def _split_csv(s: str) -> List[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
+
+
+def _validate_bugsnag_config() -> Dict[str, Any]:
+    required_groups = {
+        "BugSnag base URL": ("BUGSNAG_BASE_URL",),
+        "BugSnag token": ("BUGSNAG_TOKEN",),
+        "BugSnag project ids": ("BUGSNAG_PROJECT_IDS",),
+    }
+    missing = []
+    for label, names in required_groups.items():
+        if not any(os.environ.get(name, "").strip() for name in names):
+            missing.append(f"{label}: {' | '.join(names)}")
+
+    if missing:
+        raise ConfigError("Missing BugSnag configuration: " + "; ".join(missing))
+
+    return {
+        "base_url": _env("BUGSNAG_BASE_URL"),
+        "token": _env("BUGSNAG_TOKEN"),
+        "project_ids": _split_csv(_env("BUGSNAG_PROJECT_IDS")),
+    }
 
 
 def _request_with_backoff(
@@ -269,9 +294,14 @@ def hello_http(request):
     if request.method not in ("POST", "GET"):
         return ("Method not allowed", 405)
 
-    base_url = _env("BUGSNAG_BASE_URL")
-    token = _env("BUGSNAG_TOKEN")
-    project_ids = _split_csv(_env("BUGSNAG_PROJECT_IDS"))
+    try:
+        config = _validate_bugsnag_config()
+    except ConfigError as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+
+    base_url = config["base_url"]
+    token = config["token"]
+    project_ids = config["project_ids"]
 
     # Cloud Scheduler HTTP jobs often default to a 3-minute attempt deadline.
     # Keep a safety buffer so the function can serialize and return before
