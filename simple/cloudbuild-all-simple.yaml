@@ -1,35 +1,40 @@
 substitutions:
   _REGION: europe-west1
   _REPOSITORY: qa-metrics
+  _BUGSNAG_SERVICE: bugsnag-ingest-function
   _JIRA_SERVICE: jira-ingest-function
   _TESTRAIL_SERVICE: testrail-ingest-function
+  _GAMEBENCH_SERVICE: gamebench-ingest-function
 
 steps:
-  # Build dedicated image for Jira ingest (entrypoint: jira/main.py)
   - name: "gcr.io/cloud-builders/docker"
     args:
       - "build"
       - "-f"
       - "simple/Dockerfile"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:$SHORT_SHA"
       - "-t"
       - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
       - "-t"
-      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:latest"
-      - "."
-
-  # Build dedicated image for TestRail ingest (entrypoint: testrail/main.py)
-  - name: "gcr.io/cloud-builders/docker"
-    args:
-      - "build"
-      - "-f"
-      - "simple/Dockerfile"
-      - "-t"
       - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:$SHORT_SHA"
       - "-t"
-      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:latest"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:$SHORT_SHA"
       - "."
 
-  # Deploy Jira from its own image with explicit source
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "${_BUGSNAG_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:$SHORT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--command=sh"
+      - "--args=-c,functions-framework --target=hello_http --source=bugsnag/main.py --port=${PORT}"
+
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
     args:
@@ -43,7 +48,6 @@ steps:
       - "--command=sh"
       - "--args=-c,functions-framework --target=hello_http --source=jira/main.py --port=${PORT}"
 
-  # Deploy TestRail from its own image with explicit source
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
     args:
@@ -57,11 +61,24 @@ steps:
       - "--command=sh"
       - "--args=-c,functions-framework --target=hello_http --source=testrail/main.py --port=${PORT}"
 
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "${_GAMEBENCH_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:$SHORT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--command=sh"
+      - "--args=-c,functions-framework --target=hello_http --source=gamebench/main.py --port=${PORT}"
+
 images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:$SHORT_SHA"
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
-  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:latest"
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:$SHORT_SHA"
-  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:latest"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:$SHORT_SHA"
 
 options:
   logging: CLOUD_LOGGING_ONLY

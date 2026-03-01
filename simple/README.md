@@ -17,7 +17,6 @@ Además, la búsqueda en GameBench separa filtros por `package` y `environment` 
 - Paquetes con `.internal.` (o sufijo `.internal`) => `environment=dev`
 - Resto => `environment=prod`
 
-
 ## BigQuery location (important)
 
 If your dataset `qa_metrics_simple` is in **EU**, set (or keep) this env var in each simple service:
@@ -33,47 +32,110 @@ Without this, queries can fail with errors like: `Dataset ... was not found in l
 
 | Servicio | Env vars requeridas (alguna alternativa por grupo) | Env vars opcionales |
 |---|---|---|
-| `simple/jira/main.py` | `JIRA_SITE` \| `JIRA_BASE_URL`; `JIRA_USER` \| `JIRA_EMAIL`; `JIRA_API_TOKEN`; `JIRA_PROJECT_KEYS` \| `JIRA_PROJECT_KEYS_CSV` \| `JIRA_PROJECT_KEY` | `JIRA_SEVERITY_FIELD_ID` \| `JIRA_SEVERITY_FIELD` (se soportan ambos nombres), `JIRA_POD_FIELD`, `JIRA_LOOKBACK_DAYS`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
-| `simple/testrail/main.py` | `TESTRAIL_BASE_URL` \| `TESTRAIL_URL`; `TESTRAIL_EMAIL` \| `TESTRAIL_USER` \| `TESTRAIL_USERNAME`; `TESTRAIL_API_KEY` \| `TESTRAIL_TOKEN` \| `TESTRAIL_API_TOKEN`; `TESTRAIL_PROJECT_IDS` \| `TESTRAIL_PROJECTS` \| `TESTRAIL_PROJECT_ID` \| `TESTRAIL_PROJECT` | `TESTRAIL_LOOKBACK_DAYS`, `TESTRAIL_BVT_SUITE_NAME`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
 | `simple/bugsnag/main.py` | `BUGSNAG_BASE_URL`; `BUGSNAG_TOKEN`; `BUGSNAG_PROJECT_IDS` | `BUGSNAG_MAX_RUNTIME_S`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
+| `simple/jira/main.py` | `JIRA_SITE` \| `JIRA_BASE_URL`; `JIRA_USER` \| `JIRA_EMAIL`; `JIRA_API_TOKEN`; `JIRA_PROJECT_KEYS` \| `JIRA_PROJECT_KEYS_CSV` \| `JIRA_PROJECT_KEY` | `JIRA_SEVERITY_FIELD_ID` \| `JIRA_SEVERITY_FIELD`, `JIRA_POD_FIELD`, `JIRA_LOOKBACK_DAYS`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
+| `simple/testrail/main.py` | `TESTRAIL_BASE_URL` \| `TESTRAIL_URL`; `TESTRAIL_EMAIL` \| `TESTRAIL_USER` \| `TESTRAIL_USERNAME`; `TESTRAIL_API_KEY` \| `TESTRAIL_TOKEN` \| `TESTRAIL_API_TOKEN`; `TESTRAIL_PROJECT_IDS` \| `TESTRAIL_PROJECTS` \| `TESTRAIL_PROJECT_ID` \| `TESTRAIL_PROJECT` | `TESTRAIL_LOOKBACK_DAYS`, `TESTRAIL_BVT_SUITE_NAME`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
+| `simple/gamebench/main.py` | `GAMEBENCH_USER`; `GAMEBENCH_TOKEN` | `GAMEBENCH_COMPANY_ID`, `GAMEBENCH_COLLECTION_ID`, `GAMEBENCH_APP_PACKAGES`, `GAMEBENCH_LOOKBACK_DAYS`, `GAMEBENCH_AUTH_MODE`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
 
-### Verificación en Cloud Run (recomendada en cada deploy)
+## Build pipelines existentes y cobertura
 
-Comparar la matriz anterior contra la configuración real de cada servicio:
+Archivos de Cloud Build existentes en `/simple`:
 
-```bash
-gcloud run services describe <service-name> \
-  --region <region> \
-  --format yaml(spec.template.spec.containers)
-```
+| Pipeline | Cobertura real |
+|---|---|
+| `simple/cloudbuild-jira-testrail.yaml` | Solo despliega `jira-ingest-function` (`jira/main.py`) y `testrail-ingest-function` (`testrail/main.py`). |
+| `simple/cloudbuild-all-simple.yaml` | Despliega los 4 servicios: `bugsnag`, `jira`, `testrail`, `gamebench`. |
 
-Si hay drift de nombres, mantener aliases en código y normalizar despliegues. Ejemplo típico ya cubierto: `JIRA_SEVERITY_FIELD` vs `JIRA_SEVERITY_FIELD_ID`.
-## Cloud Build (Jira + TestRail) sin `--source`
-
-Para repos con múltiples entrypoints HTTP, usa imágenes dedicadas por servicio y despliegue con `--image`.
-
-Este repo incluye: `simple/cloudbuild-jira-testrail.yaml`.
-
-Qué hace:
-- Construye imagen Jira con `--build-arg SOURCE_FILE=ingest-jira.py`.
-- Construye imagen TestRail con `--build-arg SOURCE_FILE=ingest-testrail.py`.
-- Despliega cada servicio con su imagen propia (`gcloud run deploy ... --image=...`).
-- Fuerza `functions-framework --source` correcto por servicio en Cloud Run.
-- Valida con POST autenticado y falla si en logs recientes aparece `/app/main.py` o `BUGSNAG_BASE_URL`.
-
-Ejemplo de ejecución:
+Ejecución:
 
 ```bash
 gcloud builds submit --config simple/cloudbuild-jira-testrail.yaml .
+gcloud builds submit --config simple/cloudbuild-all-simple.yaml .
 ```
 
-## Dockerfile simple: selección de `main.py` segura
+## Tabla operativa: servicio -> pipeline -> source esperado
 
-`simple/Dockerfile` ahora soporta selección de entrypoint en runtime:
+| Servicio Cloud Run | Pipeline recomendado | `--source` esperado |
+|---|---|---|
+| `bugsnag-ingest-function` | `simple/cloudbuild-all-simple.yaml` | `bugsnag/main.py` |
+| `jira-ingest-function` | `simple/cloudbuild-jira-testrail.yaml` o `simple/cloudbuild-all-simple.yaml` | `jira/main.py` |
+| `testrail-ingest-function` | `simple/cloudbuild-jira-testrail.yaml` o `simple/cloudbuild-all-simple.yaml` | `testrail/main.py` |
+| `gamebench-ingest-function` | `simple/cloudbuild-all-simple.yaml` | `gamebench/main.py` |
 
-- Primero usa `SIMPLE_FUNCTION` (si se define explícitamente).
-- Si no existe, usa `K_SERVICE` (Cloud Run) para elegir entre `bugsnag|jira|testrail|gamebench`.
-- Si no puede resolver servicio, falla con error claro.
+## Verificación post-deploy (por servicio)
 
-Esto evita casos donde un deploy de `gamebench-ingest-function` arranca por accidente con `bugsnag/main.py`
-y falla por variables como `BUGSNAG_BASE_URL`.
+Asume `REGION=europe-west1`.
+
+### 1) Runtime args/source
+
+```bash
+REGION=europe-west1
+for SVC in bugsnag-ingest-function jira-ingest-function testrail-ingest-function gamebench-ingest-function; do
+  echo "=== $SVC runtime args ==="
+  gcloud run services describe "$SVC" --region "$REGION" \
+    --format="value(spec.template.spec.containers[0].args)"
+done
+```
+
+Validar que cada servicio incluya su `--source` correcto:
+- bugsnag: `--source=bugsnag/main.py`
+- jira: `--source=jira/main.py`
+- testrail: `--source=testrail/main.py`
+- gamebench: `--source=gamebench/main.py`
+
+### 2) Variable mínima requerida (presencia en env)
+
+```bash
+REGION=europe-west1
+
+# bugsnag
+gcloud run services describe bugsnag-ingest-function --region "$REGION" \
+  --format="value(spec.template.spec.containers[0].env[].name)" | tr ';' '\n' | grep -E '^BUGSNAG_BASE_URL$'
+
+# jira
+gcloud run services describe jira-ingest-function --region "$REGION" \
+  --format="value(spec.template.spec.containers[0].env[].name)" | tr ';' '\n' | grep -E '^(JIRA_SITE|JIRA_BASE_URL)$'
+
+# testrail
+gcloud run services describe testrail-ingest-function --region "$REGION" \
+  --format="value(spec.template.spec.containers[0].env[].name)" | tr ';' '\n' | grep -E '^(TESTRAIL_BASE_URL|TESTRAIL_URL)$'
+
+# gamebench
+gcloud run services describe gamebench-ingest-function --region "$REGION" \
+  --format="value(spec.template.spec.containers[0].env[].name)" | tr ';' '\n' | grep -E '^GAMEBENCH_USER$'
+```
+
+### 3) Smoke POST autenticado (uno por servicio)
+
+```bash
+REGION=europe-west1
+TOKEN="$(gcloud auth print-identity-token)"
+
+# bugsnag
+BUGSNAG_URL="$(gcloud run services describe bugsnag-ingest-function --region "$REGION" --format='value(status.url)')"
+curl -fsS -X POST "$BUGSNAG_URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"dry_run": true, "hours": 1}'
+
+# jira
+JIRA_URL="$(gcloud run services describe jira-ingest-function --region "$REGION" --format='value(status.url)')"
+curl -fsS -X POST "$JIRA_URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"dry_run": true, "lookback_days": 1}'
+
+# testrail
+TESTRAIL_URL="$(gcloud run services describe testrail-ingest-function --region "$REGION" --format='value(status.url)')"
+curl -fsS -X POST "$TESTRAIL_URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"dry_run": true, "days": 1}'
+
+# gamebench
+GAMEBENCH_URL="$(gcloud run services describe gamebench-ingest-function --region "$REGION" --format='value(status.url)')"
+curl -fsS -X POST "$GAMEBENCH_URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"dry_run": true, "lookback_days": 1}'
+```
