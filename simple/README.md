@@ -66,3 +66,14 @@ Ejemplo de ejecución:
 ```bash
 gcloud builds submit --config simple/cloudbuild-jira-testrail.yaml .
 ```
+
+## Dockerfile simple: selección de `main.py` segura
+
+`simple/Dockerfile` ahora soporta selección de entrypoint en runtime:
+
+- Primero usa `SIMPLE_FUNCTION` (si se define explícitamente).
+- Si no existe, usa `K_SERVICE` (Cloud Run) para elegir entre `bugsnag|jira|testrail|gamebench`.
+- Si no puede resolver servicio, falla con error claro.
+
+Esto evita casos donde un deploy de `gamebench-ingest-function` arranca por accidente con `bugsnag/main.py`
+y falla por variables como `BUGSNAG_BASE_URL`.
