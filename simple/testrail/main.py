@@ -22,11 +22,17 @@ STATUS_ID_TO_NAME = {
 EXECUTED_STATUS_IDS = (1, 2, 4, 5)
 
 
-def _env(name: str, default: Optional[str] = None) -> str:
-    v = os.environ.get(name, default)
-    if v is None or str(v).strip() == "":
-        raise RuntimeError(f"Missing required env var: {name}")
-    return str(v).strip()
+def _env_any(*names: str, default: Optional[str] = None) -> str:
+    """Return the first non-empty env var from *names, with optional default."""
+    for name in names:
+        value = os.environ.get(name)
+        if value is not None and str(value).strip() != "":
+            return str(value).strip()
+
+    if default is not None and str(default).strip() != "":
+        return str(default).strip()
+
+    raise RuntimeError(f"Missing required env var: {'/'.join(names)}")
 
 
 def _split_csv(s: str) -> List[str]:
@@ -34,9 +40,9 @@ def _split_csv(s: str) -> List[str]:
 
 
 def _get_project_ids() -> List[int]:
-    """Accept both TESTRAIL_PROJECT_IDS (CSV) and legacy TESTRAIL_PROJECT_ID."""
-    ids_csv = os.environ.get("TESTRAIL_PROJECT_IDS", "").strip()
-    legacy_id = os.environ.get("TESTRAIL_PROJECT_ID", "").strip()
+    """Accept common project-id env names in both CSV and single-id forms."""
+    ids_csv = _env_any("TESTRAIL_PROJECT_IDS", "TESTRAIL_PROJECTS", default="")
+    legacy_id = _env_any("TESTRAIL_PROJECT_ID", "TESTRAIL_PROJECT", default="")
 
     if ids_csv:
         return [int(x) for x in _split_csv(ids_csv)]
@@ -44,7 +50,9 @@ def _get_project_ids() -> List[int]:
     if legacy_id:
         return [int(legacy_id)]
 
-    raise RuntimeError("Missing required env var: TESTRAIL_PROJECT_IDS/TESTRAIL_PROJECT_ID")
+    raise RuntimeError(
+        "Missing required env var: TESTRAIL_PROJECT_IDS/TESTRAIL_PROJECTS/TESTRAIL_PROJECT_ID/TESTRAIL_PROJECT"
+    )
 
 
 def _api_base(base_url: str) -> str:
@@ -335,14 +343,12 @@ def hello_http(request):
         # Make schema resilient for older tables.
         _ensure_testrail_schema()
 
-        base_url = _env("TESTRAIL_BASE_URL")
+        base_url = _env_any("TESTRAIL_BASE_URL", "TESTRAIL_URL")
 
         # Prefer TESTRAIL_EMAIL, but allow old deployments that only have TESTRAIL_USER.
-        email = os.environ.get("TESTRAIL_EMAIL", "").strip() or os.environ.get("TESTRAIL_USER", "").strip()
-        if not email:
-            raise RuntimeError("Missing required env var: TESTRAIL_EMAIL/TESTRAIL_USER")
+        email = _env_any("TESTRAIL_EMAIL", "TESTRAIL_USER", "TESTRAIL_USERNAME")
 
-        api_key = _env("TESTRAIL_API_KEY")
+        api_key = _env_any("TESTRAIL_API_KEY", "TESTRAIL_TOKEN", "TESTRAIL_API_TOKEN")
         project_ids = _get_project_ids()
 
         lookback_days = int(os.environ.get("TESTRAIL_LOOKBACK_DAYS", "30").strip() or "30")
