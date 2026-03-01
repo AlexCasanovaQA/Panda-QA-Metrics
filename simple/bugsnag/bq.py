@@ -24,6 +24,13 @@ def get_bq_dataset() -> str:
     return os.environ.get("BQ_DATASET", "qa_metrics_simple").strip()
 
 
+def get_bq_location() -> Optional[str]:
+    """BigQuery location (e.g. EU, US). Defaults to EU for qa_metrics_simple."""
+    v = os.environ.get("BQ_LOCATION", "EU")
+    v = str(v).strip() if v is not None else ""
+    return v or None
+
+
 def table_ref(table: str) -> str:
     project = get_bq_project()
     dataset = get_bq_dataset()
@@ -72,12 +79,12 @@ def run_query(
     job_config = bigquery.QueryJobConfig()
     if job_labels:
         job_config.labels = job_labels
-    job = client.query(sql, job_config=job_config)
+    job = client.query(sql, job_config=job_config, location=get_bq_location())
     job.result()  # wait
 
 
 def fetch_scalar(client: bigquery.Client, sql: str) -> Any:
-    rows = list(client.query(sql).result())
+    rows = list(client.query(sql, location=get_bq_location()).result())
     if not rows:
         return None
     return rows[0][0]
