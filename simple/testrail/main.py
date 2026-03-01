@@ -67,6 +67,17 @@ def _log_event(level: int, event: str, **fields: Any) -> None:
     logger.log(level, payload)
 
 
+def _extract_error_status_code(error: Exception) -> Optional[int]:
+    status_code = getattr(error, "status_code", None)
+    if status_code is None:
+        status_code = getattr(error, "code", None)
+
+    try:
+        return int(status_code) if status_code is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _env_any(*names: str, default: Optional[str] = None) -> str:
     """Return the first non-empty env var from *names, with optional default."""
     for name in names:
@@ -464,6 +475,17 @@ def hello_http(request):
     try:
         config = _validate_testrail_config()
 
+        _log_event(
+            logging.INFO,
+            "ingest_config_resolved",
+            source=source,
+            service=service,
+            phase="config",
+            bq_project=(os.environ.get("BQ_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or "").strip(),
+            bq_dataset=(os.environ.get("BQ_DATASET") or "qa_metrics_simple").strip(),
+            bq_location=(os.environ.get("BQ_LOCATION") or "EU").strip(),
+        )
+
         # Make schema resilient for older tables.
         current_phase = "config"
         _ensure_testrail_schema()
@@ -532,6 +554,16 @@ def hello_http(request):
             current_run_id = None
 
         current_phase = "kpis"
+        _log_event(
+            logging.INFO,
+            "ingest_config_resolved",
+            source=source,
+            service=service,
+            phase=current_phase,
+            bq_project=(os.environ.get("BQ_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or "").strip(),
+            bq_dataset=(os.environ.get("BQ_DATASET") or "qa_metrics_simple").strip(),
+            bq_location=(os.environ.get("BQ_LOCATION") or "EU").strip(),
+        )
         _compute_testrail_kpis(bvt_suite, lookback_days)
 
         return jsonify({"status": "ok", "inserted_rows": total_inserted})
@@ -570,14 +602,17 @@ def hello_http(request):
         http_status = 503 if e.status_code is None or e.status_code == 429 else 502
         return jsonify({"status": "error", "error": str(e)}), http_status
     except Exception as e:
+        error_status_code = _extract_error_status_code(e)
         _log_event(
             logging.ERROR,
             "ingest_error",
             source=source,
             service=service,
             exception_type=type(e).__name__,
+            error_message=str(e),
             phase=current_phase,
             project_id=current_project_id,
             run_id=current_run_id,
+            status_code=error_status_code,
         )
         return jsonify({"status": "error", "error": str(e)}), 500

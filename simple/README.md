@@ -26,6 +26,19 @@ If your dataset `qa_metrics_simple` is in **EU**, set (or keep) this env var in 
 If your dataset is in another region (for example `US`), set `BQ_LOCATION` accordingly.
 Without this, queries can fail with errors like: `Dataset ... was not found in location US`.
 
+Typical mismatch example:
+
+- Dataset physically located in `europe-west1`.
+- Service configured with `BQ_LOCATION=EU` or `BQ_LOCATION=US`.
+
+Recommended verification command:
+
+```bash
+bq show --format=prettyjson <PROJECT_ID>:qa_metrics_simple | jq -r '.location'
+```
+
+Use that exact location value for `BQ_LOCATION` in each service.
+
 ## Ingest services: required env var matrix
 
 > Focus: servicios en `/simple`.
