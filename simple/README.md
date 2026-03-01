@@ -16,3 +16,13 @@ Además, la búsqueda en GameBench separa filtros por `package` y `environment` 
 
 - Paquetes con `.internal.` (o sufijo `.internal`) => `environment=dev`
 - Resto => `environment=prod`
+
+
+## BigQuery location (important)
+
+If your dataset `qa_metrics_simple` is in **EU**, set (or keep) this env var in each simple service:
+
+- `BQ_LOCATION=EU`
+
+If your dataset is in another region (for example `US`), set `BQ_LOCATION` accordingly.
+Without this, queries can fail with errors like: `Dataset ... was not found in location US`.
