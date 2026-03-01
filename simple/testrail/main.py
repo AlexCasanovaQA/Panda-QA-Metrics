@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -21,9 +22,49 @@ STATUS_ID_TO_NAME = {
 
 EXECUTED_STATUS_IDS = (1, 2, 4, 5)
 
+logger = logging.getLogger(__name__)
+
 
 class ConfigError(ValueError):
     """Raised when required service configuration is missing/invalid."""
+
+
+class TestRailAuthError(RuntimeError):
+    """Raised when TestRail API rejects credentials/permissions."""
+
+    def __init__(self, message: str, path: str, status_code: int, body_snippet: str) -> None:
+        super().__init__(message)
+        self.path = path
+        self.status_code = status_code
+        self.body_snippet = body_snippet
+
+
+class TestRailUpstreamError(RuntimeError):
+    """Raised when TestRail API fails due to upstream/transient issues."""
+
+    def __init__(
+        self,
+        message: str,
+        path: str,
+        status_code: Optional[int] = None,
+        body_snippet: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.path = path
+        self.status_code = status_code
+        self.body_snippet = body_snippet
+
+
+def _sanitize_body(body: str, max_len: int = 300) -> str:
+    clean = " ".join((body or "").split())
+    if len(clean) > max_len:
+        return clean[:max_len] + "..."
+    return clean
+
+
+def _log_event(level: int, event: str, **fields: Any) -> None:
+    payload = {"event": event, **fields}
+    logger.log(level, payload)
 
 
 def _env_any(*names: str, default: Optional[str] = None) -> str:
@@ -96,10 +137,46 @@ class TestRailClient:
 
     def get_json(self, path: str) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
-        resp = requests.get(url, auth=self.auth, timeout=60)
+        try:
+            resp = requests.get(url, auth=self.auth, timeout=60)
+        except requests.RequestException as e:
+            raise TestRailUpstreamError(
+                f"TestRail API request failed for path={path}: {type(e).__name__}: {e}",
+                path=path,
+            ) from e
+
         if not resp.ok:
-            raise RuntimeError(f"TestRail API request to {path} failed: {resp.status_code} {resp.text}")
-        return resp.json()
+            body_snippet = _sanitize_body(resp.text)
+            if resp.status_code in (401, 403):
+                raise TestRailAuthError(
+                    (
+                        "TestRail API authentication/authorization failed "
+                        f"for path={path} status_code={resp.status_code} body={body_snippet}"
+                    ),
+                    path=path,
+                    status_code=resp.status_code,
+                    body_snippet=body_snippet,
+                )
+
+            raise TestRailUpstreamError(
+                (
+                    "TestRail API error "
+                    f"for path={path} status_code={resp.status_code} body={body_snippet}"
+                ),
+                path=path,
+                status_code=resp.status_code,
+                body_snippet=body_snippet,
+            )
+
+        try:
+            return resp.json()
+        except ValueError as e:
+            raise TestRailUpstreamError(
+                f"Invalid JSON from TestRail API path={path} status_code={resp.status_code}",
+                path=path,
+                status_code=resp.status_code,
+                body_snippet=_sanitize_body(resp.text),
+            ) from e
 
     def get_suites(self, project_id: int) -> Dict[int, str]:
         data = self.get_json(f"get_suites/{project_id}")
@@ -378,10 +455,19 @@ def hello_http(request):
     if request.method not in ("POST", "GET"):
         return ("Method not allowed", 405)
 
+    source = "testrail/main.py"
+    service = (os.environ.get("K_SERVICE") or "unknown").strip() or "unknown"
+    _log_event(logging.INFO, "ingest_start", source=source, service=service, method=request.method)
+
+    current_phase = "config"
+    current_project_id: Optional[int] = None
+    current_run_id: Optional[int] = None
+
     try:
         config = _validate_testrail_config()
 
         # Make schema resilient for older tables.
+        current_phase = "config"
         _ensure_testrail_schema()
 
         base_url = config["base_url"]
@@ -403,6 +489,8 @@ def hello_http(request):
         total_inserted = 0
 
         for pid in project_ids:
+            current_phase = "api_testrail"
+            current_project_id = pid
             suites = tr.get_suites(pid)
             since_ts = _get_last_created_on(client, pid, default_since)
 
@@ -412,6 +500,7 @@ def hello_http(request):
             batch: List[Dict[str, Any]] = []
 
             for run in runs:
+                current_run_id = int(run["id"]) if run.get("id") is not None else None
                 suite_id = run.get("suite_id")
                 suite_name = suites.get(int(suite_id)) if suite_id is not None else None
 
@@ -427,20 +516,70 @@ def hello_http(request):
                         pass
 
                 if len(batch) >= 500:
+                    current_phase = "bq_write"
                     total_inserted += insert_rows(client, "testrail_results", batch)
                     batch = []
+                    current_phase = "api_testrail"
 
             if batch:
+                current_phase = "bq_write"
                 total_inserted += insert_rows(client, "testrail_results", batch)
+                current_phase = "api_testrail"
 
             if max_seen_created_on > since_ts:
+                current_phase = "bq_write"
                 _set_last_created_on(client, pid, max_seen_created_on)
+                current_phase = "api_testrail"
 
+            current_run_id = None
+
+        current_phase = "kpis"
         _compute_testrail_kpis(bvt_suite, lookback_days)
 
         return jsonify({"status": "ok", "inserted_rows": total_inserted})
 
     except ConfigError as e:
         return jsonify({"status": "error", "error": str(e)}), 400
+    except TestRailAuthError as e:
+        _log_event(
+            logging.ERROR,
+            "ingest_error",
+            source=source,
+            service=service,
+            exception_type=type(e).__name__,
+            phase=current_phase,
+            project_id=current_project_id,
+            run_id=current_run_id,
+            path=e.path,
+            status_code=e.status_code,
+            body=e.body_snippet,
+        )
+        return jsonify({"status": "error", "error": str(e)}), e.status_code
+    except TestRailUpstreamError as e:
+        _log_event(
+            logging.ERROR,
+            "ingest_error",
+            source=source,
+            service=service,
+            exception_type=type(e).__name__,
+            phase=current_phase,
+            project_id=current_project_id,
+            run_id=current_run_id,
+            path=e.path,
+            status_code=e.status_code,
+            body=e.body_snippet,
+        )
+        http_status = 503 if e.status_code is None or e.status_code == 429 else 502
+        return jsonify({"status": "error", "error": str(e)}), http_status
     except Exception as e:
+        _log_event(
+            logging.ERROR,
+            "ingest_error",
+            source=source,
+            service=service,
+            exception_type=type(e).__name__,
+            phase=current_phase,
+            project_id=current_project_id,
+            run_id=current_run_id,
+        )
         return jsonify({"status": "error", "error": str(e)}), 500

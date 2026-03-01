@@ -76,6 +76,31 @@ for SVC in bugsnag-ingest-function jira-ingest-function testrail-ingest-function
     --format="value(spec.template.spec.containers[0].args)"
 done
 ```
+Si hay drift de nombres, mantener aliases en código y normalizar despliegues. Ejemplo típico ya cubierto: `JIRA_SEVERITY_FIELD` vs `JIRA_SEVERITY_FIELD_ID`.
+## Flujo único de deploy en `/simple` (4 servicios)
+
+Comando oficial:
+
+```bash
+gcloud builds submit --config simple/cloudbuild-simple.yaml .
+```
+
+Naming oficial de servicios Cloud Run (1 imagen por servicio):
+
+- `bugsnag-ingest-function`
+- `jira-ingest-function`
+- `testrail-ingest-function`
+- `gamebench-ingest-function`
+
+Validaciones obligatorias del pipeline (`simple/cloudbuild-simple.yaml`):
+
+- Build por servicio usando **solo** `simple/Dockerfile` + `--build-arg SIMPLE_FUNCTION=<service-name>`.
+- Tag inmutable por imagen: `:$SHORT_SHA` (sin promover `latest` en este flujo).
+- Deploy de cada servicio con **su propia imagen** (`gcloud run deploy ... --image=<service>:$SHORT_SHA`).
+- Verificación post-deploy por servicio:
+  - `spec.template.spec.containers[0].args` contiene `<source>/main.py`, o
+  - logs de arranque contienen `Using source: <source>/main.py`.
+- Guardrail anti-mix de sources: el deploy falla si logs recientes contienen referencias a otro source (por ejemplo `BUGSNAG_BASE_URL` fuera de Bugsnag, `/app/main.py` genérico, o `<otro-servicio>/main.py`).
 
 Validar que cada servicio incluya su `--source` correcto:
 - bugsnag: `--source=bugsnag/main.py`
