@@ -122,6 +122,42 @@ def _f(v: Any) -> Optional[float]:
     except Exception:
         return None
 
+def _s(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    if isinstance(v, str):
+        value = v.strip()
+        return value or None
+    if isinstance(v, (int, float, bool)):
+        return str(v)
+    return None
+
+def _user_email(detail: Dict[str, Any]) -> Optional[str]:
+    user = _get(detail, "user")
+    if isinstance(user, dict):
+        return _s(user.get("email") or user.get("username") or user.get("name") or user.get("id"))
+    return _s(user) or _s(_get(detail, "account"))
+
+def _device_model(detail: Dict[str, Any]) -> Optional[str]:
+    direct = _s(_get(detail, "deviceModel") or _get(detail, "device_model"))
+    if direct:
+        return direct
+
+    device = _get(detail, "device")
+    if isinstance(device, dict):
+        return _s(device.get("model") or device.get("name") or device.get("deviceModel"))
+    return _s(device)
+
+def _device_manufacturer(detail: Dict[str, Any]) -> Optional[str]:
+    direct = _s(_get(detail, "manufacturer") or _get(detail, "deviceManufacturer") or _get(detail, "device_manufacturer"))
+    if direct:
+        return direct
+
+    device = _get(detail, "device")
+    if isinstance(device, dict):
+        return _s(device.get("manufacturer") or device.get("brand") or device.get("vendor"))
+    return None
+
 def _environment(app_package: Optional[str]) -> str:
     if not app_package:
         return "unknown"
@@ -266,7 +302,7 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
             detail = get_session(str(sid))
             fetched += 1
 
-            app_pkg = _get(detail, "app") or _get(detail, "appPackage") or _get(detail, "app_package") or _get(s, "app")
+            app_pkg = _s(_get(detail, "appPackage") or _get(detail, "app_package") or _get(detail, "app") or _get(s, "app"))
             plat = _normalize_platform_source(_get(detail, "platform") or _get(detail, "os") or _get(detail, "device", "platform"))
             if not _platform_matches(target_platform, plat):
                 rows_skipped_platform += 1
@@ -281,12 +317,12 @@ def ingest(days: int, platform: Optional[str], company_id: str, collection_id: s
                 "environment": _environment(app_pkg),
                 "platform": (str(plat).lower() if plat else None),
                 "app_package": app_pkg,
-                "app_version": _get(detail, "appVersion") or _get(detail, "app_version"),
-                "user_email": _get(detail, "user") or _get(detail, "account"),
-                "device_model": _get(detail, "device") or _get(detail, "deviceModel") or _get(detail, "device_model"),
-                "device_manufacturer": _get(detail, "manufacturer") or _get(detail, "deviceManufacturer") or _get(detail, "device_manufacturer"),
-                "os_version": _get(detail, "osVersion") or _get(detail, "os_version"),
-                "gpu_model": _get(detail, "gpuModel") or _get(detail, "gpu_model"),
+                "app_version": _s(_get(detail, "appVersion") or _get(detail, "app_version")),
+                "user_email": _user_email(detail),
+                "device_model": _device_model(detail),
+                "device_manufacturer": _device_manufacturer(detail),
+                "os_version": _s(_get(detail, "osVersion") or _get(detail, "os_version")),
+                "gpu_model": _s(_get(detail, "gpuModel") or _get(detail, "gpu_model")),
                 "seconds_played": _f(_get(detail, "secondsPlayed") or _get(detail, "seconds_played")),
                 "median_fps": _f(_get(detail, "medianFps") or _get(detail, "median_fps") or _get(detail, "fps", "median") or _get(detail, "fpsMedian")),
                 "fps_1p_low": _f(_get(detail, "fps1pLow") or _get(detail, "fps_1p_low")),
