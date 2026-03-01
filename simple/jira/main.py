@@ -38,6 +38,14 @@ from bq import get_client, insert_rows, run_query, table_ref
 from time_utils import jira_to_rfc3339, to_rfc3339, utc_now
 
 
+class JiraAPIError(RuntimeError):
+    """Raised when Jira API responds with a non-success status."""
+
+    def __init__(self, status_code: int, response_text: str):
+        super().__init__(f"Jira API request failed: {status_code} {response_text}")
+        self.status_code = status_code
+
+
 # -----------------------------
 # Helpers
 # -----------------------------
@@ -130,7 +138,7 @@ def _search_issues(
 
         resp = requests.get(url, headers=headers, params=params, timeout=timeout)
         if not resp.ok:
-            raise RuntimeError(f"Jira API request failed: {resp.status_code} {resp.text}")
+            raise JiraAPIError(resp.status_code, resp.text)
 
         data = resp.json() or {}
         issues = data.get("issues", []) or []
@@ -745,5 +753,10 @@ def hello_http(request):
         return jsonify({"status": "error", "error": f"Missing required env var: {e}"}), 400
     except ValueError as e:
         return jsonify({"status": "error", "error": str(e)}), 400
+    except JiraAPIError as e:
+        # Jira 4xx means our request/config is invalid; treat as client/config error.
+        # Jira 5xx is an upstream outage, so expose as bad gateway.
+        status_code = 400 if 400 <= e.status_code < 500 else 502
+        return jsonify({"status": "error", "error": str(e)}), status_code
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
