@@ -26,3 +26,25 @@ If your dataset `qa_metrics_simple` is in **EU**, set (or keep) this env var in 
 
 If your dataset is in another region (for example `US`), set `BQ_LOCATION` accordingly.
 Without this, queries can fail with errors like: `Dataset ... was not found in location US`.
+
+## Ingest services: required env var matrix
+
+> Focus: servicios en `/simple`.
+
+| Servicio | Env vars requeridas (alguna alternativa por grupo) | Env vars opcionales |
+|---|---|---|
+| `simple/jira/main.py` | `JIRA_SITE` \| `JIRA_BASE_URL`; `JIRA_USER` \| `JIRA_EMAIL`; `JIRA_API_TOKEN`; `JIRA_PROJECT_KEYS` \| `JIRA_PROJECT_KEYS_CSV` \| `JIRA_PROJECT_KEY` | `JIRA_SEVERITY_FIELD_ID` \| `JIRA_SEVERITY_FIELD` (se soportan ambos nombres), `JIRA_POD_FIELD`, `JIRA_LOOKBACK_DAYS`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
+| `simple/testrail/main.py` | `TESTRAIL_BASE_URL` \| `TESTRAIL_URL`; `TESTRAIL_EMAIL` \| `TESTRAIL_USER` \| `TESTRAIL_USERNAME`; `TESTRAIL_API_KEY` \| `TESTRAIL_TOKEN` \| `TESTRAIL_API_TOKEN`; `TESTRAIL_PROJECT_IDS` \| `TESTRAIL_PROJECTS` \| `TESTRAIL_PROJECT_ID` \| `TESTRAIL_PROJECT` | `TESTRAIL_LOOKBACK_DAYS`, `TESTRAIL_BVT_SUITE_NAME`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
+| `simple/bugsnag/main.py` | `BUGSNAG_BASE_URL`; `BUGSNAG_TOKEN`; `BUGSNAG_PROJECT_IDS` | `BUGSNAG_MAX_RUNTIME_S`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
+
+### Verificación en Cloud Run (recomendada en cada deploy)
+
+Comparar la matriz anterior contra la configuración real de cada servicio:
+
+```bash
+gcloud run services describe <service-name> \
+  --region <region> \
+  --format yaml(spec.template.spec.containers)
+```
+
+Si hay drift de nombres, mantener aliases en código y normalizar despliegues. Ejemplo típico ya cubierto: `JIRA_SEVERITY_FIELD` vs `JIRA_SEVERITY_FIELD_ID`.
