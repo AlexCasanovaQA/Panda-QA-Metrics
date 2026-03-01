@@ -48,3 +48,21 @@ gcloud run services describe <service-name> \
 ```
 
 Si hay drift de nombres, mantener aliases en código y normalizar despliegues. Ejemplo típico ya cubierto: `JIRA_SEVERITY_FIELD` vs `JIRA_SEVERITY_FIELD_ID`.
+## Cloud Build (Jira + TestRail) sin `--source`
+
+Para repos con múltiples entrypoints HTTP, usa imágenes dedicadas por servicio y despliegue con `--image`.
+
+Este repo incluye: `simple/cloudbuild-jira-testrail.yaml`.
+
+Qué hace:
+- Construye imagen Jira con `--build-arg SOURCE_FILE=ingest-jira.py`.
+- Construye imagen TestRail con `--build-arg SOURCE_FILE=ingest-testrail.py`.
+- Despliega cada servicio con su imagen propia (`gcloud run deploy ... --image=...`).
+- Fuerza `functions-framework --source` correcto por servicio en Cloud Run.
+- Valida con POST autenticado y falla si en logs recientes aparece `/app/main.py` o `BUGSNAG_BASE_URL`.
+
+Ejemplo de ejecución:
+
+```bash
+gcloud builds submit --config simple/cloudbuild-jira-testrail.yaml .
+```
