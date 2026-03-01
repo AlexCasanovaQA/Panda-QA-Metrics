@@ -31,9 +31,16 @@ def _request_with_backoff(
     timeout: int = 20,
     max_retries: int = 5,
     max_sleep_s: int = 15,
+    deadline_epoch: float | None = None,
 ) -> requests.Response:
     backoff = 2
     for _ in range(max_retries):
+        if deadline_epoch is not None:
+            remaining_s = int(deadline_epoch - time.time())
+            if remaining_s <= 1:
+                raise TimeoutError("Deadline reached before BugSnag request")
+            timeout = max(1, min(timeout, remaining_s - 1))
+
         resp = requests.request(method=method, url=url, headers=headers, params=params, timeout=timeout)
         if resp.status_code != 429:
             return resp
@@ -45,7 +52,15 @@ def _request_with_backoff(
         if sleep_s is None:
             sleep_s = backoff
 
-        time.sleep(min(sleep_s, max_sleep_s))
+        sleep_budget = min(sleep_s, max_sleep_s)
+        if deadline_epoch is not None:
+            remaining_s = int(deadline_epoch - time.time())
+            if remaining_s <= 1:
+                raise TimeoutError("Deadline reached during BugSnag backoff")
+            sleep_budget = min(sleep_budget, max(0, remaining_s - 1))
+
+        if sleep_budget > 0:
+            time.sleep(sleep_budget)
         backoff = min(backoff * 2, max_sleep_s)
 
     return resp
@@ -74,7 +89,18 @@ def _list_errors(
             break
 
         params = {"sort": "unsorted", "per_page": 100, "page": page}
-        resp = _request_with_backoff("GET", url, headers=headers, params=params, timeout=20)
+        try:
+            resp = _request_with_backoff(
+                "GET",
+                url,
+                headers=headers,
+                params=params,
+                timeout=20,
+                deadline_epoch=deadline_epoch,
+            )
+        except TimeoutError:
+            hit_deadline = True
+            break
 
         if resp.status_code == 429:
             was_rate_limited = True
@@ -247,9 +273,9 @@ def hello_http(request):
     token = _env("BUGSNAG_TOKEN")
     project_ids = _split_csv(_env("BUGSNAG_PROJECT_IDS"))
 
-    # Keep the function under the Cloud Run timeout (default 300s).
-    max_runtime_s = int(os.environ.get("BUGSNAG_MAX_RUNTIME_S", "250"))
-    deadline = time.time() + max(30, min(max_runtime_s, 290))
+    # Cloud Scheduler HTTP jobs often default to a 3-minute attempt deadline.
+    max_runtime_s = int(os.environ.get("BUGSNAG_MAX_RUNTIME_S", "165"))
+    deadline = time.time() + max(30, min(max_runtime_s, 170))
 
     ingest_ts = to_rfc3339(utc_now())
     client = get_client()
