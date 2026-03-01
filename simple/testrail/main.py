@@ -204,7 +204,7 @@ def _parse_result(
 
 
 def _ensure_testrail_schema() -> None:
-    """Make the service resilient if the table was created without created_on."""
+    """Make the service resilient if the table was created with an older schema."""
     project = (os.environ.get("BQ_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or "").strip()
     dataset = (os.environ.get("BQ_DATASET") or "qa_metrics_simple").strip()
     if not project:
@@ -214,7 +214,8 @@ def _ensure_testrail_schema() -> None:
     client = get_client()
     sql = f"""
 DECLARE tbl_exists BOOL;
-DECLARE col_exists BOOL;
+DECLARE created_on_exists BOOL;
+DECLARE result_id_exists BOOL;
 
 SET tbl_exists = (
   SELECT COUNT(1) > 0
@@ -223,17 +224,28 @@ SET tbl_exists = (
 );
 
 IF tbl_exists THEN
-  SET col_exists = (
+  SET created_on_exists = (
     SELECT COUNT(1) > 0
     FROM `{project}.{dataset}.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name = 'testrail_results' AND column_name = 'created_on'
   );
 
-  IF NOT col_exists THEN
+  IF NOT created_on_exists THEN
     EXECUTE IMMEDIATE 'ALTER TABLE `{project}.{dataset}.testrail_results` ADD COLUMN created_on TIMESTAMP';
   END IF;
 
+  SET result_id_exists = (
+    SELECT COUNT(1) > 0
+    FROM `{project}.{dataset}.INFORMATION_SCHEMA.COLUMNS`
+    WHERE table_name = 'testrail_results' AND column_name = 'result_id'
+  );
+
+  IF NOT result_id_exists THEN
+    EXECUTE IMMEDIATE 'ALTER TABLE `{project}.{dataset}.testrail_results` ADD COLUMN result_id INT64';
+  END IF;
+
   EXECUTE IMMEDIATE 'UPDATE `{project}.{dataset}.testrail_results` SET created_on = ingest_timestamp WHERE created_on IS NULL AND ingest_timestamp IS NOT NULL';
+  EXECUTE IMMEDIATE 'UPDATE `{project}.{dataset}.testrail_results` SET result_id = test_id WHERE result_id IS NULL AND test_id IS NOT NULL';
 END IF;
 """
     run_query(client, sql, job_labels={"pipeline": "qa-metrics", "source": "testrail", "step": "schema"})
