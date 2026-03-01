@@ -274,8 +274,10 @@ def hello_http(request):
     project_ids = _split_csv(_env("BUGSNAG_PROJECT_IDS"))
 
     # Cloud Scheduler HTTP jobs often default to a 3-minute attempt deadline.
-    max_runtime_s = int(os.environ.get("BUGSNAG_MAX_RUNTIME_S", "165"))
-    deadline = time.time() + max(30, min(max_runtime_s, 170))
+    # Keep a safety buffer so the function can serialize and return before
+    # Scheduler marks the attempt as DEADLINE_EXCEEDED.
+    max_runtime_s = int(os.environ.get("BUGSNAG_MAX_RUNTIME_S", "150"))
+    deadline = time.time() + max(30, min(max_runtime_s, 160))
 
     ingest_ts = to_rfc3339(utc_now())
     client = get_client()
@@ -308,8 +310,10 @@ def hello_http(request):
         except Exception as e:
             failed_projects.append({"project_id": str(project_id), "error": str(e)})
 
-    if total_inserted > 0:
+    kpi_computed = False
+    if total_inserted > 0 and time.time() < deadline - 10:
         _compute_bugsnag_kpis()
+        kpi_computed = True
 
     status = "ok" if not failed_projects else "partial"
 
@@ -317,6 +321,7 @@ def hello_http(request):
         {
             "status": status,
             "inserted_rows": total_inserted,
+            "kpi_computed": kpi_computed,
             "rate_limited_projects": rate_limited_projects,
             "deadline_projects": deadline_projects,
             "failed_projects": failed_projects,
