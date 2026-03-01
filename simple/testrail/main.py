@@ -321,8 +321,6 @@ IF tbl_exists THEN
     EXECUTE IMMEDIATE 'ALTER TABLE `{project}.{dataset}.testrail_results` ADD COLUMN result_id INT64';
   END IF;
 
-  EXECUTE IMMEDIATE 'UPDATE `{project}.{dataset}.testrail_results` SET created_on = ingest_timestamp WHERE created_on IS NULL AND ingest_timestamp IS NOT NULL';
-  EXECUTE IMMEDIATE 'UPDATE `{project}.{dataset}.testrail_results` SET result_id = test_id WHERE result_id IS NULL AND test_id IS NOT NULL';
 END IF;
 """
     run_query(client, sql, job_labels={"pipeline": "qa-metrics", "source": "testrail", "step": "schema"})
@@ -356,11 +354,11 @@ SELECT
   "TestRail"
 FROM (
   SELECT
-    DATE(created_on, "UTC") AS d,
-    COUNT(DISTINCT IF(status_id IN ({",".join(map(str, EXECUTED_STATUS_IDS))}), result_id, NULL)) AS executed_cnt
+    DATE(COALESCE(created_on, ingest_timestamp), "UTC") AS d,
+    COUNT(DISTINCT IF(status_id IN ({",".join(map(str, EXECUTED_STATUS_IDS))}), COALESCE(result_id, test_id), NULL)) AS executed_cnt
   FROM `{tr_table}`
-  WHERE created_on IS NOT NULL
-    AND DATE(created_on, "UTC") BETWEEN start7 AND today
+  WHERE COALESCE(created_on, ingest_timestamp) IS NOT NULL
+    AND DATE(COALESCE(created_on, ingest_timestamp), "UTC") BETWEEN start7 AND today
   GROUP BY d
 );
 
@@ -369,11 +367,11 @@ INSERT INTO `{kpi_table}`
   (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 WITH agg AS (
   SELECT
-    COUNT(DISTINCT IF(status_id = 1, result_id, NULL)) AS passed,
-    COUNT(DISTINCT IF(status_id IN ({",".join(map(str, EXECUTED_STATUS_IDS))}), result_id, NULL)) AS executed
+    COUNT(DISTINCT IF(status_id = 1, COALESCE(result_id, test_id), NULL)) AS passed,
+    COUNT(DISTINCT IF(status_id IN ({",".join(map(str, EXECUTED_STATUS_IDS))}), COALESCE(result_id, test_id), NULL)) AS executed
   FROM `{tr_table}`
-  WHERE created_on IS NOT NULL
-    AND DATE(created_on, "UTC") BETWEEN start7 AND today
+  WHERE COALESCE(created_on, ingest_timestamp) IS NOT NULL
+    AND DATE(COALESCE(created_on, ingest_timestamp), "UTC") BETWEEN start7 AND today
 )
 SELECT
   CURRENT_TIMESTAMP(),
@@ -397,11 +395,11 @@ WITH candidates AS (
     run_id,
     ANY_VALUE(run_name) AS run_name,
     ANY_VALUE(suite_name) AS suite_name,
-    MAX(created_on) AS last_result_ts,
+    MAX(COALESCE(created_on, ingest_timestamp)) AS last_result_ts,
     LOGICAL_OR(LOWER(IFNULL(suite_name, "")) = LOWER("{suite_lit}")) AS is_exact_suite
   FROM `{tr_table}`
-  WHERE created_on IS NOT NULL
-    AND created_on >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {lookback_days} DAY)
+  WHERE COALESCE(created_on, ingest_timestamp) IS NOT NULL
+    AND COALESCE(created_on, ingest_timestamp) >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {lookback_days} DAY)
     AND (
       LOWER(IFNULL(suite_name, "")) = LOWER("{suite_lit}")
       OR LOWER(IFNULL(run_name, "")) LIKE "%bvt%"
@@ -424,8 +422,8 @@ latest_run AS (
 ),
 agg AS (
   SELECT
-    COUNT(DISTINCT IF(status_id = 1, result_id, NULL)) AS passed,
-    COUNT(DISTINCT IF(status_id IN ({",".join(map(str, EXECUTED_STATUS_IDS))}), result_id, NULL)) AS executed
+    COUNT(DISTINCT IF(status_id = 1, COALESCE(result_id, test_id), NULL)) AS passed,
+    COUNT(DISTINCT IF(status_id IN ({",".join(map(str, EXECUTED_STATUS_IDS))}), COALESCE(result_id, test_id), NULL)) AS executed
   FROM `{tr_table}`
   WHERE run_id = (SELECT run_id FROM latest_run)
 )
