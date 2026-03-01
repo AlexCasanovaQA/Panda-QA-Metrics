@@ -1,0 +1,130 @@
+substitutions:
+  _REGION: europe-west1
+  _REPOSITORY: qa-metrics
+  _JIRA_SERVICE: ingest-jira
+  _TESTRAIL_SERVICE: ingest-testrail
+
+steps:
+  # Build dedicated image for Jira ingest (entrypoint: ingest-jira.py)
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "--build-arg"
+      - "SOURCE_FILE=ingest-jira.py"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:latest"
+      - "."
+
+  # Build dedicated image for TestRail ingest (entrypoint: ingest-testrail.py)
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "--build-arg"
+      - "SOURCE_FILE=ingest-testrail.py"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:$SHORT_SHA"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:latest"
+      - "."
+
+  # Deploy Jira from its own image (never use --source for multi-entrypoint repos)
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "${_JIRA_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--command=sh"
+      - "--args=-c,functions-framework --target=hello_http --source=ingest-jira.py --port=${PORT}"
+
+  # Deploy TestRail from its own image (never use --source for multi-entrypoint repos)
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "${_TESTRAIL_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:$SHORT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--command=sh"
+      - "--args=-c,functions-framework --target=hello_http --source=ingest-testrail.py --port=${PORT}"
+
+  # Validate runtime command/args point to the correct --source on each service
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: /bin/bash
+    args:
+      - "-c"
+      - |
+        set -euo pipefail
+        jira_args="$(gcloud run services describe ${_JIRA_SERVICE} --region=${_REGION} --format='value(spec.template.spec.containers[0].args)')"
+        testrail_args="$(gcloud run services describe ${_TESTRAIL_SERVICE} --region=${_REGION} --format='value(spec.template.spec.containers[0].args)')"
+
+        echo "${_JIRA_SERVICE} args: ${jira_args}"
+        echo "${_TESTRAIL_SERVICE} args: ${testrail_args}"
+
+        echo "${jira_args}" | grep -F -- '--source=ingest-jira.py'
+        echo "${testrail_args}" | grep -F -- '--source=ingest-testrail.py'
+
+  # Re-test with authenticated POST and fail if forbidden references appear in recent logs
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: /bin/bash
+    args:
+      - "-c"
+      - |
+        set -euo pipefail
+
+        jira_url="$(gcloud run services describe ${_JIRA_SERVICE} --region=${_REGION} --format='value(status.url)')"
+        testrail_url="$(gcloud run services describe ${_TESTRAIL_SERVICE} --region=${_REGION} --format='value(status.url)')"
+        token="$(gcloud auth print-identity-token)"
+
+        curl -fsS -X POST \
+          -H "Authorization: Bearer ${token}" \
+          -H "Content-Type: application/json" \
+          -d '{"dry_run": true, "lookback_days": 1}' \
+          "${jira_url}" >/tmp/jira-post-response.json
+
+        curl -fsS -X POST \
+          -H "Authorization: Bearer ${token}" \
+          -H "Content-Type: application/json" \
+          -d '{"dry_run": true, "days": 1}' \
+          "${testrail_url}" >/tmp/testrail-post-response.json
+
+        echo "Jira POST response:" && cat /tmp/jira-post-response.json
+        echo "TestRail POST response:" && cat /tmp/testrail-post-response.json
+
+        since="$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"
+
+        jira_logs="$(gcloud logging read \
+          "resource.type=cloud_run_revision AND resource.labels.service_name=${_JIRA_SERVICE} AND timestamp>=\"${since}\"" \
+          --limit=200 --format='value(textPayload)')"
+
+        testrail_logs="$(gcloud logging read \
+          "resource.type=cloud_run_revision AND resource.labels.service_name=${_TESTRAIL_SERVICE} AND timestamp>=\"${since}\"" \
+          --limit=200 --format='value(textPayload)')"
+
+        if echo "${jira_logs}" | grep -E '/app/main.py|BUGSNAG_BASE_URL'; then
+          echo "Found forbidden reference in Jira logs" >&2
+          exit 1
+        fi
+
+        if echo "${testrail_logs}" | grep -E '/app/main.py|BUGSNAG_BASE_URL'; then
+          echo "Found forbidden reference in TestRail logs" >&2
+          exit 1
+        fi
+
+images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:latest"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:$SHORT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:latest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
