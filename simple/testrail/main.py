@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from flask import jsonify
+from google.api_core.exceptions import BadRequest, GoogleAPICallError, NotFound
 
 from bq import get_client, insert_rows, run_query, fetch_scalar, table_ref
 from time_utils import unix_to_utc_ts, utc_now
@@ -455,7 +456,19 @@ def hello_http(request):
 
     source = "testrail/main.py"
     service = (os.environ.get("K_SERVICE") or "unknown").strip() or "unknown"
-    _log_event(logging.INFO, "ingest_start", source=source, service=service, method=request.method)
+    bq_project = (os.environ.get("BQ_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or "").strip()
+    bq_dataset = (os.environ.get("BQ_DATASET") or "qa_metrics_simple").strip()
+    bq_location = (os.environ.get("BQ_LOCATION") or "EU").strip()
+    _log_event(
+        logging.INFO,
+        "ingest_start",
+        source=source,
+        service=service,
+        method=request.method,
+        bq_project=bq_project,
+        bq_dataset=bq_dataset,
+        bq_location=bq_location,
+    )
 
     current_phase = "config"
     current_project_id: Optional[int] = None
@@ -466,7 +479,21 @@ def hello_http(request):
 
         # Make schema resilient for older tables.
         current_phase = "config"
-        _ensure_testrail_schema()
+        try:
+            _ensure_testrail_schema()
+        except (GoogleAPICallError, BadRequest, NotFound) as e:
+            _log_event(
+                logging.WARNING,
+                "config_schema_warning",
+                phase="config_schema",
+                source=source,
+                service=service,
+                bq_project=bq_project,
+                bq_dataset=bq_dataset,
+                bq_location=bq_location,
+                exception_type=type(e).__name__,
+                error=str(e),
+            )
 
         base_url = config["base_url"]
         email = config["email"]
@@ -544,6 +571,9 @@ def hello_http(request):
             "ingest_error",
             source=source,
             service=service,
+            bq_project=bq_project,
+            bq_dataset=bq_dataset,
+            bq_location=bq_location,
             exception_type=type(e).__name__,
             phase=current_phase,
             project_id=current_project_id,
@@ -559,6 +589,9 @@ def hello_http(request):
             "ingest_error",
             source=source,
             service=service,
+            bq_project=bq_project,
+            bq_dataset=bq_dataset,
+            bq_location=bq_location,
             exception_type=type(e).__name__,
             phase=current_phase,
             project_id=current_project_id,
@@ -575,6 +608,9 @@ def hello_http(request):
             "ingest_error",
             source=source,
             service=service,
+            bq_project=bq_project,
+            bq_dataset=bq_dataset,
+            bq_location=bq_location,
             exception_type=type(e).__name__,
             phase=current_phase,
             project_id=current_project_id,
