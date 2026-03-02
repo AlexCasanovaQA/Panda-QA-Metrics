@@ -136,8 +136,8 @@ view: qa_executive_kpis {
     type: yesno
     sql: ${TABLE}.computed_at = (
       SELECT MAX(t.computed_at)
-      FROM ${TABLE} AS t
-      WHERE t.metric_id = ${TABLE}.metric_id
+      FROM ${TABLE} t
+      WHERE t.metric_id = ${metric_id}
     ) ;;
   }
 
