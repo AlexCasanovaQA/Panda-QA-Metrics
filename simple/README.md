@@ -150,6 +150,19 @@ textPayload:"BQ_DATASET_NOT_FOUND_ALERT"
 
 Para evitar drift, el pipeline oficial ahora es **solo** `cloudbuild.yaml` en la raíz del repositorio.
 
+Checklist previo (permisos mínimos y recursos)
+
+- [ ] `PROJECT_ID`, `_REGION` y `_REPOSITORY` definidos para el entorno correcto.
+- [ ] Existe el repositorio de Artifact Registry: `${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}`.
+- [ ] La service account de Cloud Build (`<PROJECT_NUMBER>@cloudbuild.gserviceaccount.com`, o SA custom si aplica) tiene permisos para deploy de Cloud Run:
+  - `run.services.create`
+  - `run.services.update`
+  - `run.services.get`
+  - `iam.serviceAccounts.actAs`
+- [ ] La misma identidad tiene permiso para descargar imágenes desde Artifact Registry:
+  - `artifactregistry.repositories.downloadArtifacts`
+- [ ] Si en algún entorno cambias a invocación pública (`--allow-unauthenticated`), valida además permiso para policy change (`run.services.setIamPolicy`).
+
 Comando oficial:
 
 ```bash
@@ -210,6 +223,14 @@ gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-p
 gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple_mirror,_BQ_LOCATION=US .
 ```
 
+### Opcional: separar deploy de imagen y policy de invocación
+
+Para reducir riesgo por entorno, considera mantener en pasos/commands distintos:
+
+1. `gcloud run deploy ... --no-allow-unauthenticated` (solo release de imagen/config).
+2. `gcloud run services add-iam-policy-binding ... --member=allUsers --role=roles/run.invoker` (solo cuando el entorno deba ser público).
+
+Así puedes cambiar política pública/privada sin tocar el flujo base de deploy.
 ### Troubleshooting rápido
 
 Si aparece `step exited with non-zero status: 1`, revisa en este orden:
