@@ -9,7 +9,7 @@ import requests
 from flask import jsonify
 from google.api_core.exceptions import BadRequest, GoogleAPICallError, NotFound
 
-from bq import get_client, insert_rows, run_query, fetch_scalar, table_ref
+from bq import get_bq_dataset, get_bq_location, get_bq_project, get_client, insert_rows, run_query, fetch_scalar, table_ref, validate_bq_env
 from time_utils import unix_to_utc_ts, utc_now
 
 
@@ -294,8 +294,8 @@ def _parse_result(
 
 def _ensure_testrail_schema() -> None:
     """Make the service resilient if the table was created with an older schema."""
-    project = (os.environ.get("BQ_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or "").strip()
-    dataset = (os.environ.get("BQ_DATASET") or "qa_metrics_simple").strip()
+    project = get_bq_project()
+    dataset = get_bq_dataset()
     if not project:
         # If project is missing we can't fix schema here.
         return
@@ -467,9 +467,10 @@ def hello_http(request):
 
     source = "testrail/main.py"
     service = (os.environ.get("K_SERVICE") or "unknown").strip() or "unknown"
-    bq_project = (os.environ.get("BQ_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or "").strip()
-    bq_dataset = (os.environ.get("BQ_DATASET") or "qa_metrics_simple").strip()
-    bq_location = (os.environ.get("BQ_LOCATION") or "EU").strip()
+    bq_values = validate_bq_env()
+    bq_project = bq_values["project"]
+    bq_dataset = bq_values["dataset"]
+    bq_location = bq_values["location"]
     _log_event(
         logging.INFO,
         "ingest_start",
@@ -494,9 +495,9 @@ def hello_http(request):
             source=source,
             service=service,
             phase="config",
-            bq_project=(os.environ.get("BQ_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or "").strip(),
-            bq_dataset=(os.environ.get("BQ_DATASET") or "qa_metrics_simple").strip(),
-            bq_location=(os.environ.get("BQ_LOCATION") or "EU").strip(),
+            bq_project=get_bq_project(),
+            bq_dataset=get_bq_dataset(),
+            bq_location=(get_bq_location() or ""),
         )
 
         # Make schema resilient for older tables.
@@ -587,9 +588,9 @@ def hello_http(request):
             source=source,
             service=service,
             phase=current_phase,
-            bq_project=(os.environ.get("BQ_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or "").strip(),
-            bq_dataset=(os.environ.get("BQ_DATASET") or "qa_metrics_simple").strip(),
-            bq_location=(os.environ.get("BQ_LOCATION") or "EU").strip(),
+            bq_project=get_bq_project(),
+            bq_dataset=get_bq_dataset(),
+            bq_location=(get_bq_location() or ""),
         )
         _compute_testrail_kpis(bvt_suite, lookback_days)
 
