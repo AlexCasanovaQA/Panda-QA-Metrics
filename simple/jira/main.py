@@ -20,6 +20,7 @@ Optional env vars:
 BigQuery dataset defaults:
 - BQ_PROJECT = GOOGLE_CLOUD_PROJECT
 - BQ_DATASET = qa_metrics_simple
+- BQ_LOCATION = (optional; auto-detected from dataset metadata when unset)
 
 Deploy settings:
 - Function target (entrypoint): hello_http
