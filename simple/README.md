@@ -146,6 +146,66 @@ textPayload:"BQ_DATASET_NOT_FOUND_ALERT"
 | `simple/testrail/main.py` | `TESTRAIL_BASE_URL` \| `TESTRAIL_URL`; `TESTRAIL_EMAIL` \| `TESTRAIL_USER` \| `TESTRAIL_USERNAME`; `TESTRAIL_API_KEY` \| `TESTRAIL_TOKEN` \| `TESTRAIL_API_TOKEN`; `TESTRAIL_PROJECT_IDS` \| `TESTRAIL_PROJECTS` \| `TESTRAIL_PROJECT_ID` \| `TESTRAIL_PROJECT` | `TESTRAIL_LOOKBACK_DAYS`, `TESTRAIL_BVT_SUITE_NAME`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_DATASET_FALLBACK`, `BQ_LOCATION` |
 | `simple/gamebench/main.py` | `GAMEBENCH_USER`; `GAMEBENCH_TOKEN` | `GAMEBENCH_COMPANY_ID`, `GAMEBENCH_COLLECTION_ID`, `GAMEBENCH_APP_PACKAGES`, `GAMEBENCH_LOOKBACK_DAYS`, `GAMEBENCH_AUTH_MODE`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_DATASET_FALLBACK`, `BQ_LOCATION` |
 
+## Troubleshooting: `401 Unauthorized` al invocar Cloud Run (`/simple`)
+
+Si al ejecutar `curl` contra un ingest de `/simple` recibes:
+
+```html
+401 Unauthorized
+Your client does not have permission to the requested URL /
+```
+
+el rechazo ocurre **antes** de entrar al código Python del servicio (IAM de Cloud Run), no por lógica interna de `simple/<ingest>/main.py`.
+
+### Causas más comunes
+
+1. Token de identidad emitido para audiencia incorrecta.
+2. Cuenta (usuario o service account) sin rol `roles/run.invoker` en el servicio.
+3. Token vencido o usando `access token` en lugar de `identity token`.
+
+### Comando recomendado (audience explícita)
+
+```bash
+SERVICE_URL="https://jira-ingest-function-147201244534.europe-west1.run.app"
+
+curl -i -X POST "$SERVICE_URL" \
+  -H "Authorization: Bearer $(gcloud auth print-identity-token --audiences=$SERVICE_URL)" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Developer"}'
+```
+
+> Nota: usa `Bearer` (capital B) por consistencia.
+
+### Validaciones rápidas
+
+```bash
+# 1) Verifica tu cuenta activa
+gcloud auth list
+
+# 2) Verifica IAM del servicio
+gcloud run services get-iam-policy jira-ingest-function \
+  --region=europe-west1 --format=json
+```
+
+Busca que el principal que invoca tenga `roles/run.invoker`.
+
+### Si necesitas habilitar invocación
+
+```bash
+PROJECT_ID="qa-panda-metrics"
+REGION="europe-west1"
+SERVICE="jira-ingest-function"
+MEMBER="user:alex_casanova@scopely.com"  # o serviceAccount:<sa>@<project>.iam.gserviceaccount.com
+
+gcloud run services add-iam-policy-binding "$SERVICE" \
+  --project "$PROJECT_ID" \
+  --region "$REGION" \
+  --member "$MEMBER" \
+  --role "roles/run.invoker"
+```
+
+Después de aplicar el binding, repite el `curl` con `--audiences=$SERVICE_URL`.
+
 ## Build pipeline único (raíz del repo)
 
 Para evitar drift, el pipeline oficial ahora es **solo** `cloudbuild.yaml` en la raíz del repositorio.
