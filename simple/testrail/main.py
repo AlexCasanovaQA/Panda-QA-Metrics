@@ -609,9 +609,32 @@ def hello_http(request):
         )
         _compute_testrail_kpis(bvt_suite, lookback_days)
 
+        _log_event(
+            logging.INFO,
+            "ingest_success",
+            source=source,
+            service=service,
+            phase=current_phase,
+            inserted_rows=total_inserted,
+            projects=len(project_ids),
+        )
         return jsonify({"status": "ok", "inserted_rows": total_inserted})
 
     except ConfigError as e:
+        _log_event(
+            logging.WARNING,
+            "ingest_error",
+            source=source,
+            service=service,
+            bq_project=bq_project,
+            bq_dataset=bq_dataset,
+            bq_location=bq_location,
+            exception_type=type(e).__name__,
+            error_message=str(e),
+            phase=current_phase,
+            project_id=current_project_id,
+            run_id=current_run_id,
+        )
         return jsonify({"status": "error", "error": str(e)}), 400
     except TestRailAuthError as e:
         _log_event(
