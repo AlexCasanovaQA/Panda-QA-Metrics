@@ -127,6 +127,36 @@ gcloud builds submit --config simple/cloudbuild-jira-testrail.yaml .
 gcloud builds submit --config simple/cloudbuild-all-simple.yaml .
 ```
 
+## Source of truth: mapping de BigQuery por entorno (Cloud Build substitutions)
+
+Los pipelines de `/simple` (`cloudbuild-simple.yaml`, `cloudbuild-jira-testrail.yaml`, `cloudbuild-all-simple.yaml`) publican los servicios con:
+
+- `--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}`
+
+Substitutions oficiales por entorno:
+
+| Entorno | `_BQ_PROJECT` | `_BQ_DATASET` | `_BQ_LOCATION` |
+|---|---|---|---|
+| `simple-dev` | `qa-panda-metrics-dev` | `qa_metrics_simple` | `EU` |
+| `simple-prod` | `qa-panda-metrics` | `qa_metrics_simple` | `EU` |
+| `simple-prod-fallback` | `qa-panda-metrics` | `qa_metrics_simple_mirror` | `EU` |
+
+Comandos de referencia (sin editar YAML):
+
+```bash
+# DEV
+gcloud builds submit --config simple/cloudbuild-simple.yaml \
+  --substitutions=_BQ_PROJECT=qa-panda-metrics-dev,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=EU .
+
+# PROD
+gcloud builds submit --config simple/cloudbuild-simple.yaml \
+  --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=EU .
+
+# PROD fallback (mirror)
+gcloud builds submit --config simple/cloudbuild-simple.yaml \
+  --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple_mirror,_BQ_LOCATION=EU .
+```
+
 ## Tabla operativa: servicio -> pipeline -> source esperado
 
 | Servicio Cloud Run | Pipeline recomendado | `--source` esperado |
