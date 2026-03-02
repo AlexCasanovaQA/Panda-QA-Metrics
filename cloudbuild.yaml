@@ -1,13 +1,28 @@
+substitutions:
+  _REGION: us-central1
+  _REPOSITORY: qa-metrics
+  _BUGSNAG_SERVICE: bugsnag-ingest-function
+  _JIRA_SERVICE: jira-ingest-function
+  _TESTRAIL_SERVICE: testrail-ingest-function
+  _GAMEBENCH_SERVICE: gamebench-ingest-function
+  _BQ_PROJECT: qa-panda-metrics-dev
+  _BQ_DATASET: qa_metrics_simple
+  _BQ_LOCATION: US
+
 steps:
   - name: "gcr.io/cloud-builders/docker"
     args:
       - "build"
-      - "--build-arg"
-      - "SOURCE_FILE=ingest-gamebench.py"
+      - "-f"
+      - "simple/Dockerfile"
       - "-t"
-      - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:$SHORT_SHA"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:$SHORT_SHA"
       - "-t"
-      - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:latest"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:$SHORT_SHA"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:$SHORT_SHA"
       - "."
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
@@ -15,27 +30,62 @@ steps:
     args:
       - "run"
       - "deploy"
-      - "ingest-gamebench"
-      - "--image=europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:$SHORT_SHA"
-      - "--region=europe-west1"
+      - "${_BUGSNAG_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:$SHORT_SHA"
+      - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
+      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
+      - "--command=sh"
+      - "--args=-c,functions-framework --target=hello_http --source=bugsnag/main.py --port=${PORT}"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: /bin/bash
+    entrypoint: gcloud
     args:
-      - "-c"
-      - |
-        set -euo pipefail
-        SERVICE_URL="$(gcloud run services describe ingest-gamebench --region=europe-west1 --format='value(status.url)')"
-        TOKEN="$(gcloud auth print-identity-token)"
-        RESPONSE="$(curl -fsS -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/healthz")"
-        echo "${RESPONSE}"
-        echo "${RESPONSE}" | python -c 'import json,sys; body=json.load(sys.stdin); assert body.get("ready") is True, body'
+      - "run"
+      - "deploy"
+      - "${_JIRA_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
+      - "--command=sh"
+      - "--args=-c,functions-framework --target=hello_http --source=jira/main.py --port=${PORT}"
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "${_TESTRAIL_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:$SHORT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
+      - "--command=sh"
+      - "--args=-c,functions-framework --target=hello_http --source=testrail/main.py --port=${PORT}"
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "${_GAMEBENCH_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:$SHORT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
+      - "--command=sh"
+      - "--args=-c,functions-framework --target=hello_http --source=gamebench/main.py --port=${PORT}"
 
 images:
-  - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:$SHORT_SHA"
-  - "europe-west1-docker.pkg.dev/$PROJECT_ID/qa-metrics/ingest-gamebench:latest"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:$SHORT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:$SHORT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:$SHORT_SHA"
 
 options:
   logging: CLOUD_LOGGING_ONLY
