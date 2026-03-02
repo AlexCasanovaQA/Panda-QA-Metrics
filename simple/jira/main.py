@@ -778,12 +778,16 @@ GROUP BY fixv;
 # -----------------------------
 
 def hello_http(request):
-    validate_bq_env()
+    source = "jira/main.py"
+    service = (os.environ.get("K_SERVICE") or "unknown").strip() or "unknown"
 
     LOGGER.info(
         "hello_http_start",
         extra={
             "json_fields": {
+                "source": source,
+                "service": service,
+                "method": request.method,
                 "bq_project": get_bq_project() or "<unset>",
                 "bq_dataset": get_bq_dataset() or "<unset>",
                 "bq_location": get_bq_location() or "<unset>",
@@ -792,8 +796,20 @@ def hello_http(request):
     )
 
     try:
+        validate_bq_env()
         inserted_snap, inserted_chg = ingest_jira()
         _compute_jira_kpis()
+        LOGGER.info(
+            "hello_http_success",
+            extra={
+                "json_fields": {
+                    "source": source,
+                    "service": service,
+                    "inserted_snapshot_rows": inserted_snap,
+                    "inserted_changelog_rows": inserted_chg,
+                }
+            },
+        )
         return jsonify(
             {
                 "status": "ok",
@@ -802,17 +818,25 @@ def hello_http(request):
             }
         )
     except ConfigError as e:
+        LOGGER.warning("hello_http_config_error", extra={"json_fields": {"source": source, "service": service, "error": str(e)}})
         return jsonify({"status": "error", "error": str(e)}), 400
     except KeyError as e:
+        LOGGER.warning("hello_http_missing_env", extra={"json_fields": {"source": source, "service": service, "error": str(e)}})
         return jsonify({"status": "error", "error": f"Missing required env var: {e}"}), 400
     except ValueError as e:
+        LOGGER.warning("hello_http_value_error", extra={"json_fields": {"source": source, "service": service, "error": str(e)}})
         return jsonify({"status": "error", "error": str(e)}), 400
     except JiraAPIError as e:
+        LOGGER.exception(
+            "hello_http_jira_api_error",
+            extra={"json_fields": {"source": source, "service": service, "status_code": e.status_code, "error": str(e)}},
+        )
         # Jira 4xx means our request/config is invalid; treat as client/config error.
         # Jira 5xx is an upstream outage, so expose as bad gateway.
         status_code = 400 if 400 <= e.status_code < 500 else 502
         return jsonify({"status": "error", "error": str(e)}), status_code
     except RuntimeError as e:
+        LOGGER.exception("hello_http_runtime_error", extra={"json_fields": {"source": source, "service": service, "error": str(e)}})
         if "Data not available right now" in str(e):
             return (
                 jsonify(
@@ -829,4 +853,5 @@ def hello_http(request):
             )
         return jsonify({"status": "error", "error": str(e)}), 500
     except Exception as e:
+        LOGGER.exception("hello_http_unhandled_error", extra={"json_fields": {"source": source, "service": service, "error": str(e)}})
         return jsonify({"status": "error", "error": str(e)}), 500

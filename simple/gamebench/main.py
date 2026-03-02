@@ -649,6 +649,13 @@ FROM latest_build;
 # -----------------------------
 
 def hello_http(request):
+    source = "gamebench/main.py"
+    service = (os.environ.get("K_SERVICE") or "unknown").strip() or "unknown"
+    logger.info(
+        "gamebench_ingest_start",
+        extra={"source": source, "service": service, "method": request.method},
+    )
+
     try:
         _validate_bq_env_compat()
         inserted, skipped_sessions = ingest_gamebench()
@@ -656,6 +663,7 @@ def hello_http(request):
             "GAMEBENCH_HTTP_RESULT inserted_session_rows=%s skipped_sessions=%s",
             inserted,
             skipped_sessions,
+            extra={"source": source, "service": service},
         )
         kpi_status = "ok"
         try:
@@ -664,14 +672,29 @@ def hello_http(request):
             kpi_status = f"error: {e}"
             logger.exception("GameBench KPI computation failed")
 
+        status = "ok" if kpi_status == "ok" else "partial_ok"
+        logger.info(
+            "gamebench_ingest_success",
+            extra={
+                "source": source,
+                "service": service,
+                "status": status,
+                "inserted_session_rows": inserted,
+                "skipped_sessions": skipped_sessions,
+                "kpi_status": kpi_status,
+            },
+        )
         return jsonify(
             {
-                "status": "ok" if kpi_status == "ok" else "partial_ok",
+                "status": status,
                 "inserted_session_rows": inserted,
                 "skipped_sessions": skipped_sessions,
                 "kpi_status": kpi_status,
             }
         )
     except Exception as e:
-        logger.exception("GameBench ingestion failed")
+        logger.exception(
+            "GameBench ingestion failed",
+            extra={"source": source, "service": service, "error": str(e)},
+        )
         return jsonify({"status": "error", "error": str(e)}), 500
