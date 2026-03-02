@@ -200,6 +200,27 @@ gcloud builds submit --config simple/cloudbuild-simple.yaml \
 | `testrail-ingest-function` | `simple/cloudbuild-jira-testrail.yaml` o `simple/cloudbuild-all-simple.yaml` | `testrail/main.py` |
 | `gamebench-ingest-function` | `simple/cloudbuild-all-simple.yaml` | `gamebench/main.py` |
 
+## Verificación post-deploy de env vars efectivas
+
+Después de desplegar `jira-ingest-function` desde `/simple`, confirma rápidamente los valores efectivos:
+
+```bash
+REGION=europe-west1
+gcloud run services describe jira-ingest-function --region "$REGION" \
+  --format="table(spec.template.spec.containers[0].env[].name,spec.template.spec.containers[0].env[].value)"
+```
+
+También puedes validar solo las 3 variables de BigQuery:
+
+```bash
+REGION=europe-west1
+gcloud run services describe jira-ingest-function --region "$REGION" \
+  --format="json(spec.template.spec.containers[0].env)" | jq -r '
+    .spec.template.spec.containers[0].env[]
+    | select(.name=="BQ_PROJECT" or .name=="BQ_DATASET" or .name=="BQ_LOCATION")
+    | "\(.name)=\(.value)"'
+```
+
 ## Verificación post-deploy (por servicio)
 
 Asume `REGION=europe-west1`.
