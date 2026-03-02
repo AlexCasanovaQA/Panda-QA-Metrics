@@ -221,6 +221,27 @@ class GameBenchClient:
         page_size: int = 50,
         max_pages: int = 10,
     ) -> List[Dict[str, Any]]:
+        return self._advanced_search_sessions_once(
+            packages=packages,
+            environment=environment,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            collection_id=collection_id,
+            page_size=page_size,
+            max_pages=max_pages,
+        )
+
+    def _advanced_search_sessions_once(
+        self,
+        *,
+        packages: List[str],
+        environment: Optional[str],
+        start_ms: int,
+        end_ms: int,
+        collection_id: Optional[str] = None,
+        page_size: int = 50,
+        max_pages: int = 10,
+    ) -> List[Dict[str, Any]]:
         url = f"{self.BASE_URL}/advanced-search/sessions"
         all_results: List[Dict[str, Any]] = []
 
@@ -421,6 +442,21 @@ def ingest_gamebench() -> Tuple[int, int]:
             page_size=50,
             max_pages=10,
         )
+        if not grouped_sessions and collection_id:
+            logger.warning(
+                "GAMEBENCH_SEARCH_EMPTY_WITH_COLLECTION environment=%s collection_id=%s; retrying without collection filter",
+                environment,
+                collection_id,
+            )
+            grouped_sessions = gb.advanced_search_sessions(
+                packages=grouped_packages,
+                environment=environment,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                collection_id=None,
+                page_size=50,
+                max_pages=10,
+            )
         logger.info(
             "GAMEBENCH_SEARCH_RESULT environment=%s returned_sessions=%s",
             environment,
