@@ -128,9 +128,9 @@ textPayload:"BQ_DATASET_NOT_FOUND_ALERT"
 
 | Entorno | Proyecto GCP (`BQ_PROJECT`) | Dataset (`BQ_DATASET`) | Región (`BQ_LOCATION`) | Uso |
 |---|---|---|---|---|
-| `simple-dev` | `qa-panda-metrics-dev` | `qa_metrics_simple` | `EU` (o ubicación real del dataset) | pruebas de integración |
-| `simple-prod` | `qa-panda-metrics` | `qa_metrics_simple` | `EU` (o ubicación real del dataset) | dashboard/explore principal |
-| `simple-prod-fallback` | `qa-panda-metrics` | `qa_metrics_simple_mirror` | `EU` (o ubicación real del dataset espejo) | continuidad operativa |
+| `simple-dev` | `qa-panda-metrics-dev` | `qa_metrics_simple` | `US` (o ubicación real del dataset) | pruebas de integración |
+| `simple-prod` | `qa-panda-metrics` | `qa_metrics_simple` | `US` (o ubicación real del dataset) | dashboard/explore principal |
+| `simple-prod-fallback` | `qa-panda-metrics` | `qa_metrics_simple_mirror` | `US` (o ubicación real del dataset espejo) | continuidad operativa |
 
 > Nota: el valor final de `BQ_LOCATION` debe coincidir exactamente con `bq show --format=prettyjson <PROJECT>:<DATASET> | jq -r '.location'`.
 
@@ -145,183 +145,40 @@ textPayload:"BQ_DATASET_NOT_FOUND_ALERT"
 | `simple/testrail/main.py` | `TESTRAIL_BASE_URL` \| `TESTRAIL_URL`; `TESTRAIL_EMAIL` \| `TESTRAIL_USER` \| `TESTRAIL_USERNAME`; `TESTRAIL_API_KEY` \| `TESTRAIL_TOKEN` \| `TESTRAIL_API_TOKEN`; `TESTRAIL_PROJECT_IDS` \| `TESTRAIL_PROJECTS` \| `TESTRAIL_PROJECT_ID` \| `TESTRAIL_PROJECT` | `TESTRAIL_LOOKBACK_DAYS`, `TESTRAIL_BVT_SUITE_NAME`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
 | `simple/gamebench/main.py` | `GAMEBENCH_USER`; `GAMEBENCH_TOKEN` | `GAMEBENCH_COMPANY_ID`, `GAMEBENCH_COLLECTION_ID`, `GAMEBENCH_APP_PACKAGES`, `GAMEBENCH_LOOKBACK_DAYS`, `GAMEBENCH_AUTH_MODE`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
 
-## Build pipelines existentes y cobertura
+## Build pipeline único (raíz del repo)
 
-Archivos de Cloud Build existentes en `/simple`:
-
-| Pipeline | Cobertura real |
-|---|---|
-| `simple/cloudbuild-jira-testrail.yaml` | Solo despliega `jira-ingest-function` (`jira/main.py`) y `testrail-ingest-function` (`testrail/main.py`). |
-| `simple/cloudbuild-all-simple.yaml` | Despliega los 4 servicios: `bugsnag`, `jira`, `testrail`, `gamebench`. |
-
-Ejecución:
-
-```bash
-gcloud builds submit --config simple/cloudbuild-jira-testrail.yaml .
-gcloud builds submit --config simple/cloudbuild-all-simple.yaml .
-```
-
-## Source of truth: mapping de BigQuery por entorno (Cloud Build substitutions)
-
-Los pipelines de `/simple` (`cloudbuild-simple.yaml`, `cloudbuild-jira-testrail.yaml`, `cloudbuild-all-simple.yaml`) publican los servicios con:
-
-- `--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}`
-
-Substitutions oficiales por entorno:
-
-| Entorno | `_BQ_PROJECT` | `_BQ_DATASET` | `_BQ_LOCATION` |
-|---|---|---|---|
-| `simple-dev` | `qa-panda-metrics-dev` | `qa_metrics_simple` | `EU` |
-| `simple-prod` | `qa-panda-metrics` | `qa_metrics_simple` | `EU` |
-| `simple-prod-fallback` | `qa-panda-metrics` | `qa_metrics_simple_mirror` | `EU` |
-
-Comandos de referencia (sin editar YAML):
-
-```bash
-# DEV
-gcloud builds submit --config simple/cloudbuild-simple.yaml \
-  --substitutions=_BQ_PROJECT=qa-panda-metrics-dev,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=EU .
-
-# PROD
-gcloud builds submit --config simple/cloudbuild-simple.yaml \
-  --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=EU .
-
-# PROD fallback (mirror)
-gcloud builds submit --config simple/cloudbuild-simple.yaml \
-  --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple_mirror,_BQ_LOCATION=EU .
-```
-
-## Tabla operativa: servicio -> pipeline -> source esperado
-
-| Servicio Cloud Run | Pipeline recomendado | `--source` esperado |
-|---|---|---|
-| `bugsnag-ingest-function` | `simple/cloudbuild-all-simple.yaml` | `bugsnag/main.py` |
-| `jira-ingest-function` | `simple/cloudbuild-jira-testrail.yaml` o `simple/cloudbuild-all-simple.yaml` | `jira/main.py` |
-| `testrail-ingest-function` | `simple/cloudbuild-jira-testrail.yaml` o `simple/cloudbuild-all-simple.yaml` | `testrail/main.py` |
-| `gamebench-ingest-function` | `simple/cloudbuild-all-simple.yaml` | `gamebench/main.py` |
-
-## Verificación post-deploy de env vars efectivas
-
-Después de desplegar `jira-ingest-function` desde `/simple`, confirma rápidamente los valores efectivos:
-
-```bash
-REGION=europe-west1
-gcloud run services describe jira-ingest-function --region "$REGION" \
-  --format="table(spec.template.spec.containers[0].env[].name,spec.template.spec.containers[0].env[].value)"
-```
-
-También puedes validar solo las 3 variables de BigQuery:
-
-```bash
-REGION=europe-west1
-gcloud run services describe jira-ingest-function --region "$REGION" \
-  --format="json(spec.template.spec.containers[0].env)" | jq -r '
-    .spec.template.spec.containers[0].env[]
-    | select(.name=="BQ_PROJECT" or .name=="BQ_DATASET" or .name=="BQ_LOCATION")
-    | "\(.name)=\(.value)"'
-```
-
-## Verificación post-deploy (por servicio)
-
-Asume `REGION=europe-west1`.
-
-### 1) Runtime args/source
-
-```bash
-REGION=europe-west1
-for SVC in bugsnag-ingest-function jira-ingest-function testrail-ingest-function gamebench-ingest-function; do
-  echo "=== $SVC runtime args ==="
-  gcloud run services describe "$SVC" --region "$REGION" \
-    --format="value(spec.template.spec.containers[0].args)"
-done
-```
-Si hay drift de nombres, mantener aliases en código y normalizar despliegues. Ejemplo típico ya cubierto: `JIRA_SEVERITY_FIELD` vs `JIRA_SEVERITY_FIELD_ID`.
-## Flujo único de deploy en `/simple` (4 servicios)
+Para evitar drift, el pipeline oficial ahora es **solo** `cloudbuild.yaml` en la raíz del repositorio.
 
 Comando oficial:
 
 ```bash
-gcloud builds submit --config simple/cloudbuild-simple.yaml .
+gcloud builds submit --config cloudbuild.yaml .
 ```
 
-> Nota operativa: cualquier cambio de `BQ_PROJECT`, `BQ_DATASET` o `BQ_LOCATION` (por región/dataset) debe hacerse mediante **Cloud Build substitutions** en los YAML de `/simple`, nunca manualmente desde la consola de Cloud Run.
+### Source of truth (substitutions por defecto)
 
-Naming oficial de servicios Cloud Run (1 imagen por servicio):
+El pipeline raíz publica los 4 servicios de `/simple` con:
 
-- `bugsnag-ingest-function`
-- `jira-ingest-function`
-- `testrail-ingest-function`
-- `gamebench-ingest-function`
+- `--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}`
+- Región runtime: `_REGION=us-central1`
+- BigQuery location: `_BQ_LOCATION=US`
 
-Validaciones obligatorias del pipeline (`simple/cloudbuild-simple.yaml`):
+Servicios + source esperado:
 
-- Build por servicio usando **solo** `simple/Dockerfile` + `--build-arg SIMPLE_FUNCTION=<service-name>`.
-- Tag inmutable por imagen: `:$SHORT_SHA` (sin promover `latest` en este flujo).
-- Deploy de cada servicio con **su propia imagen** (`gcloud run deploy ... --image=<service>:$SHORT_SHA`).
-- Verificación post-deploy por servicio:
-  - `spec.template.spec.containers[0].args` contiene `<source>/main.py`, o
-  - logs de arranque contienen `Using source: <source>/main.py`.
-- Guardrail anti-mix de sources: el deploy falla si logs recientes contienen referencias a otro source (por ejemplo `BUGSNAG_BASE_URL` fuera de Bugsnag, `/app/main.py` genérico, o `<otro-servicio>/main.py`).
+- `bugsnag-ingest-function` -> `bugsnag/main.py`
+- `jira-ingest-function` -> `jira/main.py`
+- `testrail-ingest-function` -> `testrail/main.py`
+- `gamebench-ingest-function` -> `gamebench/main.py`
 
-Validar que cada servicio incluya su `--source` correcto:
-- bugsnag: `--source=bugsnag/main.py`
-- jira: `--source=jira/main.py`
-- testrail: `--source=testrail/main.py`
-- gamebench: `--source=gamebench/main.py`
-
-### 2) Variable mínima requerida (presencia en env)
+### Override recomendado por entorno
 
 ```bash
-REGION=europe-west1
+# DEV
+gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-panda-metrics-dev,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=US .
 
-# bugsnag
-gcloud run services describe bugsnag-ingest-function --region "$REGION" \
-  --format="value(spec.template.spec.containers[0].env[].name)" | tr ';' '\n' | grep -E '^BUGSNAG_BASE_URL$'
+# PROD
+gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=US .
 
-# jira
-gcloud run services describe jira-ingest-function --region "$REGION" \
-  --format="value(spec.template.spec.containers[0].env[].name)" | tr ';' '\n' | grep -E '^(JIRA_SITE|JIRA_BASE_URL)$'
-
-# testrail
-gcloud run services describe testrail-ingest-function --region "$REGION" \
-  --format="value(spec.template.spec.containers[0].env[].name)" | tr ';' '\n' | grep -E '^(TESTRAIL_BASE_URL|TESTRAIL_URL)$'
-
-# gamebench
-gcloud run services describe gamebench-ingest-function --region "$REGION" \
-  --format="value(spec.template.spec.containers[0].env[].name)" | tr ';' '\n' | grep -E '^GAMEBENCH_USER$'
-```
-
-### 3) Smoke POST autenticado (uno por servicio)
-
-```bash
-REGION=europe-west1
-TOKEN="$(gcloud auth print-identity-token)"
-
-# bugsnag
-BUGSNAG_URL="$(gcloud run services describe bugsnag-ingest-function --region "$REGION" --format='value(status.url)')"
-curl -fsS -X POST "$BUGSNAG_URL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"dry_run": true, "hours": 1}'
-
-# jira
-JIRA_URL="$(gcloud run services describe jira-ingest-function --region "$REGION" --format='value(status.url)')"
-curl -fsS -X POST "$JIRA_URL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"dry_run": true, "lookback_days": 1}'
-
-# testrail
-TESTRAIL_URL="$(gcloud run services describe testrail-ingest-function --region "$REGION" --format='value(status.url)')"
-curl -fsS -X POST "$TESTRAIL_URL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"dry_run": true, "days": 1}'
-
-# gamebench
-GAMEBENCH_URL="$(gcloud run services describe gamebench-ingest-function --region "$REGION" --format='value(status.url)')"
-curl -fsS -X POST "$GAMEBENCH_URL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"dry_run": true, "lookback_days": 1}'
+# PROD fallback (mirror)
+gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple_mirror,_BQ_LOCATION=US .
 ```
