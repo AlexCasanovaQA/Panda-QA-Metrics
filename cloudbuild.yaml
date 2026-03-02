@@ -40,7 +40,7 @@ steps:
       - "--no-allow-unauthenticated"
       - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
       - "--command=sh"
-      - "--args=-c,functions-framework --target=hello_http --source=bugsnag/main.py --port=${PORT}"
+      - "--args=-c,functions-framework --target=hello_http --source=bugsnag/main.py --port=$$PORT"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
@@ -54,7 +54,7 @@ steps:
       - "--no-allow-unauthenticated"
       - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
       - "--command=sh"
-      - "--args=-c,functions-framework --target=hello_http --source=jira/main.py --port=${PORT}"
+      - "--args=-c,functions-framework --target=hello_http --source=jira/main.py --port=$$PORT"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
@@ -68,7 +68,7 @@ steps:
       - "--no-allow-unauthenticated"
       - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
       - "--command=sh"
-      - "--args=-c,functions-framework --target=hello_http --source=testrail/main.py --port=${PORT}"
+      - "--args=-c,functions-framework --target=hello_http --source=testrail/main.py --port=$$PORT"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
@@ -82,7 +82,7 @@ steps:
       - "--no-allow-unauthenticated"
       - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
       - "--command=sh"
-      - "--args=-c,functions-framework --target=hello_http --source=gamebench/main.py --port=${PORT}"
+      - "--args=-c,functions-framework --target=hello_http --source=gamebench/main.py --port=$$PORT"
 
 images:
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:$SHORT_SHA"
