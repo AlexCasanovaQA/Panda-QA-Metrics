@@ -86,7 +86,7 @@
     - name: intro
       type: text
       title_text: "QA Executive"
-      body_text: "Usa los filtros. La definición abreviada de cada KPI aparece desplegada debajo del título."
+      body_text: "Usa los filtros. La definición abreviada de cada KPI aparece desplegada debajo del título. Nota: los datos disponibles cubren como máximo los últimos 90 días hacia atrás."
       row: 0
       col: 0
       width: 24
