@@ -156,6 +156,32 @@ Comando oficial:
 gcloud builds submit --config cloudbuild.yaml .
 ```
 
+### Operativa recomendada para incidentes
+
+- **Ejecución normal** (flujo estándar del equipo):
+
+```bash
+gcloud builds submit --config cloudbuild.yaml .
+```
+
+- **Ejecución con salida detallada** (stream en terminal + referencia de build id):
+
+```bash
+gcloud builds submit --config cloudbuild.yaml --verbosity=debug .
+```
+
+Con el `BUILD_ID` (visible en la salida del submit), consulta logs del build:
+
+```bash
+gcloud builds log --stream <BUILD_ID>
+```
+
+También puedes inspeccionar metadatos/estado por id:
+
+```bash
+gcloud builds describe <BUILD_ID>
+```
+
 ### Source of truth (substitutions por defecto)
 
 El pipeline raíz publica los 4 servicios de `/simple` con:
@@ -182,4 +208,15 @@ gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-p
 
 # PROD fallback (mirror)
 gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple_mirror,_BQ_LOCATION=US .
+```
+
+### Troubleshooting rápido
+
+Si aparece `step exited with non-zero status: 1`, revisa en este orden:
+
+1. **Cloud Build step logs** del `BUILD_ID` para identificar el comando exacto que falló (`gcloud builds log --stream <BUILD_ID>`).
+2. **Cloud Run revision logs** del servicio desplegado para ver el error runtime/deploy asociado a la revisión:
+
+```bash
+gcloud run services logs read <SERVICE_NAME> --region=us-central1 --limit=200
 ```
