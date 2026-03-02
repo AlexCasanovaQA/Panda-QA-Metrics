@@ -86,7 +86,7 @@
     - name: intro
       type: text
       title_text: "QA Executive"
-      body_text: "Usa los filtros. La definición abreviada de cada KPI aparece desplegada debajo del título."
+      body_text: "Usa los filtros. La definición abreviada de cada KPI aparece desplegada debajo del título. Nota: los datos disponibles cubren como máximo los últimos 90 días hacia atrás."
       row: 0
       col: 0
       width: 24
@@ -334,7 +334,7 @@
       title: "EXEC-05 — Bugs entered by severity"
       note_text: "Distribución de bugs creados por severidad según el rango de fechas seleccionado."
       note_state: collapsed
-      type: looker_grid
+      type: looker_pie
       model: panda_qa_metrics
       explore: qa_executive_kpis
       fields: [qa_executive_kpis.metric_id, qa_executive_kpis.severity, qa_executive_kpis.kpi_value]
@@ -680,7 +680,6 @@
       sorts: [qa_executive_kpis.severity]
       limit: 500
       listen:
-        Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
         Feature: qa_executive_kpis.feature
         Release: qa_executive_kpis.release
@@ -706,7 +705,6 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
         Feature: qa_executive_kpis.feature
         Release: qa_executive_kpis.release

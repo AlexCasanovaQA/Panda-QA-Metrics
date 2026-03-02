@@ -83,9 +83,32 @@ view: qa_executive_kpis {
     ) ;;
   }
 
-  dimension: feature { type: string sql: JSON_EXTRACT_SCALAR(${dimensions_json}, '$.feature') ;; }
-  dimension: release { type: string sql: JSON_EXTRACT_SCALAR(${dimensions_json}, '$.release') ;; }
-  dimension: sprint  { type: string sql: JSON_EXTRACT_SCALAR(${dimensions_json}, '$.sprint') ;; }
+  dimension: feature {
+    type: string
+    sql: COALESCE(
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.component'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.components'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.feature')
+    ) ;;
+  }
+
+  dimension: release {
+    type: string
+    sql: COALESCE(
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.fixVersion'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.fix_version'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.fix_versions'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.release')
+    ) ;;
+  }
+
+  dimension: sprint  {
+    type: string
+    sql: COALESCE(
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.sprint'),
+      JSON_EXTRACT_SCALAR(${dimensions_json}, '$.Sprint')
+    ) ;;
+  }
   dimension: platform { type: string sql: JSON_EXTRACT_SCALAR(${dimensions_json}, '$.platform') ;; }
 
   dimension: severity {

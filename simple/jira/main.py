@@ -15,7 +15,7 @@ Required env vars / secrets:
 Optional env vars:
 - JIRA_SEVERITY_FIELD  default customfield_10074
 - JIRA_POD_FIELD       default customfield_10001
-- JIRA_LOOKBACK_DAYS   default 30
+- JIRA_LOOKBACK_DAYS   default 90
 
 BigQuery dataset defaults:
 - BQ_PROJECT = GOOGLE_CLOUD_PROJECT
@@ -286,7 +286,7 @@ def ingest_jira() -> Tuple[int, int]:
     api_token = config["api_token"]
 
     project_keys = _split_csv(config["project_keys"])
-    lookback_days = int(os.environ.get("JIRA_LOOKBACK_DAYS", "30"))
+    lookback_days = int(os.environ.get("JIRA_LOOKBACK_DAYS", "90"))
 
     severity_field = _first_non_empty("JIRA_SEVERITY_FIELD_ID", "JIRA_SEVERITY_FIELD") or "customfield_10074"
     pod_field = os.environ.get("JIRA_POD_FIELD", "customfield_10001").strip() or "customfield_10001"
@@ -664,14 +664,17 @@ SELECT
 FROM active_now
 GROUP BY status;
 
--- EXEC-11 Active bug count over time (last 180d)
+-- Build a continuous day-by-day trend using the latest snapshot available
+-- at or before each day (avoids sparse/one-point trends when snapshots are irregular).
 CREATE TEMP TABLE daily_latest AS
 SELECT
-  DATE(snapshot_timestamp, "UTC") AS d,
-  MAX(snapshot_timestamp) AS ts
-FROM `{snap_table}`
-WHERE DATE(snapshot_timestamp, "UTC") BETWEEN start180 AND today
-GROUP BY d;
+  d,
+  (
+    SELECT MAX(s2.snapshot_timestamp)
+    FROM `{snap_table}` s2
+    WHERE DATE(s2.snapshot_timestamp, "UTC") <= d
+  ) AS ts
+FROM UNNEST(GENERATE_DATE_ARRAY(start180, today)) AS d;
 
 INSERT INTO `{kpi_table}`
 SELECT
@@ -682,13 +685,14 @@ SELECT
   start180,
   today,
   '{{}}',
-  COUNTIF(s.issue_type = 'Bug' AND LOWER(COALESCE(s.status_category, '')) != 'done') * 1.0,
+  COALESCE(COUNTIF(s.issue_type = 'Bug' AND LOWER(COALESCE(s.status_category, '')) != 'done') * 1.0, 0.0),
   NULL,
   NULL,
   'Jira'
 FROM daily_latest dl
-JOIN `{snap_table}` s
+LEFT JOIN `{snap_table}` s
   ON s.snapshot_timestamp = dl.ts
+WHERE dl.ts IS NOT NULL
 GROUP BY metric_date;
 
 -- EXEC-12 Reopened over time (30d, UTC)
