@@ -1,6 +1,9 @@
 substitutions:
   _REGION: europe-west1
   _REPOSITORY: qa-metrics
+  _BQ_PROJECT: $PROJECT_ID
+  _BQ_DATASET: qa_metrics
+  _BQ_LOCATION: europe-west1
   _BUGSNAG_SERVICE: bugsnag-ingest-function
   _JIRA_SERVICE: jira-ingest-function
   _TESTRAIL_SERVICE: testrail-ingest-function
@@ -66,7 +69,7 @@ steps:
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
+      - "--update-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
@@ -79,7 +82,7 @@ steps:
       - "--platform=managed"
       - "--update-env-vars=BQ_PROJECT=$PROJECT_ID,BQ_DATASET=qa_metrics_simple,BQ_LOCATION=EU"
       - "--no-allow-unauthenticated"
-      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
+      - "--update-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
@@ -91,7 +94,7 @@ steps:
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
+      - "--update-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
@@ -103,7 +106,7 @@ steps:
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
+      - "--update-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
 
   # Validate service runtime config and startup logs resolve the expected source file.
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
@@ -142,6 +145,18 @@ steps:
               exit 1
             }
           fi
+
+          env_pairs="$(gcloud run services describe "${service}" --region="${_REGION}" --format='csv[no-heading](spec.template.spec.containers[0].env[].name,spec.template.spec.containers[0].env[].value)')"
+
+          for expected in \
+            "BQ_PROJECT,${_BQ_PROJECT}" \
+            "BQ_DATASET,${_BQ_DATASET}" \
+            "BQ_LOCATION,${_BQ_LOCATION}"; do
+            echo "${env_pairs}" | grep -F -- "${expected}" >/dev/null || {
+              echo "${service}: env vars missing or mismatch for ${expected}" >&2
+              exit 1
+            }
+          done
 
           # Post-deploy anti-mix validation: fail if service logs reference another source.
           case "${source}" in
