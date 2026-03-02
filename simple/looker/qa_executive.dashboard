@@ -275,11 +275,11 @@
       fields: [qa_executive_kpis.kpi_value_percent]
       filters:
         qa_executive_kpis.metric_id: "EXEC-16"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.dimensions_json: "{}"
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        As Of Date: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
       row: 7
       col: 12
@@ -294,11 +294,11 @@
       fields: [qa_executive_kpis.kpi_value_percent]
       filters:
         qa_executive_kpis.metric_id: "EXEC-17"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.dimensions_json: "{}"
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        As Of Date: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
       row: 7
       col: 18
@@ -658,11 +658,11 @@
       fields: [qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-21"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.dimensions_json: "{}"
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        As Of Date: qa_executive_kpis.metric_date
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
       row: 52
