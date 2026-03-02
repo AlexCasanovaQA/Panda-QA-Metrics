@@ -84,11 +84,16 @@ class CollectionFallbackTest(unittest.TestCase):
                                     "advanced_search_sessions",
                                     new=_search,
                                 ):
-                                    inserted, skipped = main.ingest_gamebench()
+                                    with self.assertLogs(main.logger, level="WARNING") as logs:
+                                        inserted, skipped = main.ingest_gamebench()
 
         self.assertEqual(inserted, 1)
         self.assertEqual(skipped, 0)
         self.assertEqual(calls, ["collection-123", None])
+        self.assertTrue(any("GAMEBENCH_COLLECTION_FILTER_MISS" in msg for msg in logs.output))
+        self.assertTrue(any("environment=dev" in msg for msg in logs.output))
+        self.assertTrue(any("collection_id=collection-123" in msg for msg in logs.output))
+        self.assertTrue(any("fallback_without_collection=True" in msg for msg in logs.output))
 
 
 if __name__ == "__main__":
