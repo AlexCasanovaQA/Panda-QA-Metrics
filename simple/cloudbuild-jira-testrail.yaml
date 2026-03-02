@@ -1,16 +1,13 @@
 substitutions:
   _REGION: europe-west1
   _REPOSITORY: qa-metrics
-  _BQ_PROJECT: $PROJECT_ID
-  _BQ_DATASET: qa_metrics
-  _BQ_LOCATION: europe-west1
+  _BQ_PROJECT: qa-panda-metrics-dev
+  _BQ_DATASET: qa_metrics_simple
+  _BQ_LOCATION: US
   _BUGSNAG_SERVICE: bugsnag-ingest-function
   _JIRA_SERVICE: jira-ingest-function
   _TESTRAIL_SERVICE: testrail-ingest-function
   _GAMEBENCH_SERVICE: gamebench-ingest-function
-  _BQ_PROJECT: qa-panda-metrics-dev
-  _BQ_DATASET: qa_metrics_simple
-  _BQ_LOCATION: EU
 
 steps:
   # Build one immutable image per service from the shared simple/Dockerfile

@@ -1,16 +1,13 @@
 substitutions:
   _REGION: europe-west1
   _REPOSITORY: qa-metrics
-  _BQ_PROJECT: $PROJECT_ID
-  _BQ_DATASET: qa_metrics
-  _BQ_LOCATION: europe-west1
+  _BQ_PROJECT: qa-panda-metrics-dev
+  _BQ_DATASET: qa_metrics_simple
+  _BQ_LOCATION: US
   _BUGSNAG_SERVICE: bugsnag-ingest-function
   _JIRA_SERVICE: jira-ingest-function
   _TESTRAIL_SERVICE: testrail-ingest-function
   _GAMEBENCH_SERVICE: gamebench-ingest-function
-  _BQ_PROJECT: qa-panda-metrics-dev
-  _BQ_DATASET: qa_metrics_simple
-  _BQ_LOCATION: EU
 
 steps:
   # Build one immutable image per service from the shared simple/Dockerfile
@@ -80,7 +77,6 @@ steps:
       - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
       - "--region=${_REGION}"
       - "--platform=managed"
-      - "--update-env-vars=BQ_PROJECT=$PROJECT_ID,BQ_DATASET=qa_metrics_simple,BQ_LOCATION=EU"
       - "--no-allow-unauthenticated"
       - "--update-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
 
