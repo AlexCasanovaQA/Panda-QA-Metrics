@@ -39,6 +39,52 @@ bq show --format=prettyjson <PROJECT_ID>:qa_metrics_simple | jq -r '.location'
 
 Use that exact location value for `BQ_LOCATION` in each service.
 
+## Dashboard/Explore fallback and incident mapping (`/simple`)
+
+### 1) Element identification in Looker (`77c0972751e263ff96782c74cc0a25c8`)
+
+- Este id corresponde a un **runtime/UI element id** de Looker (no se versiona dentro de los archivos LookML).
+- Referencia operativa del dashboard: `simple/looker/qa_executive.dashboard` (`dashboard: qa_executive`, explore `qa_executive_kpis`).
+- Si necesitas el mapeo exacto id -> tile en caliente, usa Looker API sobre el dashboard desplegado (query de elementos y matching por `id`).
+
+### 2) Fallback behavior (friendly + stable mirror)
+
+Cuando falle la fuente primaria por dataset/región (ej: `Dataset ... was not found in location ...`):
+
+1. Mostrar mensaje amigable: **"Data not available right now"**.
+2. Cambiar temporalmente el origen del explore a la tabla espejo estable:
+   - `qa-panda-metrics.qa_metrics_simple_mirror.qa_executive_kpis_latest`
+3. Abrir incidente de configuración y validar `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION`.
+
+### 3) Monitoring/alerting for dataset-not-found regressions
+
+Los ingests en `/simple` emiten un log estructurado en error cuando detectan dataset no encontrado o mismatch de región:
+
+- `BQ_DATASET_NOT_FOUND_ALERT project=<...> dataset=<...> location=<...> error=<...>`
+
+Recomendación de alerta en Cloud Monitoring:
+
+- Tipo: **log-based metric** (counter).
+- Filtro:
+
+```text
+resource.type="cloud_run_revision"
+textPayload:"BQ_DATASET_NOT_FOUND_ALERT"
+```
+
+- Condición sugerida: `count >= 1` en ventana de 5 minutos por servicio.
+- Notificación: Slack/on-call de Data QA.
+
+### 4) Mapping esperado entorno -> proyecto -> dataset -> región
+
+| Entorno | Proyecto GCP (`BQ_PROJECT`) | Dataset (`BQ_DATASET`) | Región (`BQ_LOCATION`) | Uso |
+|---|---|---|---|---|
+| `simple-dev` | `qa-panda-metrics-dev` | `qa_metrics_simple` | `EU` (o ubicación real del dataset) | pruebas de integración |
+| `simple-prod` | `qa-panda-metrics` | `qa_metrics_simple` | `EU` (o ubicación real del dataset) | dashboard/explore principal |
+| `simple-prod-fallback` | `qa-panda-metrics` | `qa_metrics_simple_mirror` | `EU` (o ubicación real del dataset espejo) | continuidad operativa |
+
+> Nota: el valor final de `BQ_LOCATION` debe coincidir exactamente con `bq show --format=prettyjson <PROJECT>:<DATASET> | jq -r '.location'`.
+
 ## Ingest services: required env var matrix
 
 > Focus: servicios en `/simple`.

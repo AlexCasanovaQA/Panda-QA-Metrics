@@ -4,6 +4,8 @@
 # Legacy LookML runtime friendly:
 # - No view-level description property.
 # - Expose metric_date as DATE to avoid DATE >= TIMESTAMP BigQuery errors.
+# - Operational fallback mirror table: qa-panda-metrics.qa_metrics_simple_mirror.qa_executive_kpis_latest
+#   (use when primary dataset is unavailable due to project/region mismatch).
 
 view: qa_executive_kpis {
   sql_table_name: `qa-panda-metrics.qa_metrics_simple.qa_executive_kpis_latest` ;;
