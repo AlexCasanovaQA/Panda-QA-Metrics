@@ -156,7 +156,7 @@ view: qa_executive_kpis {
     # Some Looker runtimes reject custom value_format masks as unsupported
     # (e.g., reporting "unsupported format |#,##0.##|").
     # Use a built-in format name for compatibility.
-    value_format_name: "decimal_2"
+    value_format_name: "decimal_0"
   }
 
   measure: kpi_value_percent {
