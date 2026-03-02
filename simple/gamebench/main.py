@@ -382,10 +382,22 @@ def ingest_gamebench() -> Tuple[int, int]:
     start_ms = int(start_dt.timestamp() * 1000)
     end_ms = int(end_dt.timestamp() * 1000)
 
+    logger.info(
+        "GAMEBENCH_INGEST_START lookback_days=%s auth_mode=%s company_id_set=%s collection_id_set=%s packages=%s start_utc=%s end_utc=%s",
+        lookback_days,
+        auth_mode,
+        bool(company_id),
+        bool(collection_id),
+        packages,
+        start_dt.isoformat(),
+        end_dt.isoformat(),
+    )
+
     gb = GameBenchClient(user, token, auth_mode=auth_mode, company_id=company_id)
     client = get_client()
 
     existing = _existing_session_ids(client, lookback_days=lookback_days)
+    logger.info("GAMEBENCH_EXISTING_SESSIONS existing_count=%s", len(existing))
     package_groups: Dict[str, List[str]] = {"dev": [], "prod": []}
     for pkg in packages:
         package_groups.setdefault(_infer_platform_from_package(pkg), []).append(pkg)
@@ -394,6 +406,12 @@ def ingest_gamebench() -> Tuple[int, int]:
     for environment, grouped_packages in package_groups.items():
         if not grouped_packages:
             continue
+        logger.info(
+            "GAMEBENCH_SEARCH environment=%s package_count=%s packages=%s",
+            environment,
+            len(grouped_packages),
+            grouped_packages,
+        )
         grouped_sessions = gb.advanced_search_sessions(
             packages=grouped_packages,
             environment=environment,
@@ -403,22 +421,35 @@ def ingest_gamebench() -> Tuple[int, int]:
             page_size=50,
             max_pages=10,
         )
+        logger.info(
+            "GAMEBENCH_SEARCH_RESULT environment=%s returned_sessions=%s",
+            environment,
+            len(grouped_sessions),
+        )
         for session in grouped_sessions:
             session_id = session.get("sessionId") or session.get("id")
             if session_id:
                 sessions_by_id[session_id] = session
 
     sessions = list(sessions_by_id.values())
+    logger.info("GAMEBENCH_SESSION_POOL unique_sessions=%s", len(sessions))
 
     ingest_ts = to_rfc3339(end_dt)
 
     rows: List[Dict[str, Any]] = []
     inserted = 0
     skipped_sessions = 0
+    skipped_existing = 0
+    skipped_missing_id = 0
 
     for s in sessions:
         session_id = s.get("sessionId") or s.get("id")
-        if not session_id or session_id in existing:
+        if not session_id:
+            skipped_missing_id += 1
+            continue
+
+        if session_id in existing:
+            skipped_existing += 1
             continue
 
         user_email = s.get("userEmail") or s.get("user") or s.get("email")
@@ -463,11 +494,24 @@ def ingest_gamebench() -> Tuple[int, int]:
         )
 
         if len(rows) >= 250:
+            chunk_size = len(rows)
             inserted += insert_rows(client, "gamebench_sessions", rows)
+            logger.info("GAMEBENCH_BQ_INSERT chunk_size=%s cumulative_inserted=%s", chunk_size, inserted)
             rows = []
 
     if rows:
+        chunk_size = len(rows)
         inserted += insert_rows(client, "gamebench_sessions", rows)
+        logger.info("GAMEBENCH_BQ_INSERT chunk_size=%s cumulative_inserted=%s", chunk_size, inserted)
+
+    logger.info(
+        "GAMEBENCH_INGEST_SUMMARY unique_sessions=%s inserted=%s skipped_existing=%s skipped_missing_id=%s skipped_metric_fetch=%s",
+        len(sessions),
+        inserted,
+        skipped_existing,
+        skipped_missing_id,
+        skipped_sessions,
+    )
 
     return inserted, skipped_sessions
 
@@ -565,6 +609,11 @@ def hello_http(request):
     try:
         _validate_bq_env_compat()
         inserted, skipped_sessions = ingest_gamebench()
+        logger.info(
+            "GAMEBENCH_HTTP_RESULT inserted_session_rows=%s skipped_sessions=%s",
+            inserted,
+            skipped_sessions,
+        )
         kpi_status = "ok"
         try:
             _compute_gamebench_kpis()
