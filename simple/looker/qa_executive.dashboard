@@ -105,9 +105,9 @@
       height: 1
 
     - name: exec01_bugs_entered_today
-      title: "EXEC-01 — Bugs entered today ⓘ"
+      title: "EXEC-01 — Bugs entered today"
       note_text: "Bugs creados hoy (conteo total del día actual)."
-      note_state: expanded
+      note_state: collapsed
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -130,9 +130,9 @@
       height: 2
 
     - name: exec02_fixes_today_closed
-      title: "EXEC-02 — Fixes today (Closed) ⓘ"
+      title: "EXEC-02 — Fixes today (Closed)"
       note_text: "Bugs cerrados hoy con estado final Closed."
-      note_state: expanded
+      note_state: collapsed
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -155,9 +155,9 @@
       height: 2
 
     - name: exec03_active_bugs_now
-      title: "EXEC-03 — Active bugs now (statusCategory != Done) ⓘ"
+      title: "EXEC-03 — Active bugs now (statusCategory != Done)"
       note_text: "Bugs activos actuales (statusCategory distinto de Done)."
-      note_state: expanded
+      note_state: collapsed
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -180,9 +180,9 @@
       height: 2
 
     - name: exec04_awaiting_qa_resolved
-      title: "EXEC-04 — Awaiting QA verification (Resolved) ⓘ"
+      title: "EXEC-04 — Awaiting QA verification (Resolved)"
       note_text: "Bugs en espera de verificación QA (estado Resolved)."
-      note_state: expanded
+      note_state: collapsed
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -217,9 +217,9 @@
       height: 1
 
     - name: exec18_active_prod_errors
-      title: "EXEC-18 — Active production errors ⓘ"
+      title: "EXEC-18 — Active production errors"
       note_text: "Errores activos en producción (BugSnag)."
-      note_state: expanded
+      note_state: collapsed
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -242,9 +242,9 @@
       height: 2
 
     - name: exec19_high_critical_active_errors
-      title: "EXEC-19 — High/Critical active errors ⓘ"
+      title: "EXEC-19 — High/Critical active errors"
       note_text: "Errores activos con severidad High/Critical."
-      note_state: expanded
+      note_state: collapsed
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -267,9 +267,9 @@
       height: 2
 
     - name: exec16_pass_rate
-      title: "EXEC-16 — Pass rate ⓘ"
+      title: "EXEC-16 — Pass rate"
       note_text: "Pass rate diario de ejecución de pruebas según el rango de fechas seleccionado."
-      note_state: expanded
+      note_state: collapsed
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -293,9 +293,9 @@
       height: 2
 
     - name: exec17_bvt_pass_rate_latest
-      title: "EXEC-17 — BVT pass rate (latest Basic BVT run) ⓘ"
+      title: "EXEC-17 — BVT pass rate (latest Basic BVT run)"
       note_text: "Pass rate del último run BVT básico disponible."
-      note_state: expanded
+      note_state: collapsed
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -331,9 +331,9 @@
       height: 1
 
     - name: exec05_06_bugs_by_severity_pivot
-      title: "EXEC-05 — Bugs entered by severity ⓘ"
+      title: "EXEC-05 — Bugs entered by severity"
       note_text: "Distribución de bugs creados por severidad según el rango de fechas seleccionado."
-      note_state: expanded
+      note_state: collapsed
       type: looker_grid
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -358,9 +358,9 @@
       height: 4
 
     - name: exec08_bugs_by_day_priority
-      title: "EXEC-08 — Bugs entered by day — Priority ⓘ"
+      title: "EXEC-08 — Bugs entered by day — Priority"
       note_text: "Tendencia diaria de bugs creados por prioridad según el rango de fechas seleccionado."
-      note_state: expanded
+      note_state: collapsed
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -397,9 +397,9 @@
       height: 1
 
     - name: exec09_active_bugs_by_pod
-      title: "EXEC-09 — Active bugs by POD ⓘ"
+      title: "EXEC-09 — Active bugs by POD"
       note_text: "Distribución de bugs activos por POD."
-      note_state: expanded
+      note_state: collapsed
       type: looker_bar
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -424,9 +424,9 @@
       height: 4
 
     - name: exec10_active_bugs_by_status
-      title: "EXEC-10 — Active bugs by status ⓘ"
+      title: "EXEC-10 — Active bugs by status"
       note_text: "Distribución de bugs activos por estado."
-      note_state: expanded
+      note_state: collapsed
       type: looker_bar
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -451,9 +451,9 @@
       height: 4
 
     - name: exec14_active_bugs_by_milestone
-      title: "EXEC-14 — Active bugs by milestone (fixVersion) ⓘ"
+      title: "EXEC-14 — Active bugs by milestone (fixVersion)"
       note_text: "Bugs activos por fixVersion/milestone."
-      note_state: expanded
+      note_state: collapsed
       type: looker_bar
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -490,9 +490,9 @@
       height: 1
 
     - name: exec11_active_bug_count_over_time
-      title: "EXEC-11 — Active bug count over time ⓘ"
+      title: "EXEC-11 — Active bug count over time"
       note_text: "Evolución del total de bugs activos a lo largo del tiempo."
-      note_state: expanded
+      note_state: collapsed
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -515,9 +515,9 @@
       height: 5
 
     - name: exec07_bugs_fixed_last_7d_by_priority
-      title: "EXEC-07 — Bugs fixed by priority ⓘ"
+      title: "EXEC-07 — Bugs fixed by priority"
       note_text: "Bugs corregidos agrupados por prioridad según el rango de fechas seleccionado."
-      note_state: expanded
+      note_state: collapsed
       type: looker_bar
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -541,9 +541,9 @@
       height: 4
 
     - name: exec12_reopened_over_time_30d
-      title: "EXEC-12 — Reopened over time ⓘ"
+      title: "EXEC-12 — Reopened over time"
       note_text: "Cantidad de bugs reabiertos por día según el rango de fechas seleccionado."
-      note_state: expanded
+      note_state: collapsed
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -566,9 +566,9 @@
       height: 4
 
     - name: exec13_fix_fail_rate_over_time
-      title: "EXEC-13 — Fix fail rate over time ⓘ"
+      title: "EXEC-13 — Fix fail rate over time"
       note_text: "Porcentaje de fix fail por día según el rango de fechas seleccionado."
-      note_state: expanded
+      note_state: collapsed
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -603,9 +603,9 @@
       height: 1
 
     - name: exec15_test_cases_executed_by_day
-      title: "EXEC-15 — Test cases executed by day ⓘ"
+      title: "EXEC-15 — Test cases executed by day"
       note_text: "Casos de prueba ejecutados por día según el rango de fechas seleccionado."
-      note_state: expanded
+      note_state: collapsed
       type: looker_column
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -628,9 +628,9 @@
       height: 4
 
     - name: exec16_pass_rate_trend
-      title: "EXEC-16 — Pass rate ⓘ"
+      title: "EXEC-16 — Pass rate"
       note_text: "Pass rate diario de ejecución de pruebas según el rango de fechas seleccionado."
-      note_state: expanded
+      note_state: collapsed
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -665,9 +665,9 @@
       height: 1
 
     - name: exec18_20_errors_by_severity_pivot
-      title: "EXEC-18/20 — Active production errors / Active errors by severity ⓘ"
+      title: "EXEC-18/20 — Active production errors / Active errors by severity"
       note_text: "Errores activos en producción (BugSnag)."
-      note_state: expanded
+      note_state: collapsed
       type: looker_grid
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -693,9 +693,9 @@
       height: 4
 
     - name: exec21_new_errors
-      title: "EXEC-21 — New errors ⓘ"
+      title: "EXEC-21 — New errors"
       note_text: "Errores nuevos detectados según el rango de fechas seleccionado."
-      note_state: expanded
+      note_state: collapsed
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -731,9 +731,9 @@
       height: 1
 
     - name: exec22_median_fps
-      title: "EXEC-22 — Median FPS over time by platform ⓘ"
+      title: "EXEC-22 — Median FPS over time by platform"
       note_text: "Tendencia del FPS mediano por plataforma según el rango de fechas seleccionado."
-      note_state: expanded
+      note_state: collapsed
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -759,9 +759,9 @@
       height: 4
 
     - name: exec23_fps_stability
-      title: "EXEC-23 — FPS stability % over time by platform ⓘ"
+      title: "EXEC-23 — FPS stability % over time by platform"
       note_text: "Tendencia del porcentaje de estabilidad FPS por plataforma según el rango de fechas seleccionado."
-      note_state: expanded
+      note_state: collapsed
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -787,9 +787,9 @@
       height: 4
 
     - name: exec24_build_size_by_platform
-      title: "EXEC-24 — Current build size by platform (manual) ⓘ"
+      title: "EXEC-24 — Current build size by platform (manual)"
       note_text: "Tamaño actual de build por plataforma (carga manual)."
-      note_state: expanded
+      note_state: collapsed
       type: looker_grid
       model: panda_qa_metrics
       explore: qa_executive_kpis
