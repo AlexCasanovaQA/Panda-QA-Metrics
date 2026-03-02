@@ -25,9 +25,9 @@ steps:
         echo "[preflight] _REGION=${_REGION}"
         echo "[preflight] _REPOSITORY=${_REPOSITORY}"
 
-        PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
-        CB_SA="${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com"
-        echo "[preflight] Cloud Build service account esperado: ${CB_SA}"
+        project_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+        cb_sa="${project_number}@cloudbuild.gserviceaccount.com"
+        echo "[preflight] Cloud Build service account esperado: ${cb_sa}"
 
         if ! gcloud artifacts repositories describe "${_REPOSITORY}" \
           --location="${_REGION}" \
@@ -38,36 +38,36 @@ steps:
         fi
         echo "[preflight] OK: repositorio Artifact Registry accesible."
 
-        REQUIRED_PROJECT_PERMS="run.services.create,run.services.update,run.services.get,iam.serviceAccounts.actAs"
-        GRANTED_PROJECT_PERMS="$(gcloud projects test-iam-permissions "${PROJECT_ID}" \
-          --permissions="${REQUIRED_PROJECT_PERMS}" \
+        required_project_perms="run.services.create,run.services.update,run.services.get,iam.serviceAccounts.actAs"
+        granted_project_perms="$(gcloud projects test-iam-permissions "${PROJECT_ID}" \
+          --permissions="${required_project_perms}" \
           --format='value(permissions)' || true)"
-        GRANTED_PROJECT_PERMS="$(printf '%s' "${GRANTED_PROJECT_PERMS}" | tr ';' '\n' | sed '/^$/d')"
+        granted_project_perms="$(printf '%s' "${granted_project_perms}" | tr ';' '\n' | sed '/^$/d')"
 
         missing_project_perms=()
-        IFS=',' read -r -a project_perms <<< "${REQUIRED_PROJECT_PERMS}"
+        IFS=',' read -r -a project_perms <<< "${required_project_perms}"
         for perm in "${project_perms[@]}"; do
-          if ! printf '%s\n' "${GRANTED_PROJECT_PERMS}" | grep -qx "${perm}"; then
+          if ! printf '%s\n' "${granted_project_perms}" | grep -qx "${perm}"; then
             missing_project_perms+=("${perm}")
           fi
         done
 
         if [ ${#missing_project_perms[@]} -gt 0 ]; then
-          echo "ERROR: Permisos insuficientes para ejecutar 'gcloud run deploy' con la identidad actual (${CB_SA})."
+          echo "ERROR: Permisos insuficientes para ejecutar 'gcloud run deploy' con la identidad actual (${cb_sa})."
           echo "       Faltan permisos en proyecto: ${missing_project_perms[*]}"
           echo "       Roles mínimos sugeridos: roles/run.admin + roles/iam.serviceAccountUser (sobre la runtime service account)."
           exit 1
         fi
         echo "[preflight] OK: permisos mínimos de deploy Cloud Run presentes."
 
-        REPO_RESOURCE="projects/${PROJECT_ID}/locations/${_REGION}/repositories/${_REPOSITORY}"
-        REQUIRED_REPO_PERM="artifactregistry.repositories.downloadArtifacts"
+        repo_resource="projects/${PROJECT_ID}/locations/${_REGION}/repositories/${_REPOSITORY}"
+        required_repo_perm="artifactregistry.repositories.downloadArtifacts"
         if ! gcloud artifacts repositories test-iam-permissions "${_REPOSITORY}" \
           --location="${_REGION}" \
           --project="${PROJECT_ID}" \
-          --permissions="${REQUIRED_REPO_PERM}" \
-          --format='value(permissions)' | grep -qx "${REQUIRED_REPO_PERM}"; then
-          echo "ERROR: Falta permiso '${REQUIRED_REPO_PERM}' sobre '${REPO_RESOURCE}'."
+          --permissions="${required_repo_perm}" \
+          --format='value(permissions)' | grep -qx "${required_repo_perm}"; then
+          echo "ERROR: Falta permiso '${required_repo_perm}' sobre '${repo_resource}'."
           echo "       Asigna al Cloud Build SA un rol como roles/artifactregistry.reader en el repositorio o proyecto."
           exit 1
         fi
