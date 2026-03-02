@@ -106,6 +106,7 @@
 
     - name: exec01_bugs_entered_today
       title: "EXEC-01 — Bugs entered today"
+      show_title: true
       note_text: "Bugs created today (total count for the current day)."
       note_state: expanded
       type: single_value
@@ -131,6 +132,7 @@
 
     - name: exec02_fixes_today_closed
       title: "EXEC-02 — Fixes today (Closed)"
+      show_title: true
       note_text: "Bugs closed today with final status Closed."
       note_state: expanded
       type: single_value
@@ -156,6 +158,7 @@
 
     - name: exec03_active_bugs_now
       title: "EXEC-03 — Active bugs now (statusCategory != Done)"
+      show_title: true
       note_text: "Current active bugs (statusCategory not equal to Done)."
       note_state: expanded
       type: single_value
@@ -181,6 +184,7 @@
 
     - name: exec04_awaiting_qa_resolved
       title: "EXEC-04 — Awaiting QA verification (Resolved)"
+      show_title: true
       note_text: "Bugs awaiting QA verification (status Resolved)."
       note_state: expanded
       type: single_value
@@ -218,6 +222,7 @@
 
     - name: exec18_active_prod_errors
       title: "EXEC-18 — Active production errors"
+      show_title: true
       note_text: "Active production errors (BugSnag)."
       note_state: expanded
       type: single_value
@@ -243,6 +248,7 @@
 
     - name: exec19_high_critical_active_errors
       title: "EXEC-19 — High/Critical active errors"
+      show_title: true
       note_text: "Active errors with High/Critical severity."
       note_state: expanded
       type: single_value
@@ -268,6 +274,7 @@
 
     - name: exec16_pass_rate
       title: "EXEC-16 — Pass rate"
+      show_title: true
       note_text: "Daily test execution pass rate for the selected date range."
       note_state: expanded
       type: single_value
@@ -294,6 +301,7 @@
 
     - name: exec17_bvt_pass_rate_latest
       title: "EXEC-17 — BVT pass rate (latest Basic BVT run)"
+      show_title: true
       note_text: "Pass rate of the latest available basic BVT run."
       note_state: expanded
       type: single_value
