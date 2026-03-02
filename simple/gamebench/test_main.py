@@ -48,5 +48,48 @@ class ValidateBqEnvCompatTest(unittest.TestCase):
         self.assertTrue(any("validation helper not found" in m for m in logs.output))
 
 
+class CollectionFallbackTest(unittest.TestCase):
+    def test_retries_without_collection_when_first_search_returns_empty(self):
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "GAMEBENCH_USER": "user@example.com",
+                "GAMEBENCH_TOKEN": "secret",
+                "GAMEBENCH_COLLECTION_ID": "collection-123",
+                "GAMEBENCH_APP_PACKAGES": "com.scopely.internal.wwedomination",
+                "GAMEBENCH_LOOKBACK_DAYS": "1",
+            },
+            clear=False,
+        ):
+            with mock.patch.object(main, "get_client", return_value=object()):
+                with mock.patch.object(main, "_existing_session_ids", return_value=set()):
+                    with mock.patch.object(main, "insert_rows", return_value=1):
+                        with mock.patch.object(main.GameBenchClient, "get_fps", return_value=[60.0]):
+                            with mock.patch.object(main.GameBenchClient, "get_fps_stability", return_value=[95.0]):
+                                calls = []
+
+                                def _search(self, **kwargs):  # noqa: ANN001
+                                    calls.append(kwargs.get("collection_id"))
+                                    if kwargs.get("collection_id"):
+                                        return []
+                                    return [
+                                        {
+                                            "sessionId": "s-1",
+                                            "appInfo": {"package": "com.scopely.internal.wwedomination"},
+                                        }
+                                    ]
+
+                                with mock.patch.object(
+                                    main.GameBenchClient,
+                                    "advanced_search_sessions",
+                                    new=_search,
+                                ):
+                                    inserted, skipped = main.ingest_gamebench()
+
+        self.assertEqual(inserted, 1)
+        self.assertEqual(skipped, 0)
+        self.assertEqual(calls, ["collection-123", None])
+
+
 if __name__ == "__main__":
     unittest.main()
