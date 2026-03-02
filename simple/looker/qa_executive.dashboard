@@ -334,7 +334,7 @@
       title: "EXEC-05 — Bugs entered by severity ⓘ"
       note_text: "Distribución de bugs creados por severidad según el rango de fechas seleccionado."
       note_state: expanded
-      type: looker_grid
+      type: looker_pie
       model: panda_qa_metrics
       explore: qa_executive_kpis
       fields: [qa_executive_kpis.metric_id, qa_executive_kpis.severity, qa_executive_kpis.kpi_value]
