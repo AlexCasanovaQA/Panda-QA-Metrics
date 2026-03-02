@@ -32,7 +32,9 @@ class ExistingSessionIdsTest(unittest.TestCase):
                 main._existing_session_ids(client, lookback_days=7)
 
         message = str(ctx.exception)
-        self.assertIn("dataset missing or region mismatch", message)
+        self.assertIn("dataset availability/location mismatch", message)
+        self.assertIn("fallback_attempted=True", message)
+        self.assertIn("fallback_dataset_failed", message)
         self.assertIn("BQ_PROJECT/BQ_DATASET/BQ_LOCATION", message)
 
 

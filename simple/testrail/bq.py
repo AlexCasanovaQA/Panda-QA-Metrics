@@ -12,11 +12,6 @@ LOGGER = logging.getLogger(__name__)
 
 
 def get_bq_project() -> str:
-    """Return the GCP project used for BigQuery operations.
-
-    Cloud Run/Functions typically set GOOGLE_CLOUD_PROJECT, but some environments may use
-    GCP_PROJECT / GCLOUD_PROJECT instead.
-    """
     for key in ("BQ_PROJECT", "GOOGLE_CLOUD_PROJECT", "GCP_PROJECT", "GCLOUD_PROJECT"):
         v = os.environ.get(key)
         if v and str(v).strip():
@@ -25,18 +20,10 @@ def get_bq_project() -> str:
 
 
 def get_bq_dataset() -> str:
-    """Return the BigQuery dataset name."""
     return os.environ.get("BQ_DATASET", "qa_metrics_simple").strip()
 
 
 def get_bq_dataset_fallback() -> Optional[str]:
-    """Return optional fallback dataset name.
-
-    Behavior:
-    - If BQ_DATASET_FALLBACK is explicitly set to empty => disabled.
-    - If not set => auto-use <BQ_DATASET>_mirror.
-    - If fallback equals primary => disabled.
-    """
     primary = get_bq_dataset()
     raw = os.environ.get("BQ_DATASET_FALLBACK")
     if raw is None:
@@ -49,7 +36,6 @@ def get_bq_dataset_fallback() -> Optional[str]:
 
 
 def get_bq_location() -> Optional[str]:
-    """BigQuery location (e.g. EU, US). Defaults to EU for qa_metrics_simple."""
     v = os.environ.get("BQ_LOCATION", "EU")
     v = str(v).strip() if v is not None else ""
     return v or None
@@ -77,32 +63,20 @@ def _is_dataset_not_found_error(exc: Exception) -> bool:
     )
 
 
-def _raise_with_dataset_alert(exc: Exception) -> None:
-    if _is_dataset_not_found_error(exc):
-        LOGGER.error(
-            "BQ_DATASET_NOT_FOUND_ALERT project=%s dataset=%s location=%s error=%s",
-            get_bq_project() or "<unknown>",
-            get_bq_dataset() or "<unknown>",
-            get_bq_location() or "<unset>",
-            exc,
-        )
-        raise RuntimeError(
-            "Data not available right now (dataset missing or region mismatch). "
-            "Please verify BQ_PROJECT/BQ_DATASET/BQ_LOCATION or switch to the stable mirror table."
-        ) from exc
-    raise exc
-
-
 def _rewrite_query_dataset(sql: str, source_dataset: str, target_dataset: str) -> str:
-    """Replace references to source dataset with target dataset in a SQL string."""
     if source_dataset == target_dataset:
         return sql
-    rewritten = re.sub(
-        rf"(?<=\.){re.escape(source_dataset)}(?=\.)",
-        target_dataset,
-        sql,
+    return re.sub(rf"(?<=\.){re.escape(source_dataset)}(?=\.)", target_dataset, sql)
+
+
+def _log_dataset_not_found_alert(exc: Exception) -> None:
+    LOGGER.error(
+        "BQ_DATASET_NOT_FOUND_ALERT project=%s dataset=%s location=%s error=%s",
+        get_bq_project() or "<unknown>",
+        get_bq_dataset() or "<unknown>",
+        get_bq_location() or "<unset>",
+        exc,
     )
-    return rewritten
 
 
 def _log_fallback_used(operation: str, primary_error: Exception, fallback_dataset: str) -> None:
@@ -117,106 +91,91 @@ def _log_fallback_used(operation: str, primary_error: Exception, fallback_datase
     )
 
 
-def insert_rows(
-    client: bigquery.Client,
-    table: str,
-    rows: List[Dict[str, Any]],
-    *,
-    ignore_unknown_values: bool = True,
-) -> int:
-    """Stream JSON rows into BigQuery.
+def _raise_dataset_error(exc: Exception, *, operation: str, fallback_attempted: bool, failure_reason: str) -> None:
+    if _is_dataset_not_found_error(exc):
+        _log_dataset_not_found_alert(exc)
+        raise RuntimeError(
+            f"BigQuery {operation} blocked by dataset availability/location mismatch; "
+            f"fallback_attempted={fallback_attempted}; reason={failure_reason}. "
+            "Verify BQ_PROJECT/BQ_DATASET/BQ_LOCATION and BQ_DATASET_FALLBACK."
+        ) from exc
+    raise exc
 
-    ignore_unknown_values=True makes the pipeline resilient if the table schema lags behind
-    the code (unknown fields are dropped instead of failing the whole request).
-    """
+
+def insert_rows(client: bigquery.Client, table: str, rows: List[Dict[str, Any]], *, ignore_unknown_values: bool = True) -> int:
     if not rows:
         return 0
-
-    primary_exc: Optional[Exception] = None
     try:
-        errors = client.insert_rows_json(
-            table_ref(table),
-            rows,
-            ignore_unknown_values=ignore_unknown_values,
-        )
+        errors = client.insert_rows_json(table_ref(table), rows, ignore_unknown_values=ignore_unknown_values)
     except (NotFound, BadRequest) as exc:
         if not _is_dataset_not_found_error(exc):
-            _raise_with_dataset_alert(exc)
-        primary_exc = exc
+            raise exc
         fallback_dataset = get_bq_dataset_fallback()
         if not fallback_dataset:
-            _raise_with_dataset_alert(exc)
+            _raise_dataset_error(exc, operation="insert", fallback_attempted=False, failure_reason="fallback_disabled_or_same_as_primary")
         _log_fallback_used("insert", exc, fallback_dataset)
         try:
-            errors = client.insert_rows_json(
-                table_ref(table, dataset=fallback_dataset),
-                rows,
-                ignore_unknown_values=ignore_unknown_values,
-            )
+            errors = client.insert_rows_json(table_ref(table, dataset=fallback_dataset), rows, ignore_unknown_values=ignore_unknown_values)
         except (NotFound, BadRequest) as fallback_exc:
-            raise RuntimeError(
-                "BigQuery insert failed in primary and fallback datasets. "
-                f"primary_error={primary_exc}; fallback_error={fallback_exc}"
-            ) from fallback_exc
+            _raise_dataset_error(
+                fallback_exc,
+                operation="insert",
+                fallback_attempted=True,
+                failure_reason=f"fallback_dataset_failed fallback_dataset={fallback_dataset} primary_error={exc}",
+            )
 
     if errors:
-        raise RuntimeError(
-            f"BigQuery insert errors: {errors[:3]}{' ...' if len(errors) > 3 else ''}"
-        )
+        raise RuntimeError(f"BigQuery insert errors: {errors[:3]}{' ...' if len(errors) > 3 else ''}")
     return len(rows)
 
 
-def run_query(
-    client: bigquery.Client,
-    sql: str,
-    job_labels: Optional[Dict[str, str]] = None,
-) -> None:
+def run_query(client: bigquery.Client, sql: str, job_labels: Optional[Dict[str, str]] = None) -> None:
     job_config = bigquery.QueryJobConfig()
     if job_labels:
         job_config.labels = job_labels
-    primary_exc: Optional[Exception] = None
     try:
         job = client.query(sql, job_config=job_config, location=get_bq_location())
-        job.result()  # wait
+        job.result()
     except (NotFound, BadRequest) as exc:
         if not _is_dataset_not_found_error(exc):
-            _raise_with_dataset_alert(exc)
-        primary_exc = exc
+            raise exc
         fallback_dataset = get_bq_dataset_fallback()
         if not fallback_dataset:
-            _raise_with_dataset_alert(exc)
+            _raise_dataset_error(exc, operation="query", fallback_attempted=False, failure_reason="fallback_disabled_or_same_as_primary")
         _log_fallback_used("query", exc, fallback_dataset)
         fallback_sql = _rewrite_query_dataset(sql, get_bq_dataset(), fallback_dataset)
         try:
             job = client.query(fallback_sql, job_config=job_config, location=get_bq_location())
-            job.result()  # wait
+            job.result()
         except (NotFound, BadRequest) as fallback_exc:
-            raise RuntimeError(
-                "BigQuery query failed in primary and fallback datasets. "
-                f"primary_error={primary_exc}; fallback_error={fallback_exc}"
-            ) from fallback_exc
+            _raise_dataset_error(
+                fallback_exc,
+                operation="query",
+                fallback_attempted=True,
+                failure_reason=f"fallback_dataset_failed fallback_dataset={fallback_dataset} primary_error={exc}",
+            )
 
 
 def fetch_scalar(client: bigquery.Client, sql: str) -> Any:
-    primary_exc: Optional[Exception] = None
     try:
         rows = list(client.query(sql, location=get_bq_location()).result())
     except (NotFound, BadRequest) as exc:
         if not _is_dataset_not_found_error(exc):
-            _raise_with_dataset_alert(exc)
-        primary_exc = exc
+            raise exc
         fallback_dataset = get_bq_dataset_fallback()
         if not fallback_dataset:
-            _raise_with_dataset_alert(exc)
+            _raise_dataset_error(exc, operation="query", fallback_attempted=False, failure_reason="fallback_disabled_or_same_as_primary")
         _log_fallback_used("query", exc, fallback_dataset)
         fallback_sql = _rewrite_query_dataset(sql, get_bq_dataset(), fallback_dataset)
         try:
             rows = list(client.query(fallback_sql, location=get_bq_location()).result())
         except (NotFound, BadRequest) as fallback_exc:
-            raise RuntimeError(
-                "BigQuery query failed in primary and fallback datasets. "
-                f"primary_error={primary_exc}; fallback_error={fallback_exc}"
-            ) from fallback_exc
+            _raise_dataset_error(
+                fallback_exc,
+                operation="query",
+                fallback_attempted=True,
+                failure_reason=f"fallback_dataset_failed fallback_dataset={fallback_dataset} primary_error={exc}",
+            )
     if not rows:
         return None
     return rows[0][0]

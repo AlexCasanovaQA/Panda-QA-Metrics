@@ -90,7 +90,7 @@ This script performs the same operational flow requested for incident response:
 
 ### 2) Fallback behavior (friendly + stable mirror)
 
-En los ingests de `/simple`, el fallback de BigQuery ya es **automático** cuando la operación
+En los cuatro ingests de `/simple` (`testrail`, `gamebench`, `bugsnag`, `jira`), el fallback de BigQuery es **uniforme y automático** cuando la operación
 falla por dataset no encontrado o mismatch de región (ej: `Dataset ... was not found in location ...`).
 
 - Dataset primario: `BQ_DATASET` (default: `qa_metrics_simple`).
@@ -99,7 +99,7 @@ falla por dataset no encontrado o mismatch de región (ej: `Dataset ... was not 
     (por ejemplo `qa_metrics_simple_mirror`).
   - Para desactivar fallback, define `BQ_DATASET_FALLBACK` en vacío (`""`).
 
-Si primario y fallback fallan, la request falla reportando ambos errores para facilitar diagnóstico.
+Si primario y fallback fallan, la request informa explícitamente `fallback_attempted=true` y la razón exacta del fallo para facilitar diagnóstico.
 
 Para observabilidad, se emite evento estructurado adicional cuando se usa fallback:
 
@@ -140,10 +140,10 @@ textPayload:"BQ_DATASET_NOT_FOUND_ALERT"
 
 | Servicio | Env vars requeridas (alguna alternativa por grupo) | Env vars opcionales |
 |---|---|---|
-| `simple/bugsnag/main.py` | `BUGSNAG_BASE_URL`; `BUGSNAG_TOKEN`; `BUGSNAG_PROJECT_IDS` | `BUGSNAG_MAX_RUNTIME_S`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
-| `simple/jira/main.py` | `JIRA_SITE` \| `JIRA_BASE_URL`; `JIRA_USER` \| `JIRA_EMAIL`; `JIRA_API_TOKEN`; `JIRA_PROJECT_KEYS` \| `JIRA_PROJECT_KEYS_CSV` \| `JIRA_PROJECT_KEY` | `JIRA_SEVERITY_FIELD_ID` \| `JIRA_SEVERITY_FIELD`, `JIRA_POD_FIELD`, `JIRA_LOOKBACK_DAYS`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
-| `simple/testrail/main.py` | `TESTRAIL_BASE_URL` \| `TESTRAIL_URL`; `TESTRAIL_EMAIL` \| `TESTRAIL_USER` \| `TESTRAIL_USERNAME`; `TESTRAIL_API_KEY` \| `TESTRAIL_TOKEN` \| `TESTRAIL_API_TOKEN`; `TESTRAIL_PROJECT_IDS` \| `TESTRAIL_PROJECTS` \| `TESTRAIL_PROJECT_ID` \| `TESTRAIL_PROJECT` | `TESTRAIL_LOOKBACK_DAYS`, `TESTRAIL_BVT_SUITE_NAME`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
-| `simple/gamebench/main.py` | `GAMEBENCH_USER`; `GAMEBENCH_TOKEN` | `GAMEBENCH_COMPANY_ID`, `GAMEBENCH_COLLECTION_ID`, `GAMEBENCH_APP_PACKAGES`, `GAMEBENCH_LOOKBACK_DAYS`, `GAMEBENCH_AUTH_MODE`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
+| `simple/bugsnag/main.py` | `BUGSNAG_BASE_URL`; `BUGSNAG_TOKEN`; `BUGSNAG_PROJECT_IDS` | `BUGSNAG_MAX_RUNTIME_S`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_DATASET_FALLBACK`, `BQ_LOCATION` |
+| `simple/jira/main.py` | `JIRA_SITE` \| `JIRA_BASE_URL`; `JIRA_USER` \| `JIRA_EMAIL`; `JIRA_API_TOKEN`; `JIRA_PROJECT_KEYS` \| `JIRA_PROJECT_KEYS_CSV` \| `JIRA_PROJECT_KEY` | `JIRA_SEVERITY_FIELD_ID` \| `JIRA_SEVERITY_FIELD`, `JIRA_POD_FIELD`, `JIRA_LOOKBACK_DAYS`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_DATASET_FALLBACK`, `BQ_LOCATION` |
+| `simple/testrail/main.py` | `TESTRAIL_BASE_URL` \| `TESTRAIL_URL`; `TESTRAIL_EMAIL` \| `TESTRAIL_USER` \| `TESTRAIL_USERNAME`; `TESTRAIL_API_KEY` \| `TESTRAIL_TOKEN` \| `TESTRAIL_API_TOKEN`; `TESTRAIL_PROJECT_IDS` \| `TESTRAIL_PROJECTS` \| `TESTRAIL_PROJECT_ID` \| `TESTRAIL_PROJECT` | `TESTRAIL_LOOKBACK_DAYS`, `TESTRAIL_BVT_SUITE_NAME`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_DATASET_FALLBACK`, `BQ_LOCATION` |
+| `simple/gamebench/main.py` | `GAMEBENCH_USER`; `GAMEBENCH_TOKEN` | `GAMEBENCH_COMPANY_ID`, `GAMEBENCH_COLLECTION_ID`, `GAMEBENCH_APP_PACKAGES`, `GAMEBENCH_LOOKBACK_DAYS`, `GAMEBENCH_AUTH_MODE`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_DATASET_FALLBACK`, `BQ_LOCATION` |
 
 ## Build pipeline único (raíz del repo)
 
