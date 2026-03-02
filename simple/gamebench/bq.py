@@ -120,10 +120,14 @@ def run_query(
 
 
 def fetch_scalar(client: bigquery.Client, sql: str) -> Any:
-    try:
-        rows = list(client.query(sql, location=get_bq_location()).result())
-    except (NotFound, BadRequest) as exc:
-        _raise_with_dataset_alert(exc)
+    rows = fetch_rows(client, sql)
     if not rows:
         return None
     return rows[0][0]
+
+
+def fetch_rows(client: bigquery.Client, sql: str) -> List[Any]:
+    try:
+        return list(client.query(sql, location=get_bq_location()).result())
+    except (NotFound, BadRequest) as exc:
+        _raise_with_dataset_alert(exc)
