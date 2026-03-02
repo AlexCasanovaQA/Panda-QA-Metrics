@@ -11,6 +11,7 @@ substitutions:
   _BQ_PROJECT: qa-panda-metrics-dev
   _BQ_DATASET: qa_metrics_simple
   _BQ_LOCATION: US
+  _IMAGE_TAG: dev
 
 steps:
   - name: "gcr.io/cloud-builders/docker"
@@ -19,13 +20,13 @@ steps:
       - "-f"
       - "simple/Dockerfile"
       - "-t"
-      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:$SHORT_SHA"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:${_IMAGE_TAG}"
       - "-t"
-      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:${_IMAGE_TAG}"
       - "-t"
-      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:$SHORT_SHA"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:${_IMAGE_TAG}"
       - "-t"
-      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:$SHORT_SHA"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:${_IMAGE_TAG}"
       - "."
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
@@ -34,7 +35,7 @@ steps:
       - "run"
       - "deploy"
       - "${_BUGSNAG_SERVICE}"
-      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:$SHORT_SHA"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:${_IMAGE_TAG}"
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
@@ -48,7 +49,7 @@ steps:
       - "run"
       - "deploy"
       - "${_JIRA_SERVICE}"
-      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:${_IMAGE_TAG}"
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
@@ -62,7 +63,7 @@ steps:
       - "run"
       - "deploy"
       - "${_TESTRAIL_SERVICE}"
-      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:$SHORT_SHA"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:${_IMAGE_TAG}"
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
@@ -76,7 +77,7 @@ steps:
       - "run"
       - "deploy"
       - "${_GAMEBENCH_SERVICE}"
-      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:$SHORT_SHA"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:${_IMAGE_TAG}"
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
@@ -85,10 +86,10 @@ steps:
       - "--args=-c,functions-framework --target=hello_http --source=gamebench/main.py --port=$$PORT"
 
 images:
-  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:$SHORT_SHA"
-  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
-  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:$SHORT_SHA"
-  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:$SHORT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_BUGSNAG_SERVICE}:${_IMAGE_TAG}"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:${_IMAGE_TAG}"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_TESTRAIL_SERVICE}:${_IMAGE_TAG}"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:${_IMAGE_TAG}"
 
 options:
   logging: CLOUD_LOGGING_ONLY
