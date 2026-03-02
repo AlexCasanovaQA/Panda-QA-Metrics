@@ -193,7 +193,7 @@ gcloud run deploy jira-ingest --image gcr.io/YOUR_PROJECT/jira-ingest --region e
 
 Repeat for the other scripts changing `SOURCE_FILE`.
 
-For the `/simple` ingests, the root `cloudbuild.yaml` is the canonical pipeline: it deploys `bugsnag-ingest-function`, `jira-ingest-function`, `testrail-ingest-function`, and `gamebench-ingest-function` from `simple/*/main.py` with default region `us-central1` and `BQ_LOCATION=US`.
+For the `/simple` ingests, the root `cloudbuild.yaml` is the canonical pipeline: it deploys `bugsnag-ingest-function`, `jira-ingest-function`, `testrail-ingest-function`, and `gamebench-ingest-function` from `simple/*/main.py` with default region `europe-west1` and `BQ_LOCATION=EU`.
 
 ### Option B: Local run
 ```bash

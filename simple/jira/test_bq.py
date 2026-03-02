@@ -11,8 +11,8 @@ import bq
 class ResolveQueryLocationTests(unittest.TestCase):
     def test_uses_explicit_location_when_set(self):
         client = Mock()
-        with patch.dict(os.environ, {"BQ_LOCATION": "US"}, clear=False):
-            self.assertEqual(bq.resolve_query_location(client), "US")
+        with patch.dict(os.environ, {"BQ_LOCATION": "EU"}, clear=False):
+            self.assertEqual(bq.resolve_query_location(client), "EU")
         client.get_dataset.assert_not_called()
 
     def test_uses_dataset_location_when_not_configured(self):
