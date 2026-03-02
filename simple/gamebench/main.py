@@ -20,7 +20,7 @@ Required env vars / secrets:
 
 Optional:
 - GAMEBENCH_COMPANY_ID       defaults to AWGaWNjXBxsUazsJuoUp
-- GAMEBENCH_COLLECTION_ID    defaults to 7cf80f11-6915-4e6c-b70c-4ad7ed44aaf9
+- GAMEBENCH_COLLECTION_ID    optional (no default); use only when validated for the current tenant
 - GAMEBENCH_APP_PACKAGES     CSV defaults to
                               com.scopely.internal.wwedomination,
                               com.scopely.wwedomination
@@ -393,7 +393,7 @@ def ingest_gamebench() -> Tuple[int, int]:
         raise ValueError("GAMEBENCH_APP_PACKAGES must contain at least one package")
 
     company_id = os.environ.get("GAMEBENCH_COMPANY_ID", "AWGaWNjXBxsUazsJuoUp") or None
-    collection_id = os.environ.get("GAMEBENCH_COLLECTION_ID", "7cf80f11-6915-4e6c-b70c-4ad7ed44aaf9") or None
+    collection_id = os.environ.get("GAMEBENCH_COLLECTION_ID") or None
     lookback_days = int(os.environ.get("GAMEBENCH_LOOKBACK_DAYS", "7"))
 
     end_dt = utc_now()
@@ -447,6 +447,13 @@ def ingest_gamebench() -> Tuple[int, int]:
                 "GAMEBENCH_SEARCH_EMPTY_WITH_COLLECTION environment=%s collection_id=%s; retrying without collection filter",
                 environment,
                 collection_id,
+            )
+            logger.warning(
+                "GAMEBENCH_COLLECTION_FILTER_MISS environment=%s collection_id=%s packages=%s fallback_without_collection=%s",
+                environment,
+                collection_id,
+                grouped_packages,
+                True,
             )
             grouped_sessions = gb.advanced_search_sessions(
                 packages=grouped_packages,
@@ -642,6 +649,13 @@ FROM latest_build;
 # -----------------------------
 
 def hello_http(request):
+    source = "gamebench/main.py"
+    service = (os.environ.get("K_SERVICE") or "unknown").strip() or "unknown"
+    logger.info(
+        "gamebench_ingest_start",
+        extra={"source": source, "service": service, "method": request.method},
+    )
+
     try:
         _validate_bq_env_compat()
         inserted, skipped_sessions = ingest_gamebench()
@@ -649,6 +663,7 @@ def hello_http(request):
             "GAMEBENCH_HTTP_RESULT inserted_session_rows=%s skipped_sessions=%s",
             inserted,
             skipped_sessions,
+            extra={"source": source, "service": service},
         )
         kpi_status = "ok"
         try:
@@ -657,14 +672,29 @@ def hello_http(request):
             kpi_status = f"error: {e}"
             logger.exception("GameBench KPI computation failed")
 
+        status = "ok" if kpi_status == "ok" else "partial_ok"
+        logger.info(
+            "gamebench_ingest_success",
+            extra={
+                "source": source,
+                "service": service,
+                "status": status,
+                "inserted_session_rows": inserted,
+                "skipped_sessions": skipped_sessions,
+                "kpi_status": kpi_status,
+            },
+        )
         return jsonify(
             {
-                "status": "ok" if kpi_status == "ok" else "partial_ok",
+                "status": status,
                 "inserted_session_rows": inserted,
                 "skipped_sessions": skipped_sessions,
                 "kpi_status": kpi_status,
             }
         )
     except Exception as e:
-        logger.exception("GameBench ingestion failed")
+        logger.exception(
+            "GameBench ingestion failed",
+            extra={"source": source, "service": service, "error": str(e)},
+        )
         return jsonify({"status": "error", "error": str(e)}), 500

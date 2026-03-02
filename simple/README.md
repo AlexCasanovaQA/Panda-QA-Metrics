@@ -5,17 +5,47 @@
 El pipeline `simple/gamebench/main.py` soporta defaults para Panda y permite override vía variables de entorno:
 
 - `GAMEBENCH_COMPANY_ID` (default: `AWGaWNjXBxsUazsJuoUp`)
-- `GAMEBENCH_COLLECTION_ID` (default: `7cf80f11-6915-4e6c-b70c-4ad7ed44aaf9`)
+- `GAMEBENCH_COLLECTION_ID` (opcional, sin default)
 - `GAMEBENCH_APP_PACKAGES` (default CSV):
   - `com.scopely.internal.wwedomination`
   - `com.scopely.wwedomination`
 
 Si defines estas variables de entorno en despliegue, prevalecen sobre los defaults.
 
+Sobre `GAMEBENCH_COLLECTION_ID`: el filtro de colección solo se aplica cuando la variable
+viene explícitamente seteada en el entorno. Se recomienda configurarlo únicamente cuando
+el `collectionId` esté validado para el tenant actual; de lo contrario, dejarlo vacío.
+
 Además, la búsqueda en GameBench separa filtros por `package` y `environment` para mantener la lógica `dev/prod`:
 
 - Paquetes con `.internal.` (o sufijo `.internal`) => `environment=dev`
 - Resto => `environment=prod`
+
+### Evento adicional para alerting de collection filter miss
+
+Cuando una búsqueda inicial retorna vacía usando `GAMEBENCH_COLLECTION_ID`, el ingest emite dos eventos:
+
+- `GAMEBENCH_SEARCH_EMPTY_WITH_COLLECTION` (evento existente para contexto humano).
+- `GAMEBENCH_COLLECTION_FILTER_MISS` (evento estable sugerido para métricas/alertas).
+
+`GAMEBENCH_COLLECTION_FILTER_MISS` incluye campos estables en el payload de texto:
+
+- `environment=<dev|prod|...>`
+- `collection_id=<collection-id>`
+- `packages=[...]`
+- `fallback_without_collection=True`
+
+Filtro sugerido para métrica basada en logs (counter):
+
+```text
+resource.type="cloud_run_revision"
+textPayload:"GAMEBENCH_COLLECTION_FILTER_MISS"
+```
+
+Alerta sugerida por frecuencia:
+
+- Condición: `count >= N` en ventana de `1h` (por servicio).
+- Ejemplo inicial: `N=5` en `1h` para detectar regresiones del filtro de colección sin ruido excesivo.
 
 ## BigQuery runbook único (source of truth para región)
 

@@ -426,10 +426,23 @@ def hello_http(request):
     if request.method not in ("POST", "GET"):
         return ("Method not allowed", 405)
 
+    source = "bugsnag/main.py"
+    service = (os.environ.get("K_SERVICE") or "unknown").strip() or "unknown"
     current_phase = "config"
     current_project_id: Optional[str] = None
     bq_dataset = (os.environ.get("BQ_DATASET") or "qa_metrics_simple").strip()
     bq_location = (os.environ.get("BQ_LOCATION") or "EU").strip()
+    logger.info(
+        "bugsnag_ingest_start",
+        extra={
+            "source": source,
+            "service": service,
+            "method": request.method,
+            "phase": current_phase,
+            "bq_dataset": bq_dataset,
+            "bq_location": bq_location,
+        },
+    )
 
     try:
         validate_bq_env()
@@ -516,6 +529,19 @@ def hello_http(request):
             kpi_computed = True
             kpi_refresh_without_changes = total_source_errors == 0
 
+        logger.info(
+            "bugsnag_ingest_success",
+            extra={
+                "source": source,
+                "service": service,
+                "phase": current_phase,
+                "status": run_status,
+                "inserted_rows": total_inserted,
+                "source_errors_seen": total_source_errors,
+                "failed_projects_count": len(failed_projects),
+            },
+        )
+
         return jsonify(
             {
                 "status": run_status,
@@ -533,10 +559,13 @@ def hello_http(request):
         logger.warning(
             "bugsnag config error",
             extra={
+                "source": source,
+                "service": service,
                 "phase": current_phase,
                 "project_id": current_project_id,
                 "bq_dataset": bq_dataset,
                 "bq_location": bq_location,
+                "error": str(e),
             },
         )
         return jsonify({"status": "error", "error": str(e)}), 400
@@ -544,10 +573,13 @@ def hello_http(request):
         logger.exception(
             "bugsnag ingest failed",
             extra={
+                "source": source,
+                "service": service,
                 "phase": current_phase,
                 "project_id": current_project_id,
                 "bq_dataset": bq_dataset,
                 "bq_location": bq_location,
+                "error": str(e),
             },
         )
         return jsonify({"status": "error", "error": str(e)}), 500
