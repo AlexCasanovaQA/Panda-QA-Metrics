@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Dict, List, Optional
 
+from google.api_core.exceptions import BadRequest, NotFound
 from google.cloud import bigquery
+
+LOGGER = logging.getLogger(__name__)
 
 
 def get_bq_project() -> str:
@@ -44,6 +48,31 @@ def get_client() -> bigquery.Client:
     return bigquery.Client(project=project)
 
 
+def _is_dataset_not_found_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return (
+        "dataset" in msg
+        and "not found" in msg
+        and ("location" in msg or "notfound" in exc.__class__.__name__.lower())
+    )
+
+
+def _raise_with_dataset_alert(exc: Exception) -> None:
+    if _is_dataset_not_found_error(exc):
+        LOGGER.error(
+            "BQ_DATASET_NOT_FOUND_ALERT project=%s dataset=%s location=%s error=%s",
+            get_bq_project() or "<unknown>",
+            get_bq_dataset() or "<unknown>",
+            get_bq_location() or "<unset>",
+            exc,
+        )
+        raise RuntimeError(
+            "Data not available right now (dataset missing or region mismatch). "
+            "Please verify BQ_PROJECT/BQ_DATASET/BQ_LOCATION or switch to the stable mirror table."
+        ) from exc
+    raise exc
+
+
 def insert_rows(
     client: bigquery.Client,
     table: str,
@@ -59,11 +88,15 @@ def insert_rows(
     if not rows:
         return 0
 
-    errors = client.insert_rows_json(
-        table_ref(table),
-        rows,
-        ignore_unknown_values=ignore_unknown_values,
-    )
+    try:
+        errors = client.insert_rows_json(
+            table_ref(table),
+            rows,
+            ignore_unknown_values=ignore_unknown_values,
+        )
+    except (NotFound, BadRequest) as exc:
+        _raise_with_dataset_alert(exc)
+
     if errors:
         raise RuntimeError(
             f"BigQuery insert errors: {errors[:3]}{' ...' if len(errors) > 3 else ''}"
@@ -79,12 +112,18 @@ def run_query(
     job_config = bigquery.QueryJobConfig()
     if job_labels:
         job_config.labels = job_labels
-    job = client.query(sql, job_config=job_config, location=get_bq_location())
-    job.result()  # wait
+    try:
+        job = client.query(sql, job_config=job_config, location=get_bq_location())
+        job.result()  # wait
+    except (NotFound, BadRequest) as exc:
+        _raise_with_dataset_alert(exc)
 
 
 def fetch_scalar(client: bigquery.Client, sql: str) -> Any:
-    rows = list(client.query(sql, location=get_bq_location()).result())
+    try:
+        rows = list(client.query(sql, location=get_bq_location()).result())
+    except (NotFound, BadRequest) as exc:
+        _raise_with_dataset_alert(exc)
     if not rows:
         return None
     return rows[0][0]
