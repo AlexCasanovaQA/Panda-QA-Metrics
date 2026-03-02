@@ -38,7 +38,7 @@ def get_bq_dataset_fallback() -> Optional[str]:
 
 
 def get_bq_location() -> Optional[str]:
-    v = os.environ.get("BQ_LOCATION", "")
+    v = os.environ.get("BQ_LOCATION")
     v = str(v).strip() if v is not None else ""
     return v or None
 

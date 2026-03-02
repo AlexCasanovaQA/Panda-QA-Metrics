@@ -30,6 +30,16 @@ class ResolveQueryLocationTests(unittest.TestCase):
             self.assertEqual(bq.resolve_query_location(client), "europe-west2")
             client.get_dataset.assert_called_once_with("demo-proj.qa_metrics_simple")
 
+    def test_validate_bq_env_requires_location(self):
+        env = {
+            "BQ_PROJECT": "demo-proj",
+            "BQ_DATASET": "qa_metrics_simple",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            with self.assertRaises(RuntimeError) as ctx:
+                bq.validate_bq_env()
+        self.assertIn("BQ_LOCATION", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
