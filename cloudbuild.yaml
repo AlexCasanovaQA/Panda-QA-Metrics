@@ -92,7 +92,7 @@ images:
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_GAMEBENCH_SERVICE}:${_IMAGE_TAG}"
 
 options:
-  logging: CLOUD_LOGGING_ONLY
+  logging: LEGACY
   # Allow literal runtime env placeholders (for example, ${TOKEN} in helper commands)
   # without failing Cloud Build template validation.
   substitution_option: ALLOW_LOOSE
