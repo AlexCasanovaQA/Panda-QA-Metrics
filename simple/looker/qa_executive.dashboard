@@ -117,7 +117,7 @@
         **How to read this dashboard**
         - Top rows are the *headline KPIs* (overall scope).
         - Sections below provide breakdowns and trends. Use dashboard filters to slice by POD / Feature / Platform, etc.
-        - Each tile includes a hover note (ⓘ) describing the metric and how it is calculated.
+        - Each KPI title includes an info icon (ⓘ). Hover to see a short definition.
 
         **Fallback when data is unavailable**
         - Default deployment target is **europe-west1** with `BQ_LOCATION=EU` across model/explore/dashboard assets.
@@ -143,6 +143,7 @@
 
     - name: exec01_bugs_entered_today
       title: "EXEC-01 — Bugs entered today ⓘ"
+      note_text: "Bugs creados hoy (conteo total del día actual)."
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -162,6 +163,7 @@
 
     - name: exec02_fixes_today_closed
       title: "EXEC-02 — Fixes today (Closed) ⓘ"
+      note_text: "Bugs cerrados hoy con estado final Closed."
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -181,6 +183,7 @@
 
     - name: exec03_active_bugs_now
       title: "EXEC-03 — Active bugs now (statusCategory != Done) ⓘ"
+      note_text: "Bugs activos actuales (statusCategory distinto de Done)."
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -200,6 +203,7 @@
 
     - name: exec04_awaiting_qa_resolved
       title: "EXEC-04 — Awaiting QA verification (Resolved) ⓘ"
+      note_text: "Bugs en espera de verificación QA (estado Resolved)."
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -231,6 +235,7 @@
 
     - name: exec18_active_prod_errors
       title: "EXEC-18 — Active production errors ⓘ"
+      note_text: "Errores activos en producción (BugSnag)."
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -250,6 +255,7 @@
 
     - name: exec19_high_critical_active_errors
       title: "EXEC-19 — High/Critical active errors ⓘ"
+      note_text: "Errores activos con severidad High/Critical."
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -269,6 +275,7 @@
 
     - name: exec16_pass_rate_last_7d
       title: "EXEC-16 — Pass rate (last 7d) ⓘ"
+      note_text: "Pass rate diario de ejecución de pruebas (últimos 7 días)."
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -288,6 +295,7 @@
 
     - name: exec17_bvt_pass_rate_latest
       title: "EXEC-17 — BVT pass rate (latest Basic BVT run) ⓘ"
+      note_text: "Pass rate del último run BVT básico disponible."
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -319,6 +327,7 @@
 
     - name: exec05_06_bugs_by_severity_pivot
       title: "EXEC-05/06 — Bugs entered by severity (7d vs 30d) ⓘ"
+      note_text: "Comparativa de bugs creados por severidad en ventana 7d vs 30d."
       type: looker_grid
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -328,7 +337,7 @@
         qa_executive_kpis.metric_id: "EXEC-05,EXEC-06"
         qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.severity: "-NULL"
-      sorts: [qa_executive_kpis.kpi_value desc]
+      sorts: [qa_executive_kpis.severity]
       limit: 500
       listen:
         POD: qa_executive_kpis.pod
@@ -344,6 +353,7 @@
 
     - name: exec08_bugs_by_day_priority
       title: "EXEC-08 — Bugs entered by day (last 7d) — Priority ⓘ"
+      note_text: "Tendencia diaria de bugs creados durante los últimos 7 días por prioridad."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -352,7 +362,7 @@
       fill_fields: [qa_executive_kpis.metric_date]
       filters:
         qa_executive_kpis.metric_id: "EXEC-08"
-      sorts: [qa_executive_kpis.metric_date asc]
+      sorts: [qa_executive_kpis.metric_date asc, qa_executive_kpis.priority]
       limit: 500
       listen:
         Trend Range: qa_executive_kpis.metric_date
@@ -381,6 +391,7 @@
 
     - name: exec09_active_bugs_by_pod
       title: "EXEC-09 — Active bugs by POD ⓘ"
+      note_text: "Distribución de bugs activos por POD."
       type: looker_bar
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -406,6 +417,7 @@
 
     - name: exec10_active_bugs_by_status
       title: "EXEC-10 — Active bugs by status ⓘ"
+      note_text: "Distribución de bugs activos por estado."
       type: looker_bar
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -432,6 +444,7 @@
 
     - name: exec14_active_bugs_by_milestone
       title: "EXEC-14 — Active bugs by milestone (fixVersion) ⓘ"
+      note_text: "Bugs activos por fixVersion/milestone."
       type: looker_bar
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -470,6 +483,7 @@
 
     - name: exec11_active_bug_count_over_time
       title: "EXEC-11 — Active bug count over time ⓘ"
+      note_text: "Evolución del total de bugs activos a lo largo del tiempo."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -495,6 +509,7 @@
 
     - name: exec07_bugs_fixed_last_7d_by_priority
       title: "EXEC-07 — Bugs fixed (last 7d) by priority ⓘ"
+      note_text: "Bugs corregidos en los últimos 7 días, agrupados por prioridad."
       type: looker_bar
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -519,6 +534,7 @@
 
     - name: exec12_reopened_over_time_30d
       title: "EXEC-12 — Reopened over time (30d) ⓘ"
+      note_text: "Cantidad de bugs reabiertos por día en ventana de 30 días."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -542,6 +558,7 @@
 
     - name: exec13_fix_fail_rate_over_time
       title: "EXEC-13 — Fix fail rate over time (30d) ⓘ"
+      note_text: "Porcentaje de fix fail por día en ventana de 30 días."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -577,6 +594,7 @@
 
     - name: exec15_test_cases_executed_by_day
       title: "EXEC-15 — Test cases executed by day (last 7d) ⓘ"
+      note_text: "Casos de prueba ejecutados por día (últimos 7 días)."
       type: looker_column
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -598,6 +616,7 @@
 
     - name: exec16_pass_rate_trend
       title: "EXEC-16 — Pass rate (last 7d) ⓘ"
+      note_text: "Pass rate diario de ejecución de pruebas (últimos 7 días)."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -631,6 +650,7 @@
 
     - name: exec18_20_errors_by_severity_pivot
       title: "EXEC-18/20 — Active production errors / Active errors by severity ⓘ"
+      note_text: "Errores activos en producción (BugSnag)."
       type: looker_grid
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -640,7 +660,7 @@
         qa_executive_kpis.metric_id: "EXEC-18,EXEC-20"
         qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.severity: "-NULL"
-      sorts: [qa_executive_kpis.kpi_value desc]
+      sorts: [qa_executive_kpis.severity]
       limit: 500
       listen:
         Platform: qa_executive_kpis.platform
@@ -652,6 +672,7 @@
 
     - name: exec21_new_errors_last_7d
       title: "EXEC-21 — New errors (last 7d) ⓘ"
+      note_text: "Errores nuevos detectados durante los últimos 7 días."
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -684,6 +705,7 @@
 
     - name: exec22_median_fps_last_7d
       title: "EXEC-22 — Median FPS over time (last 7d) by platform ⓘ"
+      note_text: "Tendencia del FPS mediano por plataforma (últimos 7 días)."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -705,6 +727,7 @@
 
     - name: exec23_fps_stability_last_7d
       title: "EXEC-23 — FPS stability % over time (last 7d) by platform ⓘ"
+      note_text: "Tendencia del porcentaje de estabilidad FPS por plataforma (últimos 7 días)."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -726,6 +749,7 @@
 
     - name: exec24_build_size_by_platform
       title: "EXEC-24 — Current build size by platform (manual) ⓘ"
+      note_text: "Tamaño actual de build por plataforma (carga manual)."
       type: looker_grid
       model: panda_qa_metrics
       explore: qa_executive_kpis
