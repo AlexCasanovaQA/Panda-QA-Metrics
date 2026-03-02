@@ -2,8 +2,8 @@ connection: "qa-panda-metrics-exp"
 # Default runtime target for this Looker project: Cloud Run europe-west1 + BigQuery location EU.
 
 # Local simple project assets (all focused on qa_metrics_simple dataset)
-include: "/simple/looker/*.view"
-include: "/simple/looker/*.dashboard"
+include: "/scopely_panda/views/qa_metrics/simple/*.view.lkml"
+include: "/scopely_panda/dashboards/qa_metrics/*.dashboard.lookml"
 
 
 explore: qa_executive_kpis {
