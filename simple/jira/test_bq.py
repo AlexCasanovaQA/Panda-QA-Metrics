@@ -24,6 +24,7 @@ class ResolveQueryLocationTests(unittest.TestCase):
         env = {
             "BQ_PROJECT": "demo-proj",
             "BQ_DATASET": "qa_metrics_simple",
+            "BQ_LOCATION": "",
         }
         with patch.dict(os.environ, env, clear=True):
             self.assertEqual(bq.resolve_query_location(client), "europe-west2")
