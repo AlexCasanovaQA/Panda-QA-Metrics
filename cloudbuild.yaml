@@ -92,3 +92,6 @@ images:
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  # Allow literal runtime env placeholders (for example, ${TOKEN} in helper commands)
+  # without failing Cloud Build template validation.
+  substitution_option: ALLOW_LOOSE
