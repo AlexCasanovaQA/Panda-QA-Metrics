@@ -17,27 +17,28 @@ Además, la búsqueda en GameBench separa filtros por `package` y `environment` 
 - Paquetes con `.internal.` (o sufijo `.internal`) => `environment=dev`
 - Resto => `environment=prod`
 
-## BigQuery location (important)
+## BigQuery runbook único (source of truth para región)
 
-If your dataset `qa_metrics_simple` is in **EU**, set (or keep) this env var in each simple service:
+Regla única para `/simple`: **la región efectiva viene de `BQ_LOCATION` inyectada en deploy** (Cloud Run env vars).
+No dependas de defaults de código para región/dataset/proyecto.
 
-- `BQ_LOCATION=EU`
+### Pasos operativos
 
-If your dataset is in another region (for example `US`), set `BQ_LOCATION` accordingly.
-Without this, queries can fail with errors like: `Dataset ... was not found in location US`.
-
-Typical mismatch example:
-
-- Dataset physically located in `europe-west1`.
-- Service configured with `BQ_LOCATION=EU` or `BQ_LOCATION=US`.
-
-Recommended verification command:
+1. Verifica la ubicación real del dataset:
 
 ```bash
-bq show --format=prettyjson <PROJECT_ID>:qa_metrics_simple | jq -r '.location'
+bq show --format=prettyjson <PROJECT_ID>:<DATASET> | jq -r '.location'
 ```
 
-Use that exact location value for `BQ_LOCATION` in each service.
+2. Propaga ese valor exacto a Cloud Run (junto con proyecto y dataset):
+
+```bash
+--set-env-vars=BQ_PROJECT=<PROJECT_ID>,BQ_DATASET=<DATASET>,BQ_LOCATION=<LOCATION_FROM_BQ_SHOW>
+```
+
+3. Confirma en logs de arranque el evento `BQ_STARTUP_CONFIG` (los 4 ingests de `/simple` lo emiten al iniciar request) y valida que no haya `<unset>`.
+
+Si falta alguno (`BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION`), el servicio falla rápido con error explícito para evitar escribir/consultar en una ubicación incorrecta.
 
 ### Testrail quick-fix runbook (BQ dataset/location mismatch)
 
@@ -140,10 +141,10 @@ textPayload:"BQ_DATASET_NOT_FOUND_ALERT"
 
 | Servicio | Env vars requeridas (alguna alternativa por grupo) | Env vars opcionales |
 |---|---|---|
-| `simple/bugsnag/main.py` | `BUGSNAG_BASE_URL`; `BUGSNAG_TOKEN`; `BUGSNAG_PROJECT_IDS` | `BUGSNAG_MAX_RUNTIME_S`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
-| `simple/jira/main.py` | `JIRA_SITE` \| `JIRA_BASE_URL`; `JIRA_USER` \| `JIRA_EMAIL`; `JIRA_API_TOKEN`; `JIRA_PROJECT_KEYS` \| `JIRA_PROJECT_KEYS_CSV` \| `JIRA_PROJECT_KEY` | `JIRA_SEVERITY_FIELD_ID` \| `JIRA_SEVERITY_FIELD`, `JIRA_POD_FIELD`, `JIRA_LOOKBACK_DAYS`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
-| `simple/testrail/main.py` | `TESTRAIL_BASE_URL` \| `TESTRAIL_URL`; `TESTRAIL_EMAIL` \| `TESTRAIL_USER` \| `TESTRAIL_USERNAME`; `TESTRAIL_API_KEY` \| `TESTRAIL_TOKEN` \| `TESTRAIL_API_TOKEN`; `TESTRAIL_PROJECT_IDS` \| `TESTRAIL_PROJECTS` \| `TESTRAIL_PROJECT_ID` \| `TESTRAIL_PROJECT` | `TESTRAIL_LOOKBACK_DAYS`, `TESTRAIL_BVT_SUITE_NAME`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
-| `simple/gamebench/main.py` | `GAMEBENCH_USER`; `GAMEBENCH_TOKEN` | `GAMEBENCH_COMPANY_ID`, `GAMEBENCH_COLLECTION_ID`, `GAMEBENCH_APP_PACKAGES`, `GAMEBENCH_LOOKBACK_DAYS`, `GAMEBENCH_AUTH_MODE`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION` |
+| `simple/bugsnag/main.py` | `BUGSNAG_BASE_URL`; `BUGSNAG_TOKEN`; `BUGSNAG_PROJECT_IDS`; `BQ_PROJECT`; `BQ_DATASET`; `BQ_LOCATION` | `BUGSNAG_MAX_RUNTIME_S` |
+| `simple/jira/main.py` | `JIRA_SITE` \| `JIRA_BASE_URL`; `JIRA_USER` \| `JIRA_EMAIL`; `JIRA_API_TOKEN`; `JIRA_PROJECT_KEYS` \| `JIRA_PROJECT_KEYS_CSV` \| `JIRA_PROJECT_KEY`; `BQ_PROJECT`; `BQ_DATASET`; `BQ_LOCATION` | `JIRA_SEVERITY_FIELD_ID` \| `JIRA_SEVERITY_FIELD`, `JIRA_POD_FIELD`, `JIRA_LOOKBACK_DAYS` |
+| `simple/testrail/main.py` | `TESTRAIL_BASE_URL` \| `TESTRAIL_URL`; `TESTRAIL_EMAIL` \| `TESTRAIL_USER` \| `TESTRAIL_USERNAME`; `TESTRAIL_API_KEY` \| `TESTRAIL_TOKEN` \| `TESTRAIL_API_TOKEN`; `TESTRAIL_PROJECT_IDS` \| `TESTRAIL_PROJECTS` \| `TESTRAIL_PROJECT_ID` \| `TESTRAIL_PROJECT`; `BQ_PROJECT`; `BQ_DATASET`; `BQ_LOCATION` | `TESTRAIL_LOOKBACK_DAYS`, `TESTRAIL_BVT_SUITE_NAME` |
+| `simple/gamebench/main.py` | `GAMEBENCH_USER`; `GAMEBENCH_TOKEN`; `BQ_PROJECT`; `BQ_DATASET`; `BQ_LOCATION` | `GAMEBENCH_COMPANY_ID`, `GAMEBENCH_COLLECTION_ID`, `GAMEBENCH_APP_PACKAGES`, `GAMEBENCH_LOOKBACK_DAYS`, `GAMEBENCH_AUTH_MODE` |
 
 ## Build pipeline único (raíz del repo)
 

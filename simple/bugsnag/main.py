@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 import requests
 from flask import jsonify
 
-from bq import get_client, insert_rows, run_query, table_ref
+from bq import get_client, insert_rows, run_query, table_ref, validate_bq_env
 from time_utils import to_rfc3339, utc_now
 
 
@@ -359,6 +359,7 @@ def hello_http(request):
         return ("Method not allowed", 405)
 
     try:
+        validate_bq_env()
         config = _validate_bugsnag_config()
     except ConfigError as e:
         return jsonify({"status": "error", "error": str(e)}), 400

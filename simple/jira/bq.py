@@ -25,14 +25,44 @@ def get_bq_project() -> str:
 
 def get_bq_dataset() -> str:
     """Return the BigQuery dataset name."""
-    return os.environ.get("BQ_DATASET", "qa_metrics_simple").strip()
+    return (os.environ.get("BQ_DATASET") or "").strip()
 
 
 def get_bq_location() -> Optional[str]:
-    """BigQuery location (e.g. EU, US). Defaults to EU for qa_metrics_simple."""
-    v = os.environ.get("BQ_LOCATION", "EU")
+    """BigQuery location (e.g. EU, US)."""
+    v = os.environ.get("BQ_LOCATION")
     v = str(v).strip() if v is not None else ""
     return v or None
+
+
+def validate_bq_env() -> Dict[str, str]:
+    """Log effective BQ env vars and fail fast when required vars are missing."""
+    project = get_bq_project()
+    dataset = get_bq_dataset()
+    location = get_bq_location() or ""
+
+    LOGGER.info(
+        "BQ_STARTUP_CONFIG project=%s dataset=%s location=%s",
+        project or "<unset>",
+        dataset or "<unset>",
+        location or "<unset>",
+    )
+
+    missing: List[str] = []
+    if not project:
+        missing.append("BQ_PROJECT (or GOOGLE_CLOUD_PROJECT/GCP_PROJECT/GCLOUD_PROJECT)")
+    if not dataset:
+        missing.append("BQ_DATASET")
+    if not location:
+        missing.append("BQ_LOCATION")
+    if missing:
+        raise RuntimeError(
+            "Missing required BigQuery configuration: "
+            + ", ".join(missing)
+            + ". Set all of BQ_PROJECT, BQ_DATASET and BQ_LOCATION in Cloud Run env vars."
+        )
+
+    return {"project": project, "dataset": dataset, "location": location}
 
 
 def table_ref(table: str) -> str:
