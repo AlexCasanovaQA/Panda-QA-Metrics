@@ -39,6 +39,47 @@ bq show --format=prettyjson <PROJECT_ID>:qa_metrics_simple | jq -r '.location'
 
 Use that exact location value for `BQ_LOCATION` in each service.
 
+### Testrail quick-fix runbook (BQ dataset/location mismatch)
+
+Para incidentes en `testrail-ingest-function` con `BQ_DATASET_NOT_FOUND_ALERT`, usa este script:
+
+```bash
+simple/scripts/fix_testrail_bq_config.sh
+```
+
+El script ejecuta en orden:
+
+1. Inspección de env vars efectivas en Cloud Run: `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION`.
+2. Verificación del dataset real vía `bq show --format=prettyjson <PROJECT>:<DATASET>` y lectura de `.location`.
+3. Alineación automática de valores finales de `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION`.
+4. Re-deploy de `testrail-ingest-function` conservando `--source=testrail/main.py`.
+5. Validación en logs: desaparición de `BQ_DATASET_NOT_FOUND_ALERT` y retorno de invocaciones `POST 200`.
+
+Overrides útiles:
+
+```bash
+PROJECT_ID=qa-panda-metrics \
+REGION=europe-west1 \
+TARGET_BQ_PROJECT=qa-panda-metrics \
+TARGET_BQ_DATASET=qa_metrics_simple \
+TARGET_BQ_LOCATION=EU \
+simple/scripts/fix_testrail_bq_config.sh
+```
+### Quick fix for `gamebench-ingest-function`
+
+If you need to align env vars exactly with the real dataset location and validate end-to-end (`POST 200` + logs), run:
+
+```bash
+bash simple/scripts/align_gamebench_bq_env.sh
+```
+
+This script performs the same operational flow requested for incident response:
+1. Reads dataset location with `bq show ... | jq -r .location`.
+2. Prints current Cloud Run env vars.
+3. Updates `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION`.
+4. Executes authenticated manual `POST` (`dry_run`).
+5. Prints recent logs to confirm dataset-location errors are gone and request status returns `200`.
+
 ## Dashboard/Explore fallback and incident mapping (`/simple`)
 
 ### 1) Element identification in Looker (`77c0972751e263ff96782c74cc0a25c8`)
@@ -49,12 +90,20 @@ Use that exact location value for `BQ_LOCATION` in each service.
 
 ### 2) Fallback behavior (friendly + stable mirror)
 
-Cuando falle la fuente primaria por dataset/región (ej: `Dataset ... was not found in location ...`):
+En los ingests de `/simple`, el fallback de BigQuery ya es **automático** cuando la operación
+falla por dataset no encontrado o mismatch de región (ej: `Dataset ... was not found in location ...`).
 
-1. Mostrar mensaje amigable: **"Data not available right now"**.
-2. Cambiar temporalmente el origen del explore a la tabla espejo estable:
-   - `qa-panda-metrics.qa_metrics_simple_mirror.qa_executive_kpis_latest`
-3. Abrir incidente de configuración y validar `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION`.
+- Dataset primario: `BQ_DATASET` (default: `qa_metrics_simple`).
+- Dataset fallback: `BQ_DATASET_FALLBACK`.
+  - Si no defines `BQ_DATASET_FALLBACK`, se usa automáticamente `<BQ_DATASET>_mirror`
+    (por ejemplo `qa_metrics_simple_mirror`).
+  - Para desactivar fallback, define `BQ_DATASET_FALLBACK` en vacío (`""`).
+
+Si primario y fallback fallan, la request falla reportando ambos errores para facilitar diagnóstico.
+
+Para observabilidad, se emite evento estructurado adicional cuando se usa fallback:
+
+- `BQ_DATASET_FALLBACK_USED operation=<query|insert> project=<...> primary_dataset=<...> fallback_dataset=<...> location=<...> primary_error=<...>`
 
 ### 3) Monitoring/alerting for dataset-not-found regressions
 
@@ -112,6 +161,36 @@ gcloud builds submit --config simple/cloudbuild-jira-testrail.yaml .
 gcloud builds submit --config simple/cloudbuild-all-simple.yaml .
 ```
 
+## Source of truth: mapping de BigQuery por entorno (Cloud Build substitutions)
+
+Los pipelines de `/simple` (`cloudbuild-simple.yaml`, `cloudbuild-jira-testrail.yaml`, `cloudbuild-all-simple.yaml`) publican los servicios con:
+
+- `--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}`
+
+Substitutions oficiales por entorno:
+
+| Entorno | `_BQ_PROJECT` | `_BQ_DATASET` | `_BQ_LOCATION` |
+|---|---|---|---|
+| `simple-dev` | `qa-panda-metrics-dev` | `qa_metrics_simple` | `EU` |
+| `simple-prod` | `qa-panda-metrics` | `qa_metrics_simple` | `EU` |
+| `simple-prod-fallback` | `qa-panda-metrics` | `qa_metrics_simple_mirror` | `EU` |
+
+Comandos de referencia (sin editar YAML):
+
+```bash
+# DEV
+gcloud builds submit --config simple/cloudbuild-simple.yaml \
+  --substitutions=_BQ_PROJECT=qa-panda-metrics-dev,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=EU .
+
+# PROD
+gcloud builds submit --config simple/cloudbuild-simple.yaml \
+  --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=EU .
+
+# PROD fallback (mirror)
+gcloud builds submit --config simple/cloudbuild-simple.yaml \
+  --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple_mirror,_BQ_LOCATION=EU .
+```
+
 ## Tabla operativa: servicio -> pipeline -> source esperado
 
 | Servicio Cloud Run | Pipeline recomendado | `--source` esperado |
@@ -120,6 +199,27 @@ gcloud builds submit --config simple/cloudbuild-all-simple.yaml .
 | `jira-ingest-function` | `simple/cloudbuild-jira-testrail.yaml` o `simple/cloudbuild-all-simple.yaml` | `jira/main.py` |
 | `testrail-ingest-function` | `simple/cloudbuild-jira-testrail.yaml` o `simple/cloudbuild-all-simple.yaml` | `testrail/main.py` |
 | `gamebench-ingest-function` | `simple/cloudbuild-all-simple.yaml` | `gamebench/main.py` |
+
+## Verificación post-deploy de env vars efectivas
+
+Después de desplegar `jira-ingest-function` desde `/simple`, confirma rápidamente los valores efectivos:
+
+```bash
+REGION=europe-west1
+gcloud run services describe jira-ingest-function --region "$REGION" \
+  --format="table(spec.template.spec.containers[0].env[].name,spec.template.spec.containers[0].env[].value)"
+```
+
+También puedes validar solo las 3 variables de BigQuery:
+
+```bash
+REGION=europe-west1
+gcloud run services describe jira-ingest-function --region "$REGION" \
+  --format="json(spec.template.spec.containers[0].env)" | jq -r '
+    .spec.template.spec.containers[0].env[]
+    | select(.name=="BQ_PROJECT" or .name=="BQ_DATASET" or .name=="BQ_LOCATION")
+    | "\(.name)=\(.value)"'
+```
 
 ## Verificación post-deploy (por servicio)
 
@@ -143,6 +243,8 @@ Comando oficial:
 ```bash
 gcloud builds submit --config simple/cloudbuild-simple.yaml .
 ```
+
+> Nota operativa: cualquier cambio de `BQ_PROJECT`, `BQ_DATASET` o `BQ_LOCATION` (por región/dataset) debe hacerse mediante **Cloud Build substitutions** en los YAML de `/simple`, nunca manualmente desde la consola de Cloud Run.
 
 Naming oficial de servicios Cloud Run (1 imagen por servicio):
 
