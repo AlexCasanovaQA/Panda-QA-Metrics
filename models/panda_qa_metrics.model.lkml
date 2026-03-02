@@ -1,4 +1,5 @@
 connection: "qa-panda-metrics-exp"
+# Default deployment topology: Cloud Run europe-west1 with BigQuery dataset location EU.
 
 include: "/views/*.view.lkml"
 include: "/dashboards/*.dashboard.lookml"

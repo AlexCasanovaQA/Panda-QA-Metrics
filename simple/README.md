@@ -129,9 +129,9 @@ textPayload:"BQ_DATASET_NOT_FOUND_ALERT"
 
 | Entorno | Proyecto GCP (`BQ_PROJECT`) | Dataset (`BQ_DATASET`) | Región (`BQ_LOCATION`) | Uso |
 |---|---|---|---|---|
-| `simple-dev` | `qa-panda-metrics-dev` | `qa_metrics_simple` | `US` (o ubicación real del dataset) | pruebas de integración |
-| `simple-prod` | `qa-panda-metrics` | `qa_metrics_simple` | `US` (o ubicación real del dataset) | dashboard/explore principal |
-| `simple-prod-fallback` | `qa-panda-metrics` | `qa_metrics_simple_mirror` | `US` (o ubicación real del dataset espejo) | continuidad operativa |
+| `simple-dev` | `qa-panda-metrics-dev` | `qa_metrics_simple` | `EU` (o ubicación real del dataset) | pruebas de integración |
+| `simple-prod` | `qa-panda-metrics` | `qa_metrics_simple` | `EU` (o ubicación real del dataset) | dashboard/explore principal |
+| `simple-prod-fallback` | `qa-panda-metrics` | `qa_metrics_simple_mirror` | `EU` (o ubicación real del dataset espejo) | continuidad operativa |
 
 > Nota: el valor final de `BQ_LOCATION` debe coincidir exactamente con `bq show --format=prettyjson <PROJECT>:<DATASET> | jq -r '.location'`.
 
@@ -200,8 +200,8 @@ gcloud builds describe <BUILD_ID>
 El pipeline raíz publica los 4 servicios de `/simple` con:
 
 - `--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}`
-- Región runtime: `_REGION=us-central1`
-- BigQuery location: `_BQ_LOCATION=US`
+- Región runtime: `_REGION=europe-west1`
+- BigQuery location: `_BQ_LOCATION=EU`
 
 Servicios + source esperado:
 
@@ -214,13 +214,13 @@ Servicios + source esperado:
 
 ```bash
 # DEV
-gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-panda-metrics-dev,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=US .
+gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-panda-metrics-dev,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=EU .
 
 # PROD
-gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=US .
+gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple,_BQ_LOCATION=EU .
 
 # PROD fallback (mirror)
-gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple_mirror,_BQ_LOCATION=US .
+gcloud builds submit --config cloudbuild.yaml   --substitutions=_BQ_PROJECT=qa-panda-metrics,_BQ_DATASET=qa_metrics_simple_mirror,_BQ_LOCATION=EU .
 ```
 
 ### Opcional: separar deploy de imagen y policy de invocación
@@ -239,5 +239,5 @@ Si aparece `step exited with non-zero status: 1`, revisa en este orden:
 2. **Cloud Run revision logs** del servicio desplegado para ver el error runtime/deploy asociado a la revisión:
 
 ```bash
-gcloud run services logs read <SERVICE_NAME> --region=us-central1 --limit=200
+gcloud run services logs read <SERVICE_NAME> --region=europe-west1 --limit=200
 ```

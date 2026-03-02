@@ -13,7 +13,7 @@ import main  # noqa: E402
 
 class _FakeClient:
     def query(self, *_args, **_kwargs):
-        raise NotFound("Not found: Dataset demo:qa_metrics_simple was not found in location US")
+        raise NotFound("Not found: Dataset demo:qa_metrics_simple was not found in location EU")
 
 
 class ExistingSessionIdsTest(unittest.TestCase):
@@ -24,7 +24,7 @@ class ExistingSessionIdsTest(unittest.TestCase):
             {
                 "BQ_PROJECT": "demo",
                 "BQ_DATASET": "qa_metrics_simple",
-                "BQ_LOCATION": "US",
+                "BQ_LOCATION": "EU",
             },
             clear=False,
         ):

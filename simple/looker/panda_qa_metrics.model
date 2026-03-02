@@ -1,4 +1,5 @@
 connection: "qa-panda-metrics-exp"
+# Default runtime target for this Looker project: Cloud Run europe-west1 + BigQuery location EU.
 
 
 include: "/scopely_panda/views/qa_metrics/*.view.lkml"

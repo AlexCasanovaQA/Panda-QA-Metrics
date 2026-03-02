@@ -1,5 +1,5 @@
 substitutions:
-  _REGION: us-central1
+  _REGION: europe-west1
   _REPOSITORY: qa-metrics
   _BUGSNAG_SERVICE: bugsnag-ingest-function
   _JIRA_SERVICE: jira-ingest-function
@@ -10,7 +10,7 @@ substitutions:
   # PROD example: _BQ_PROJECT=qa-panda-metrics
   _BQ_PROJECT: qa-panda-metrics-dev
   _BQ_DATASET: qa_metrics_simple
-  _BQ_LOCATION: US
+  _BQ_LOCATION: EU
   _IMAGE_TAG: dev
 
 steps:

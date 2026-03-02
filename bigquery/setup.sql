@@ -41,7 +41,7 @@ DECLARE keep_objects ARRAY<STRING> DEFAULT [
   'gamebench_sessions_latest'
 ];
 
-CREATE SCHEMA IF NOT EXISTS `qa_metrics` OPTIONS(location="US");
+CREATE SCHEMA IF NOT EXISTS `qa_metrics` OPTIONS(location="EU");
 
 FOR obj IN (
   SELECT table_name, table_type
