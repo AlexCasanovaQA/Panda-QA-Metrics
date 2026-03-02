@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import os
 import time
+import logging
 from typing import Any, Dict, List, Optional
 
 import requests
 from flask import jsonify
 
-from bq import get_client, insert_rows, run_query, table_ref
+from bq import get_client, insert_rows, run_query, table_ref, validate_bq_env
 from time_utils import to_rfc3339, utc_now
+
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigError(ValueError):
@@ -358,92 +362,125 @@ def hello_http(request):
     if request.method not in ("POST", "GET"):
         return ("Method not allowed", 405)
 
+    current_phase = "config"
+    current_project_id: Optional[str] = None
+    bq_dataset = (os.environ.get("BQ_DATASET") or "qa_metrics_simple").strip()
+    bq_location = (os.environ.get("BQ_LOCATION") or "EU").strip()
+
     try:
+        validate_bq_env()
         config = _validate_bugsnag_config()
-    except ConfigError as e:
-        return jsonify({"status": "error", "error": str(e)}), 400
 
-    base_url = config["base_url"]
-    token = config["token"]
-    project_ids = config["project_ids"]
+        base_url = config["base_url"]
+        token = config["token"]
+        project_ids = config["project_ids"]
 
-    # Cloud Scheduler HTTP jobs often default to a 3-minute attempt deadline.
-    # Keep a safety buffer so the function can serialize and return before
-    # Scheduler marks the attempt as DEADLINE_EXCEEDED.
-    max_runtime_s = int(os.environ.get("BUGSNAG_MAX_RUNTIME_S", "150"))
-    deadline = time.time() + max(30, min(max_runtime_s, 160))
+        # Cloud Scheduler HTTP jobs often default to a 3-minute attempt deadline.
+        # Keep a safety buffer so the function can serialize and return before
+        # Scheduler marks the attempt as DEADLINE_EXCEEDED.
+        max_runtime_s = int(os.environ.get("BUGSNAG_MAX_RUNTIME_S", "150"))
+        deadline = time.time() + max(30, min(max_runtime_s, 160))
 
-    ingest_ts = to_rfc3339(utc_now())
-    client = get_client()
-    _ensure_bugsnag_run_table()
+        ingest_ts = to_rfc3339(utc_now())
+        current_phase = "bq_setup"
+        client = get_client()
+        _ensure_bugsnag_run_table()
 
-    total_inserted = 0
-    total_source_errors = 0
-    rate_limited_projects: List[str] = []
-    deadline_projects: List[str] = []
-    failed_projects: List[Dict[str, str]] = []
+        total_inserted = 0
+        total_source_errors = 0
+        rate_limited_projects: List[str] = []
+        deadline_projects: List[str] = []
+        failed_projects: List[Dict[str, str]] = []
 
-    for project_id in project_ids:
-        if time.time() >= deadline:
-            deadline_projects.append(str(project_id))
-            continue
+        current_phase = "api_bugsnag"
+        for project_id in project_ids:
+            current_project_id = str(project_id)
+            if time.time() >= deadline:
+                deadline_projects.append(str(project_id))
+                continue
 
-        try:
-            errors, was_rl, hit_deadline = _list_errors(base_url, project_id, token, deadline_epoch=deadline)
-            if was_rl:
-                rate_limited_projects.append(project_id)
-            if hit_deadline:
-                deadline_projects.append(project_id)
-
-            total_source_errors += len(errors)
-            rows: List[Dict[str, Any]] = [_parse_error(e, ingest_ts, project_id) for e in errors]
-            if not rows and not was_rl and not hit_deadline:
-                rows = [_empty_project_snapshot(ingest_ts, project_id)]
-
-            for i in range(0, len(rows), 500):
-                if time.time() >= deadline:
+            try:
+                errors, was_rl, hit_deadline = _list_errors(base_url, project_id, token, deadline_epoch=deadline)
+                if was_rl:
+                    rate_limited_projects.append(project_id)
+                if hit_deadline:
                     deadline_projects.append(project_id)
-                    break
-                total_inserted += insert_rows(client, "bugsnag_errors", rows[i : i + 500])
 
-        except Exception as e:
-            failed_projects.append({"project_id": str(project_id), "error": str(e)})
+                total_source_errors += len(errors)
+                rows: List[Dict[str, Any]] = [_parse_error(e, ingest_ts, project_id) for e in errors]
+                if not rows and not was_rl and not hit_deadline:
+                    rows = [_empty_project_snapshot(ingest_ts, project_id)]
 
-    if not failed_projects:
-        status = "ok"
-    elif len(failed_projects) == len(project_ids):
-        status = "error"
-    else:
-        status = "partial"
+                current_phase = "bq_write"
+                for i in range(0, len(rows), 500):
+                    if time.time() >= deadline:
+                        deadline_projects.append(project_id)
+                        break
+                    total_inserted += insert_rows(client, "bugsnag_errors", rows[i : i + 500])
+                current_phase = "api_bugsnag"
 
-    _insert_bugsnag_run_marker(
-        client,
-        run_ts=ingest_ts,
-        status=status,
-        inserted_rows=total_inserted,
-        rate_limited_projects=rate_limited_projects,
-        deadline_projects=deadline_projects,
-    )
+            except Exception as e:
+                failed_projects.append({"project_id": str(project_id), "error": str(e)})
 
-    kpi_computed = False
-    kpi_refresh_without_changes = False
-    ingest_completed = not failed_projects and not rate_limited_projects and not deadline_projects
-    if ingest_completed and time.time() < deadline - 10:
-        _compute_bugsnag_kpis()
-        kpi_computed = True
-        kpi_refresh_without_changes = total_source_errors == 0
+        if not failed_projects:
+            status = "ok"
+        elif len(failed_projects) == len(project_ids):
+            status = "error"
+        else:
+            status = "partial"
 
-    status = "ok" if ingest_completed else "partial"
+        current_phase = "bq_run_marker"
+        _insert_bugsnag_run_marker(
+            client,
+            run_ts=ingest_ts,
+            status=status,
+            inserted_rows=total_inserted,
+            rate_limited_projects=rate_limited_projects,
+            deadline_projects=deadline_projects,
+        )
 
-    return jsonify(
-        {
-            "status": status,
-            "inserted_rows": total_inserted,
-            "kpi_computed": kpi_computed,
-            "kpi_refresh_without_changes": kpi_refresh_without_changes,
-            "source_errors_seen": total_source_errors,
-            "rate_limited_projects": rate_limited_projects,
-            "deadline_projects": deadline_projects,
-            "failed_projects": failed_projects,
-        }
-    )
+        kpi_computed = False
+        kpi_refresh_without_changes = False
+        ingest_completed = not failed_projects and not rate_limited_projects and not deadline_projects
+        if ingest_completed and time.time() < deadline - 10:
+            current_phase = "kpis"
+            _compute_bugsnag_kpis()
+            kpi_computed = True
+            kpi_refresh_without_changes = total_source_errors == 0
+
+        status = "ok" if ingest_completed else "partial"
+
+        return jsonify(
+            {
+                "status": status,
+                "inserted_rows": total_inserted,
+                "kpi_computed": kpi_computed,
+                "kpi_refresh_without_changes": kpi_refresh_without_changes,
+                "source_errors_seen": total_source_errors,
+                "rate_limited_projects": rate_limited_projects,
+                "deadline_projects": deadline_projects,
+                "failed_projects": failed_projects,
+            }
+        )
+    except ConfigError as e:
+        logger.warning(
+            "bugsnag config error",
+            extra={
+                "phase": current_phase,
+                "project_id": current_project_id,
+                "bq_dataset": bq_dataset,
+                "bq_location": bq_location,
+            },
+        )
+        return jsonify({"status": "error", "error": str(e)}), 400
+    except Exception as e:
+        logger.exception(
+            "bugsnag ingest failed",
+            extra={
+                "phase": current_phase,
+                "project_id": current_project_id,
+                "bq_dataset": bq_dataset,
+                "bq_location": bq_location,
+            },
+        )
+        return jsonify({"status": "error", "error": str(e)}), 500

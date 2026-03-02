@@ -20,6 +20,7 @@ Optional env vars:
 BigQuery dataset defaults:
 - BQ_PROJECT = GOOGLE_CLOUD_PROJECT
 - BQ_DATASET = qa_metrics_simple
+- BQ_LOCATION = (optional; auto-detected from dataset metadata when unset)
 
 Deploy settings:
 - Function target (entrypoint): hello_http
@@ -35,7 +36,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import requests
 from flask import jsonify
 
-from bq import get_bq_dataset, get_bq_location, get_bq_project, get_client, insert_rows, run_query, table_ref
+from bq import get_bq_dataset, get_bq_location, get_bq_project, get_client, insert_rows, run_query, table_ref, validate_bq_env
 from time_utils import jira_to_rfc3339, to_rfc3339, utc_now
 
 
@@ -777,6 +778,8 @@ GROUP BY fixv;
 # -----------------------------
 
 def hello_http(request):
+    validate_bq_env()
+
     LOGGER.info(
         "hello_http_start",
         extra={

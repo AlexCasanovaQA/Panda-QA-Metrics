@@ -51,7 +51,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import requests
 from flask import jsonify
 
-from bq import fetch_rows, get_client, insert_rows, run_query, table_ref
+from bq import fetch_rows, get_client, insert_rows, run_query, table_ref, validate_bq_env
 from time_utils import to_rfc3339, utc_now
 
 
@@ -543,6 +543,7 @@ FROM latest_build;
 
 def hello_http(request):
     try:
+        validate_bq_env()
         inserted, skipped_sessions = ingest_gamebench()
         kpi_status = "ok"
         try:
