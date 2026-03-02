@@ -149,7 +149,12 @@ view: qa_executive_kpis {
 
   dimension: is_overall { type: yesno sql: ${dimensions_json} = '{}' ;; }
 
-  measure: kpi_value { label: "KPI Value" type: max sql: ${TABLE}.value ;; }
+  measure: kpi_value {
+    label: "KPI Value"
+    type: max
+    sql: ${TABLE}.value ;;
+    value_format: "#,##0.##"
+  }
 
   measure: kpi_value_percent {
     label: "KPI Value (%)"
