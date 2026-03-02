@@ -325,10 +325,11 @@
     - name: exec05_06_bugs_by_severity_pivot
       title: "EXEC-05 — Bugs entered by severity ⓘ"
       note_text: "Distribución de bugs creados por severidad según el rango de fechas seleccionado."
-      type: looker_grid
+      type: looker_pie
       model: panda_qa_metrics
       explore: qa_executive_kpis
-      fields: [qa_executive_kpis.severity, qa_executive_kpis.kpi_value]
+      fields: [qa_executive_kpis.metric_id, qa_executive_kpis.severity, qa_executive_kpis.kpi_value]
+      pivots: [qa_executive_kpis.severity]
       filters:
         qa_executive_kpis.metric_id: "EXEC-05"
         qa_executive_kpis.severity: "-NULL"
