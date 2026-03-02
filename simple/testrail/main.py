@@ -377,19 +377,33 @@ FROM (
 -- EXEC-16: pass rate (last 7d, UTC)
 INSERT INTO `{kpi_table}`
   (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
-WITH agg AS (
+WITH calendar AS (
+  SELECT day AS metric_date
+  FROM UNNEST(GENERATE_DATE_ARRAY(start7, today)) AS day
+),
+daily AS (
   SELECT
+    DATE(COALESCE(created_on, ingest_timestamp), "UTC") AS metric_date,
     COUNT(DISTINCT IF(status_id = 1, COALESCE(result_id, test_id), NULL)) AS passed,
     COUNT(DISTINCT IF(status_id IN ({",".join(map(str, EXECUTED_STATUS_IDS))}), COALESCE(result_id, test_id), NULL)) AS executed
   FROM `{tr_table}`
   WHERE COALESCE(created_on, ingest_timestamp) IS NOT NULL
     AND DATE(COALESCE(created_on, ingest_timestamp), "UTC") BETWEEN start7 AND today
+  GROUP BY metric_date
+),
+agg AS (
+  SELECT
+    c.metric_date,
+    IFNULL(d.passed, 0) AS passed,
+    IFNULL(d.executed, 0) AS executed
+  FROM calendar c
+  LEFT JOIN daily d USING (metric_date)
 )
 SELECT
   CURRENT_TIMESTAMP(),
   "EXEC-16",
   "Pass rate (last 7d, UTC)",
-  today,
+  metric_date,
   start7,
   today,
   "{{}}",
@@ -397,7 +411,8 @@ SELECT
   passed * 1.0,
   executed * 1.0,
   "TestRail"
-FROM agg;
+FROM agg
+ORDER BY metric_date;
 
 -- EXEC-17: BVT pass rate (latest Basic BVT run)
 INSERT INTO `{kpi_table}`
