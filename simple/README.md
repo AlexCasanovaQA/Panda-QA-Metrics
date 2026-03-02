@@ -49,12 +49,20 @@ Use that exact location value for `BQ_LOCATION` in each service.
 
 ### 2) Fallback behavior (friendly + stable mirror)
 
-Cuando falle la fuente primaria por dataset/región (ej: `Dataset ... was not found in location ...`):
+En los ingests de `/simple`, el fallback de BigQuery ya es **automático** cuando la operación
+falla por dataset no encontrado o mismatch de región (ej: `Dataset ... was not found in location ...`).
 
-1. Mostrar mensaje amigable: **"Data not available right now"**.
-2. Cambiar temporalmente el origen del explore a la tabla espejo estable:
-   - `qa-panda-metrics.qa_metrics_simple_mirror.qa_executive_kpis_latest`
-3. Abrir incidente de configuración y validar `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION`.
+- Dataset primario: `BQ_DATASET` (default: `qa_metrics_simple`).
+- Dataset fallback: `BQ_DATASET_FALLBACK`.
+  - Si no defines `BQ_DATASET_FALLBACK`, se usa automáticamente `<BQ_DATASET>_mirror`
+    (por ejemplo `qa_metrics_simple_mirror`).
+  - Para desactivar fallback, define `BQ_DATASET_FALLBACK` en vacío (`""`).
+
+Si primario y fallback fallan, la request falla reportando ambos errores para facilitar diagnóstico.
+
+Para observabilidad, se emite evento estructurado adicional cuando se usa fallback:
+
+- `BQ_DATASET_FALLBACK_USED operation=<query|insert> project=<...> primary_dataset=<...> fallback_dataset=<...> location=<...> primary_error=<...>`
 
 ### 3) Monitoring/alerting for dataset-not-found regressions
 
