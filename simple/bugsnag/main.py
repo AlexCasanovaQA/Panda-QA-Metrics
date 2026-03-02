@@ -239,6 +239,7 @@ def _empty_project_snapshot(ingest_ts: str, project_id: str) -> Dict[str, Any]:
 
 
 def _compute_bugsnag_kpis() -> None:
+    """Compute BugSnag KPIs using the latest ingested snapshot (best effort)."""
     client = get_client()
     bugsnag_table = table_ref("bugsnag_errors")
     runs_table = table_ref("bugsnag_ingest_runs")
@@ -457,17 +458,17 @@ def hello_http(request):
                 failed_projects.append({"project_id": str(project_id), "error": str(e)})
 
         if not failed_projects:
-            status = "ok"
+            run_status = "ok"
         elif len(failed_projects) == len(project_ids):
-            status = "error"
+            run_status = "error"
         else:
-            status = "partial"
+            run_status = "partial"
 
         current_phase = "bq_run_marker"
         _insert_bugsnag_run_marker(
             client,
             run_ts=ingest_ts,
-            status=status,
+            status=run_status,
             inserted_rows=total_inserted,
             rate_limited_projects=rate_limited_projects,
             deadline_projects=deadline_projects,
@@ -475,20 +476,23 @@ def hello_http(request):
 
         kpi_computed = False
         kpi_refresh_without_changes = False
+        # KPI policy: best effort. Compute whenever there is at least a usable
+        # subset of this run (rows inserted from errors and/or empty snapshots).
         ingest_completed = not failed_projects and not rate_limited_projects and not deadline_projects
-        if ingest_completed and time.time() < deadline - 10:
+        has_usable_subset = total_inserted > 0
+        kpi_partial_coverage = has_usable_subset and not ingest_completed
+        if has_usable_subset and time.time() < deadline - 10:
             current_phase = "kpis"
             _compute_bugsnag_kpis()
             kpi_computed = True
             kpi_refresh_without_changes = total_source_errors == 0
 
-        status = "ok" if ingest_completed else "partial"
-
         return jsonify(
             {
-                "status": status,
+                "status": run_status,
                 "inserted_rows": total_inserted,
                 "kpi_computed": kpi_computed,
+                "kpi_partial_coverage": kpi_partial_coverage,
                 "kpi_refresh_without_changes": kpi_refresh_without_changes,
                 "source_errors_seen": total_source_errors,
                 "rate_limited_projects": rate_limited_projects,
