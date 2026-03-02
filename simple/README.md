@@ -125,8 +125,8 @@ Para evitar tiles vacíos cuando el dashboard se filtra por una fecha sin cálcu
 Resumen actual:
 
 - **Respetan `As Of Date`**: `EXEC-01`, `EXEC-02`, `EXEC-03`, `EXEC-04`, `EXEC-18`, `EXEC-19`.
-- **Respetan `Trend Range`**: `EXEC-08`, `EXEC-09`, `EXEC-11`, `EXEC-12`, `EXEC-13`, `EXEC-15`, `EXEC-16` (tile trend), `EXEC-22`, `EXEC-23`.
-- **Siempre latest (sin listener `As Of Date`)**: `EXEC-05`, `EXEC-06`, `EXEC-07`, `EXEC-10`, `EXEC-14`, `EXEC-16` (single value), `EXEC-17`, `EXEC-18/20` (pivot), `EXEC-21`, `EXEC-24`.
+- **Respetan `Trend Range`**: `EXEC-05`, `EXEC-07`, `EXEC-08`, `EXEC-09`, `EXEC-11`, `EXEC-12`, `EXEC-13`, `EXEC-15`, `EXEC-16` (tile trend), `EXEC-22`, `EXEC-23`.
+- **Siempre latest (sin listener `As Of Date`)**: `EXEC-06`, `EXEC-10`, `EXEC-14`, `EXEC-16` (single value), `EXEC-17`, `EXEC-18/20` (pivot), `EXEC-21`, `EXEC-24`.
 
 ### 1) Element identification in Looker (`77c0972751e263ff96782c74cc0a25c8`)
 

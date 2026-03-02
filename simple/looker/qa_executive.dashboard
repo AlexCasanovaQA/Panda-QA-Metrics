@@ -260,9 +260,9 @@
       width: 6
       height: 2
 
-    - name: exec16_pass_rate_last_7d
-      title: "EXEC-16 — Pass rate (last 7d) ⓘ"
-      note_text: "Pass rate diario de ejecución de pruebas (últimos 7 días)."
+    - name: exec16_pass_rate
+      title: "EXEC-16 — Pass rate ⓘ"
+      note_text: "Pass rate diario de ejecución de pruebas según el rango de fechas seleccionado."
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -323,16 +323,14 @@
       height: 1
 
     - name: exec05_06_bugs_by_severity_pivot
-      title: "EXEC-05/06 — Bugs entered by severity (7d vs 30d) ⓘ"
-      note_text: "Comparativa de bugs creados por severidad en ventana 7d vs 30d."
+      title: "EXEC-05 — Bugs entered by severity ⓘ"
+      note_text: "Distribución de bugs creados por severidad según el rango de fechas seleccionado."
       type: looker_grid
       model: panda_qa_metrics
       explore: qa_executive_kpis
-      fields: [qa_executive_kpis.severity, qa_executive_kpis.metric_id, qa_executive_kpis.kpi_value]
-      pivots: [qa_executive_kpis.metric_id]
+      fields: [qa_executive_kpis.severity, qa_executive_kpis.kpi_value]
       filters:
-        qa_executive_kpis.metric_id: "EXEC-05,EXEC-06"
-        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
+        qa_executive_kpis.metric_id: "EXEC-05"
         qa_executive_kpis.severity: "-NULL"
       sorts: [qa_executive_kpis.severity]
       limit: 500
@@ -350,8 +348,8 @@
       height: 4
 
     - name: exec08_bugs_by_day_priority
-      title: "EXEC-08 — Bugs entered by day (last 7d) — Priority ⓘ"
-      note_text: "Tendencia diaria de bugs creados durante los últimos 7 días por prioridad."
+      title: "EXEC-08 — Bugs entered by day — Priority ⓘ"
+      note_text: "Tendencia diaria de bugs creados por prioridad según el rango de fechas seleccionado."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -502,15 +500,14 @@
       height: 5
 
     - name: exec07_bugs_fixed_last_7d_by_priority
-      title: "EXEC-07 — Bugs fixed (last 7d) by priority ⓘ"
-      note_text: "Bugs corregidos en los últimos 7 días, agrupados por prioridad."
+      title: "EXEC-07 — Bugs fixed by priority ⓘ"
+      note_text: "Bugs corregidos agrupados por prioridad según el rango de fechas seleccionado."
       type: looker_bar
       model: panda_qa_metrics
       explore: qa_executive_kpis
       fields: [qa_executive_kpis.priority, qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-07"
-        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.priority: "-NULL"
       sorts: [qa_executive_kpis.kpi_value desc]
       limit: 50
@@ -528,8 +525,8 @@
       height: 4
 
     - name: exec12_reopened_over_time_30d
-      title: "EXEC-12 — Reopened over time (30d) ⓘ"
-      note_text: "Cantidad de bugs reabiertos por día en ventana de 30 días."
+      title: "EXEC-12 — Reopened over time ⓘ"
+      note_text: "Cantidad de bugs reabiertos por día según el rango de fechas seleccionado."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -552,8 +549,8 @@
       height: 4
 
     - name: exec13_fix_fail_rate_over_time
-      title: "EXEC-13 — Fix fail rate over time (30d) ⓘ"
-      note_text: "Porcentaje de fix fail por día en ventana de 30 días."
+      title: "EXEC-13 — Fix fail rate over time ⓘ"
+      note_text: "Porcentaje de fix fail por día según el rango de fechas seleccionado."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -588,8 +585,8 @@
       height: 1
 
     - name: exec15_test_cases_executed_by_day
-      title: "EXEC-15 — Test cases executed by day (last 7d) ⓘ"
-      note_text: "Casos de prueba ejecutados por día (últimos 7 días)."
+      title: "EXEC-15 — Test cases executed by day ⓘ"
+      note_text: "Casos de prueba ejecutados por día según el rango de fechas seleccionado."
       type: looker_column
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -612,8 +609,8 @@
       height: 4
 
     - name: exec16_pass_rate_trend
-      title: "EXEC-16 — Pass rate (last 7d) ⓘ"
-      note_text: "Pass rate diario de ejecución de pruebas (últimos 7 días)."
+      title: "EXEC-16 — Pass rate ⓘ"
+      note_text: "Pass rate diario de ejecución de pruebas según el rango de fechas seleccionado."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -674,9 +671,9 @@
       width: 24
       height: 4
 
-    - name: exec21_new_errors_last_7d
-      title: "EXEC-21 — New errors (last 7d) ⓘ"
-      note_text: "Errores nuevos detectados durante los últimos 7 días."
+    - name: exec21_new_errors
+      title: "EXEC-21 — New errors ⓘ"
+      note_text: "Errores nuevos detectados según el rango de fechas seleccionado."
       type: single_value
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -711,9 +708,9 @@
       width: 24
       height: 1
 
-    - name: exec22_median_fps_last_7d
-      title: "EXEC-22 — Median FPS over time (last 7d) by platform ⓘ"
-      note_text: "Tendencia del FPS mediano por plataforma (últimos 7 días)."
+    - name: exec22_median_fps
+      title: "EXEC-22 — Median FPS over time by platform ⓘ"
+      note_text: "Tendencia del FPS mediano por plataforma según el rango de fechas seleccionado."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
@@ -738,9 +735,9 @@
       width: 12
       height: 4
 
-    - name: exec23_fps_stability_last_7d
-      title: "EXEC-23 — FPS stability % over time (last 7d) by platform ⓘ"
-      note_text: "Tendencia del porcentaje de estabilidad FPS por plataforma (últimos 7 días)."
+    - name: exec23_fps_stability
+      title: "EXEC-23 — FPS stability % over time by platform ⓘ"
+      note_text: "Tendencia del porcentaje de estabilidad FPS por plataforma según el rango de fechas seleccionado."
       type: looker_line
       model: panda_qa_metrics
       explore: qa_executive_kpis
