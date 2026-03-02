@@ -73,6 +73,7 @@ steps:
       - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_JIRA_SERVICE}:$SHORT_SHA"
       - "--region=${_REGION}"
       - "--platform=managed"
+      - "--update-env-vars=BQ_PROJECT=$PROJECT_ID,BQ_DATASET=qa_metrics_simple,BQ_LOCATION=EU"
       - "--no-allow-unauthenticated"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
