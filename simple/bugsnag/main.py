@@ -182,6 +182,24 @@ def _parse_error(e: Dict[str, Any], ingest_ts: str, project_id: str) -> Dict[str
     }
 
 
+def _empty_project_snapshot(ingest_ts: str, project_id: str) -> Dict[str, Any]:
+    """Placeholder row to persist a refresh run with no current errors for a project."""
+    return {
+        "ingest_timestamp": ingest_ts,
+        "project_id": str(project_id),
+        "error_id": None,
+        "error_class": None,
+        "message": None,
+        "severity": None,
+        "status": None,
+        "first_seen": None,
+        "last_seen": None,
+        "events": None,
+        "users": None,
+        "release_stages": [],
+    }
+
+
 def _compute_bugsnag_kpis() -> None:
     client = get_client()
     bugsnag_table = table_ref("bugsnag_errors")
@@ -313,6 +331,7 @@ def hello_http(request):
     client = get_client()
 
     total_inserted = 0
+    total_source_errors = 0
     rate_limited_projects: List[str] = []
     deadline_projects: List[str] = []
     failed_projects: List[Dict[str, str]] = []
@@ -329,7 +348,10 @@ def hello_http(request):
             if hit_deadline:
                 deadline_projects.append(project_id)
 
+            total_source_errors += len(errors)
             rows: List[Dict[str, Any]] = [_parse_error(e, ingest_ts, project_id) for e in errors]
+            if not rows and not was_rl and not hit_deadline:
+                rows = [_empty_project_snapshot(ingest_ts, project_id)]
 
             for i in range(0, len(rows), 500):
                 if time.time() >= deadline:
@@ -341,17 +363,22 @@ def hello_http(request):
             failed_projects.append({"project_id": str(project_id), "error": str(e)})
 
     kpi_computed = False
-    if total_inserted > 0 and time.time() < deadline - 10:
+    kpi_refresh_without_changes = False
+    ingest_completed = not failed_projects and not rate_limited_projects and not deadline_projects
+    if ingest_completed and time.time() < deadline - 10:
         _compute_bugsnag_kpis()
         kpi_computed = True
+        kpi_refresh_without_changes = total_source_errors == 0
 
-    status = "ok" if not failed_projects else "partial"
+    status = "ok" if ingest_completed else "partial"
 
     return jsonify(
         {
             "status": status,
             "inserted_rows": total_inserted,
             "kpi_computed": kpi_computed,
+            "kpi_refresh_without_changes": kpi_refresh_without_changes,
+            "source_errors_seen": total_source_errors,
             "rate_limited_projects": rate_limited_projects,
             "deadline_projects": deadline_projects,
             "failed_projects": failed_projects,
