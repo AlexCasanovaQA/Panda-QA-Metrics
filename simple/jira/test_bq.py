@@ -1,11 +1,14 @@
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).resolve().parent))
+import importlib.util
 import os
+from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 
-import bq
+_BQ_PATH = Path(__file__).resolve().parent / "bq.py"
+_SPEC = importlib.util.spec_from_file_location("jira_bq", _BQ_PATH)
+bq = importlib.util.module_from_spec(_SPEC)
+assert _SPEC and _SPEC.loader
+_SPEC.loader.exec_module(bq)
 
 
 class ResolveQueryLocationTests(unittest.TestCase):
@@ -30,15 +33,20 @@ class ResolveQueryLocationTests(unittest.TestCase):
             self.assertEqual(bq.resolve_query_location(client), "europe-west2")
             client.get_dataset.assert_called_once_with("demo-proj.qa_metrics_simple")
 
-    def test_validate_bq_env_requires_location(self):
+    def test_validate_bq_env_allows_missing_location(self):
         env = {
             "BQ_PROJECT": "demo-proj",
             "BQ_DATASET": "qa_metrics_simple",
         }
         with patch.dict(os.environ, env, clear=True):
-            with self.assertRaises(RuntimeError) as ctx:
-                bq.validate_bq_env()
-        self.assertIn("BQ_LOCATION", str(ctx.exception))
+            self.assertEqual(
+                bq.validate_bq_env(),
+                {
+                    "project": "demo-proj",
+                    "dataset": "qa_metrics_simple",
+                    "location": "",
+                },
+            )
 
 
 if __name__ == "__main__":
