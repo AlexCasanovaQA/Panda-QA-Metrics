@@ -337,8 +337,7 @@
       type: looker_pie
       model: panda_qa_metrics
       explore: qa_executive_kpis
-      fields: [qa_executive_kpis.metric_id, qa_executive_kpis.severity, qa_executive_kpis.kpi_value]
-      pivots: [qa_executive_kpis.severity]
+      fields: [qa_executive_kpis.severity, qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-05"
         qa_executive_kpis.severity: "-NULL"
