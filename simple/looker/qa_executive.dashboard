@@ -86,6 +86,7 @@
     - name: intro
       type: text
       title_text: "QA Executive"
+      body_text: "Usa los filtros y pasa el ratón por el icono ⓘ de cada KPI para ver su definición abreviada."
       row: 0
       col: 0
       width: 24
