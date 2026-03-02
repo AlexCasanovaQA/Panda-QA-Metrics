@@ -38,5 +38,15 @@ class ExistingSessionIdsTest(unittest.TestCase):
         self.assertIn("BQ_PROJECT/BQ_DATASET/BQ_LOCATION", message)
 
 
+class ValidateBqEnvCompatTest(unittest.TestCase):
+    def test_skips_validation_when_helper_missing(self):
+        with mock.patch.object(main.bq, "validate_bq_env", new=None, create=True):
+            with self.assertLogs(main.logger, level="WARNING") as logs:
+                result = main._validate_bq_env_compat()
+
+        self.assertEqual(result, {})
+        self.assertTrue(any("validation helper not found" in m for m in logs.output))
+
+
 if __name__ == "__main__":
     unittest.main()

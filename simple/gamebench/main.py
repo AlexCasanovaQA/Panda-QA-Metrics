@@ -51,8 +51,28 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import requests
 from flask import jsonify
 
-from bq import fetch_rows, get_client, insert_rows, run_query, table_ref, validate_bq_env
+import bq
 from time_utils import to_rfc3339, utc_now
+
+
+fetch_rows = bq.fetch_rows
+get_client = bq.get_client
+insert_rows = bq.insert_rows
+run_query = bq.run_query
+table_ref = bq.table_ref
+
+
+def _validate_bq_env_compat() -> Dict[str, str]:
+    """Run startup BQ validation when available.
+
+    Older deployments may still load a `bq.py` variant without `validate_bq_env`.
+    In that case we keep the service bootable and preserve backward-compatible behavior.
+    """
+    validator = getattr(bq, "validate_bq_env", None)
+    if callable(validator):
+        return validator()
+    logger.warning("BQ_STARTUP_CONFIG validation helper not found in bq.py; skipping strict env validation")
+    return {}
 
 
 logger = logging.getLogger(__name__)
@@ -543,7 +563,7 @@ FROM latest_build;
 
 def hello_http(request):
     try:
-        validate_bq_env()
+        _validate_bq_env_compat()
         inserted, skipped_sessions = ingest_gamebench()
         kpi_status = "ok"
         try:
