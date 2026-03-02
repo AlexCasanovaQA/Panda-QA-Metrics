@@ -16,14 +16,20 @@
   filters:
     - name: As Of Date
       title: "As Of Date"
-      type: date_filter
+      type: field_filter
+      model: panda_qa_metrics
+      explore: qa_executive_kpis
+      field: qa_executive_kpis.metric_date
       default_value: "today"
       allow_multiple_values: false
       required: false
 
     - name: Trend Range
       title: "Trend Range"
-      type: date_filter
+      type: field_filter
+      model: panda_qa_metrics
+      explore: qa_executive_kpis
+      field: qa_executive_kpis.metric_date
       default_value: "30 days"
       allow_multiple_values: false
       required: false
