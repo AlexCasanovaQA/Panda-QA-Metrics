@@ -1,10 +1,5 @@
 view: jira_changelog {
-  sql_table_name:
-    {% if _in_development %}
-      `@{QA_METRICS_SIMPLE_DEV_PROJECT}.@{QA_METRICS_SIMPLE_DEV_DATASET}.jira_changelog`
-    {% else %}
-      `@{QA_METRICS_SIMPLE_PROD_PROJECT}.@{QA_METRICS_SIMPLE_PROD_DATASET}.jira_changelog`
-    {% endif %} ;;
+  sql_table_name: `qa-panda-metrics.qa_metrics_simple.jira_changelog` ;;
 
   dimension_group: change_timestamp {
     type: time
