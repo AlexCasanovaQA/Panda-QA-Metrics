@@ -51,7 +51,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import requests
 from flask import jsonify
 
-from bq import get_bq_location, get_client, insert_rows, run_query, table_ref
+from bq import fetch_rows, get_client, insert_rows, run_query, table_ref
 from time_utils import to_rfc3339, utc_now
 
 
@@ -336,7 +336,7 @@ def _existing_session_ids(client, lookback_days: int) -> set:
       WHERE time_pushed >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {lookback_days + 1} DAY)
     """
     existing = set()
-    for row in client.query(sql, location=get_bq_location()).result():
+    for row in fetch_rows(client, sql):
         existing.add(row[0])
     return existing
 

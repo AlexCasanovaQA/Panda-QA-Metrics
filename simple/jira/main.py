@@ -28,14 +28,18 @@ Deploy settings:
 from __future__ import annotations
 
 import base64
+import logging
 import os
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import requests
 from flask import jsonify
 
-from bq import get_client, insert_rows, run_query, table_ref
+from bq import get_bq_dataset, get_bq_location, get_bq_project, get_client, insert_rows, run_query, table_ref
 from time_utils import jira_to_rfc3339, to_rfc3339, utc_now
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class JiraAPIError(RuntimeError):
@@ -773,6 +777,17 @@ GROUP BY fixv;
 # -----------------------------
 
 def hello_http(request):
+    LOGGER.info(
+        "hello_http_start",
+        extra={
+            "json_fields": {
+                "bq_project": get_bq_project() or "<unset>",
+                "bq_dataset": get_bq_dataset() or "<unset>",
+                "bq_location": get_bq_location() or "<unset>",
+            }
+        },
+    )
+
     try:
         inserted_snap, inserted_chg = ingest_jira()
         _compute_jira_kpis()
@@ -794,5 +809,21 @@ def hello_http(request):
         # Jira 5xx is an upstream outage, so expose as bad gateway.
         status_code = 400 if 400 <= e.status_code < 500 else 502
         return jsonify({"status": "error", "error": str(e)}), status_code
+    except RuntimeError as e:
+        if "Data not available right now" in str(e):
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "error": (
+                            "Configuration issue detected for BigQuery. "
+                            "Please verify BQ_PROJECT, BQ_DATASET, and BQ_LOCATION."
+                        ),
+                        "details": str(e),
+                    }
+                ),
+                503,
+            )
+        return jsonify({"status": "error", "error": str(e)}), 500
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
