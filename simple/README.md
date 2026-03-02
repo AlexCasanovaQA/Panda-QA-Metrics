@@ -144,6 +144,8 @@ Comando oficial:
 gcloud builds submit --config simple/cloudbuild-simple.yaml .
 ```
 
+> Nota operativa: cualquier cambio de `BQ_PROJECT`, `BQ_DATASET` o `BQ_LOCATION` (por región/dataset) debe hacerse mediante **Cloud Build substitutions** en los YAML de `/simple`, nunca manualmente desde la consola de Cloud Run.
+
 Naming oficial de servicios Cloud Run (1 imagen por servicio):
 
 - `bugsnag-ingest-function`
