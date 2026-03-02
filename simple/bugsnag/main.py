@@ -247,6 +247,8 @@ def _compute_bugsnag_kpis() -> None:
     sql = f"""
 DECLARE today DATE DEFAULT CURRENT_DATE("UTC");
 DECLARE start7 DATE DEFAULT DATE_SUB(today, INTERVAL 6 DAY);
+DECLARE ingest_lookback_days INT64 DEFAULT 30;
+DECLARE ingest_start DATE DEFAULT DATE_SUB(today, INTERVAL ingest_lookback_days DAY);
 DECLARE latest_run_ts TIMESTAMP DEFAULT (
   SELECT MAX(run_ts) FROM `{runs_table}` WHERE source = "bugsnag"
 );
@@ -330,22 +332,39 @@ FROM snap
 WHERE LOWER(status) = "open"
 GROUP BY severity;
 
--- EXEC-21: New errors (last 7d, UTC) by first_seen
+-- EXEC-21: New errors detected in 7d (UTC), deduplicated across recent ingests.
+-- Uses a lookback ingest window to avoid depending only on the latest snapshot.
+CREATE TEMP TABLE exec21_recent_errors AS
+SELECT
+  error_id,
+  SAFE.TIMESTAMP(first_seen) AS first_seen_ts
+FROM `{bugsnag_table}`
+WHERE DATE(TIMESTAMP(ingest_timestamp), "UTC") BETWEEN ingest_start AND today
+  AND error_id IS NOT NULL;
+
+CREATE TEMP TABLE exec21_dedup AS
+SELECT
+  error_id,
+  MIN(first_seen_ts) AS first_seen_ts
+FROM exec21_recent_errors
+WHERE first_seen_ts IS NOT NULL
+GROUP BY error_id;
+
 INSERT INTO `{kpi_table}` (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 SELECT
   CURRENT_TIMESTAMP(),
   "EXEC-21",
-  "New errors (last 7d, UTC)",
+  "New errors detected (last 7d, UTC)",
   today,
   start7,
   today,
   "{{}}",
-  COUNT(DISTINCT error_id) * 1.0,
+  COUNT(*) * 1.0,
   NULL,
   NULL,
   "BugSnag"
-FROM snap
-WHERE DATE(first_seen, "UTC") BETWEEN start7 AND today;
+FROM exec21_dedup
+WHERE DATE(first_seen_ts, "UTC") BETWEEN start7 AND today;
 """
 
     run_query(client, sql, job_labels={"pipeline": "qa-metrics", "source": "bugsnag"})
