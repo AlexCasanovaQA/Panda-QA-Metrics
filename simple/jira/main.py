@@ -664,14 +664,17 @@ SELECT
 FROM active_now
 GROUP BY status;
 
--- EXEC-11 Active bug count over time (last 180d)
+-- Build a continuous day-by-day trend using the latest snapshot available
+-- at or before each day (avoids sparse/one-point trends when snapshots are irregular).
 CREATE TEMP TABLE daily_latest AS
 SELECT
-  DATE(snapshot_timestamp, "UTC") AS d,
-  MAX(snapshot_timestamp) AS ts
-FROM `{snap_table}`
-WHERE DATE(snapshot_timestamp, "UTC") BETWEEN start180 AND today
-GROUP BY d;
+  d,
+  (
+    SELECT MAX(s2.snapshot_timestamp)
+    FROM `{snap_table}` s2
+    WHERE DATE(s2.snapshot_timestamp, "UTC") <= d
+  ) AS ts
+FROM UNNEST(GENERATE_DATE_ARRAY(start180, today)) AS d;
 
 INSERT INTO `{kpi_table}`
 SELECT
@@ -682,13 +685,14 @@ SELECT
   start180,
   today,
   '{{}}',
-  COUNTIF(s.issue_type = 'Bug' AND LOWER(COALESCE(s.status_category, '')) != 'done') * 1.0,
+  COALESCE(COUNTIF(s.issue_type = 'Bug' AND LOWER(COALESCE(s.status_category, '')) != 'done') * 1.0, 0.0),
   NULL,
   NULL,
   'Jira'
 FROM daily_latest dl
-JOIN `{snap_table}` s
+LEFT JOIN `{snap_table}` s
   ON s.snapshot_timestamp = dl.ts
+WHERE dl.ts IS NOT NULL
 GROUP BY metric_date;
 
 -- EXEC-12 Reopened over time (30d, UTC)
