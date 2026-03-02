@@ -185,16 +185,21 @@ def _parse_error(e: Dict[str, Any], ingest_ts: str, project_id: str) -> Dict[str
 def _compute_bugsnag_kpis() -> None:
     client = get_client()
     bugsnag_table = table_ref("bugsnag_errors")
+    runs_table = table_ref("bugsnag_ingest_runs")
     kpi_table = table_ref("qa_executive_kpis")
 
     sql = f"""
 DECLARE today DATE DEFAULT CURRENT_DATE("UTC");
 DECLARE start7 DATE DEFAULT DATE_SUB(today, INTERVAL 6 DAY);
+DECLARE latest_run_ts TIMESTAMP DEFAULT (
+  SELECT MAX(run_ts) FROM `{runs_table}` WHERE source = "bugsnag"
+);
 
 CREATE TEMP TABLE snap AS
 SELECT *
 FROM `{bugsnag_table}`
-WHERE ingest_timestamp = (SELECT MAX(ingest_timestamp) FROM `{bugsnag_table}`);
+WHERE latest_run_ts IS NOT NULL
+  AND TIMESTAMP(ingest_timestamp) = latest_run_ts;
 
 -- EXEC-18: Active production errors (overall)
 INSERT INTO `{kpi_table}` (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
@@ -290,6 +295,47 @@ WHERE DATE(first_seen, "UTC") BETWEEN start7 AND today;
     run_query(client, sql, job_labels={"pipeline": "qa-metrics", "source": "bugsnag"})
 
 
+def _ensure_bugsnag_run_table() -> None:
+    client = get_client()
+    runs_table = table_ref("bugsnag_ingest_runs")
+    sql = f"""
+CREATE TABLE IF NOT EXISTS `{runs_table}` (
+  run_ts TIMESTAMP,
+  source STRING,
+  status STRING,
+  inserted_rows INT64,
+  rate_limited_projects ARRAY<STRING>,
+  deadline_projects ARRAY<STRING>
+);
+"""
+    run_query(client, sql, job_labels={"pipeline": "qa-metrics", "source": "bugsnag"})
+
+
+def _insert_bugsnag_run_marker(
+    client,
+    *,
+    run_ts: str,
+    status: str,
+    inserted_rows: int,
+    rate_limited_projects: List[str],
+    deadline_projects: List[str],
+) -> None:
+    insert_rows(
+        client,
+        "bugsnag_ingest_runs",
+        [
+            {
+                "run_ts": run_ts,
+                "source": "bugsnag",
+                "status": status,
+                "inserted_rows": inserted_rows,
+                "rate_limited_projects": sorted(set(rate_limited_projects)),
+                "deadline_projects": sorted(set(deadline_projects)),
+            }
+        ],
+    )
+
+
 def hello_http(request):
     if request.method not in ("POST", "GET"):
         return ("Method not allowed", 405)
@@ -311,6 +357,7 @@ def hello_http(request):
 
     ingest_ts = to_rfc3339(utc_now())
     client = get_client()
+    _ensure_bugsnag_run_table()
 
     total_inserted = 0
     rate_limited_projects: List[str] = []
@@ -340,12 +387,26 @@ def hello_http(request):
         except Exception as e:
             failed_projects.append({"project_id": str(project_id), "error": str(e)})
 
+    if not failed_projects:
+        status = "ok"
+    elif len(failed_projects) == len(project_ids):
+        status = "error"
+    else:
+        status = "partial"
+
+    _insert_bugsnag_run_marker(
+        client,
+        run_ts=ingest_ts,
+        status=status,
+        inserted_rows=total_inserted,
+        rate_limited_projects=rate_limited_projects,
+        deadline_projects=deadline_projects,
+    )
+
     kpi_computed = False
-    if total_inserted > 0 and time.time() < deadline - 10:
+    if time.time() < deadline - 10:
         _compute_bugsnag_kpis()
         kpi_computed = True
-
-    status = "ok" if not failed_projects else "partial"
 
     return jsonify(
         {
