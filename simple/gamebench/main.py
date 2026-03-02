@@ -448,6 +448,13 @@ def ingest_gamebench() -> Tuple[int, int]:
                 environment,
                 collection_id,
             )
+            logger.warning(
+                "GAMEBENCH_COLLECTION_FILTER_MISS environment=%s collection_id=%s packages=%s fallback_without_collection=%s",
+                environment,
+                collection_id,
+                grouped_packages,
+                True,
+            )
             grouped_sessions = gb.advanced_search_sessions(
                 packages=grouped_packages,
                 environment=environment,

@@ -17,6 +17,32 @@ Además, la búsqueda en GameBench separa filtros por `package` y `environment` 
 - Paquetes con `.internal.` (o sufijo `.internal`) => `environment=dev`
 - Resto => `environment=prod`
 
+### Evento adicional para alerting de collection filter miss
+
+Cuando una búsqueda inicial retorna vacía usando `GAMEBENCH_COLLECTION_ID`, el ingest emite dos eventos:
+
+- `GAMEBENCH_SEARCH_EMPTY_WITH_COLLECTION` (evento existente para contexto humano).
+- `GAMEBENCH_COLLECTION_FILTER_MISS` (evento estable sugerido para métricas/alertas).
+
+`GAMEBENCH_COLLECTION_FILTER_MISS` incluye campos estables en el payload de texto:
+
+- `environment=<dev|prod|...>`
+- `collection_id=<collection-id>`
+- `packages=[...]`
+- `fallback_without_collection=True`
+
+Filtro sugerido para métrica basada en logs (counter):
+
+```text
+resource.type="cloud_run_revision"
+textPayload:"GAMEBENCH_COLLECTION_FILTER_MISS"
+```
+
+Alerta sugerida por frecuencia:
+
+- Condición: `count >= N` en ventana de `1h` (por servicio).
+- Ejemplo inicial: `N=5` en `1h` para detectar regresiones del filtro de colección sin ruido excesivo.
+
 ## BigQuery runbook único (source of truth para región)
 
 Regla única para `/simple`: **la región efectiva viene de `BQ_LOCATION` inyectada en deploy** (Cloud Run env vars).
