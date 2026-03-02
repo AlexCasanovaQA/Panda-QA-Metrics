@@ -5,6 +5,9 @@ substitutions:
   _JIRA_SERVICE: jira-ingest-function
   _TESTRAIL_SERVICE: testrail-ingest-function
   _GAMEBENCH_SERVICE: gamebench-ingest-function
+  _BQ_PROJECT: qa-panda-metrics-dev
+  _BQ_DATASET: qa_metrics_simple
+  _BQ_LOCATION: EU
 
 steps:
   # Build one immutable image per service from the shared simple/Dockerfile
@@ -63,6 +66,7 @@ steps:
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
+      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
@@ -74,6 +78,7 @@ steps:
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
+      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
@@ -85,6 +90,7 @@ steps:
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
+      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
@@ -96,6 +102,7 @@ steps:
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
+      - "--set-env-vars=BQ_PROJECT=${_BQ_PROJECT},BQ_DATASET=${_BQ_DATASET},BQ_LOCATION=${_BQ_LOCATION}"
 
   # Validate service runtime config and startup logs resolve the expected source file.
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
