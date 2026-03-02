@@ -41,6 +41,37 @@ def get_bq_location() -> Optional[str]:
     return v or None
 
 
+def validate_bq_env() -> Dict[str, str]:
+    """Log effective BigQuery config and fail fast when required values are missing."""
+    project = get_bq_project()
+    dataset = get_bq_dataset()
+    location = get_bq_location() or ""
+
+    LOGGER.info(
+        "BQ_STARTUP_CONFIG project=%s dataset=%s location=%s",
+        project or "<unset>",
+        dataset or "<unset>",
+        location or "<unset>",
+    )
+
+    missing: List[str] = []
+    if not project:
+        missing.append("BQ_PROJECT (or GOOGLE_CLOUD_PROJECT/GCP_PROJECT/GCLOUD_PROJECT)")
+    if not dataset:
+        missing.append("BQ_DATASET")
+    if not location:
+        missing.append("BQ_LOCATION")
+
+    if missing:
+        raise RuntimeError(
+            "Missing required BigQuery configuration: "
+            + ", ".join(missing)
+            + ". Set all of BQ_PROJECT, BQ_DATASET and BQ_LOCATION in Cloud Run env vars."
+        )
+
+    return {"project": project, "dataset": dataset, "location": location}
+
+
 def table_ref(table: str, dataset: Optional[str] = None) -> str:
     project = get_bq_project()
     dataset_name = dataset or get_bq_dataset()
