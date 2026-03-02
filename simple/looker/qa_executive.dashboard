@@ -86,17 +86,6 @@
     - name: intro
       type: text
       title_text: "QA Executive"
-      body_text: |
-        **How to read this dashboard**
-        - Top rows are the *headline KPIs* (overall scope).
-        - Sections below provide breakdowns and trends. Use dashboard filters to slice by POD / Feature / Release / Sprint / Severity / Priority.
-        - Each KPI title includes an info icon (ⓘ). Hover to see a short definition.
-
-        **Fallback when data is unavailable**
-        - Default deployment target is **europe-west1** with `BQ_LOCATION=EU` across model/explore/dashboard assets.
-        - If a tile returns empty/error due to dataset-region mismatch (`dataset not found`), show friendly status: **"Data not available right now"**.
-        - For business continuity, switch Explore to stable mirror table: `qa-panda-metrics.qa_metrics_simple_mirror.qa_executive_kpis_latest`.
-        - Incident tracking reference: Looker frontend element id `77c0972751e263ff96782c74cc0a25c8` (runtime UI id, not persisted in LookML).
       row: 0
       col: 0
       width: 24
