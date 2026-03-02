@@ -1,5 +1,10 @@
 view: gamebench_sessions {
-  sql_table_name: `qa-panda-metrics.qa_metrics_simple.gamebench_sessions` ;;
+  sql_table_name:
+    {% if _in_development %}
+      `@{QA_METRICS_SIMPLE_DEV_PROJECT}.@{QA_METRICS_SIMPLE_DEV_DATASET}.gamebench_sessions`
+    {% else %}
+      `@{QA_METRICS_SIMPLE_PROD_PROJECT}.@{QA_METRICS_SIMPLE_PROD_DATASET}.gamebench_sessions`
+    {% endif %} ;;
 
   dimension_group: time_pushed {
     type: time

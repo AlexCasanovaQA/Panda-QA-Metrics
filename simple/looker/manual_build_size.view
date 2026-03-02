@@ -1,5 +1,10 @@
 view: manual_build_size {
-  sql_table_name: `qa-panda-metrics.qa_metrics_simple.manual_build_size` ;;
+  sql_table_name:
+    {% if _in_development %}
+      `@{QA_METRICS_SIMPLE_DEV_PROJECT}.@{QA_METRICS_SIMPLE_DEV_DATASET}.manual_build_size`
+    {% else %}
+      `@{QA_METRICS_SIMPLE_PROD_PROJECT}.@{QA_METRICS_SIMPLE_PROD_DATASET}.manual_build_size`
+    {% endif %} ;;
 
   dimension_group: metric_date {
     type: time
