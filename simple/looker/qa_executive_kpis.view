@@ -33,13 +33,13 @@ view: qa_executive_kpis {
   # IMPORTANT: DATE (not dimension_group) to prevent DATE >= TIMESTAMP errors
   dimension: metric_date {
     type: date
-    sql: ${TABLE}.metric_date ;;
+    sql: TIMESTAMP(${TABLE}.metric_date) ;;
   }
 
   dimension: metric_date_raw {
     hidden: yes
     type: date
-    sql: ${TABLE}.metric_date ;;
+    sql: TIMESTAMP(${TABLE}.metric_date) ;;
   }
 
   dimension: metric_id {

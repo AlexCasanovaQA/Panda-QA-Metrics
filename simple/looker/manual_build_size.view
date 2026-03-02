@@ -4,7 +4,7 @@ view: manual_build_size {
   dimension_group: metric_date {
     type: time
     timeframes: [date, week, month, year]
-    sql: ${TABLE}.metric_date ;;
+    sql: TIMESTAMP(${TABLE}.metric_date) ;;
   }
 
   dimension: platform { type: string sql: ${TABLE}.platform ;; }
