@@ -104,6 +104,7 @@
     - name: intro
       type: text
       title_text: "QA Executive"
+      body_text: "Usa los filtros y pasa el ratón por el icono ⓘ de cada KPI para ver su definición abreviada."
       row: 0
       col: 0
       width: 24
@@ -134,8 +135,15 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        As Of Date: qa_executive_kpis.metric_date
+        Trend Range: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Platform: qa_executive_kpis.platform
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 4
       col: 0
       width: 6
@@ -154,8 +162,15 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        As Of Date: qa_executive_kpis.metric_date
+        Trend Range: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Platform: qa_executive_kpis.platform
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 4
       col: 6
       width: 6
@@ -174,8 +189,15 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        As Of Date: qa_executive_kpis.metric_date
+        Trend Range: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Platform: qa_executive_kpis.platform
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 4
       col: 12
       width: 6
@@ -194,8 +216,15 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        As Of Date: qa_executive_kpis.metric_date
+        Trend Range: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Platform: qa_executive_kpis.platform
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 4
       col: 18
       width: 6
@@ -226,8 +255,15 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        As Of Date: qa_executive_kpis.metric_date
+        Trend Range: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Platform: qa_executive_kpis.platform
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 7
       col: 0
       width: 6
@@ -246,8 +282,15 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        As Of Date: qa_executive_kpis.metric_date
+        Trend Range: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Platform: qa_executive_kpis.platform
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 7
       col: 6
       width: 6
@@ -268,6 +311,13 @@
       limit: 1
       listen:
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Platform: qa_executive_kpis.platform
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 7
       col: 12
       width: 6
@@ -288,6 +338,13 @@
       limit: 1
       listen:
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Platform: qa_executive_kpis.platform
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 7
       col: 18
       width: 6
@@ -326,6 +383,8 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 10
       col: 0
       width: 24
@@ -352,6 +411,8 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 14
       col: 0
       width: 24
@@ -390,6 +451,7 @@
         Severity: qa_executive_kpis.severity
         Priority: qa_executive_kpis.priority
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
       row: 20
       col: 0
       width: 12
@@ -507,6 +569,8 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 34
       col: 0
       width: 12
@@ -531,6 +595,8 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 34
       col: 12
       width: 12
@@ -555,6 +621,8 @@
         Sprint: qa_executive_kpis.sprint
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 38
       col: 0
       width: 24
@@ -589,6 +657,10 @@
         Feature: qa_executive_kpis.feature
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 43
       col: 0
       width: 12
@@ -611,6 +683,10 @@
         Feature: qa_executive_kpis.feature
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 43
       col: 12
       width: 12
@@ -645,6 +721,12 @@
       listen:
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 48
       col: 0
       width: 24
@@ -666,6 +748,12 @@
       listen:
         Platform: qa_executive_kpis.platform
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 52
       col: 0
       width: 24
@@ -700,6 +788,13 @@
       listen:
         Trend Range: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Platform: qa_executive_kpis.platform
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 55
       col: 0
       width: 12
@@ -722,6 +817,13 @@
       listen:
         Trend Range: qa_executive_kpis.metric_date
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Platform: qa_executive_kpis.platform
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 55
       col: 12
       width: 12
@@ -741,6 +843,13 @@
       limit: 50
       listen:
         Privacy: qa_executive_kpis.privacy_level
+        POD: qa_executive_kpis.pod
+        Feature: qa_executive_kpis.feature
+        Release: qa_executive_kpis.release
+        Sprint: qa_executive_kpis.sprint
+        Platform: qa_executive_kpis.platform
+        Severity: qa_executive_kpis.severity
+        Priority: qa_executive_kpis.priority
       row: 59
       col: 0
       width: 24
