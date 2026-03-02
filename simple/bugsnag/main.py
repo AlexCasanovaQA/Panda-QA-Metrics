@@ -273,7 +273,12 @@ SELECT
   "BugSnag"
 FROM snap
 WHERE LOWER(status) = "open"
-  AND "Production" IN UNNEST(IFNULL(release_stages, []));
+  -- Avoid exact match because release stage casing can vary across projects/sources.
+  AND EXISTS (
+    SELECT 1
+    FROM UNNEST(IFNULL(release_stages, [])) AS stage
+    WHERE LOWER(stage) IN ("production", "prod")
+  );
 
 -- EXEC-18: Breakdown by severity
 INSERT INTO `{kpi_table}` (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
@@ -291,7 +296,12 @@ SELECT
   "BugSnag"
 FROM snap
 WHERE LOWER(status) = "open"
-  AND "Production" IN UNNEST(IFNULL(release_stages, []))
+  -- Avoid exact match because release stage casing can vary across projects/sources.
+  AND EXISTS (
+    SELECT 1
+    FROM UNNEST(IFNULL(release_stages, [])) AS stage
+    WHERE LOWER(stage) IN ("production", "prod")
+  )
 GROUP BY severity;
 
 -- EXEC-19: High/Critical active errors (overall, open)
