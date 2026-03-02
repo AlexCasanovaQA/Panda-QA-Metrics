@@ -1,5 +1,13 @@
 connection: "qa-panda-metrics-exp"
 
+# Environment-aware BigQuery routing for the /simple scope.
+constant: QA_METRICS_SIMPLE_PROD_PROJECT { value: "qa-panda-metrics" }
+constant: QA_METRICS_SIMPLE_PROD_DATASET { value: "qa_metrics_simple" }
+
+# TODO: update DEV values if your development project/dataset differs.
+constant: QA_METRICS_SIMPLE_DEV_PROJECT { value: "qa-panda-metrics" }
+constant: QA_METRICS_SIMPLE_DEV_DATASET { value: "qa_metrics_simple" }
+
 include: "/scopely_panda/views/qa_metrics/*.view.lkml"
 include: "/scopely_panda/views/qa_metrics/simple/*.view.lkml"
 include: "/scopely_panda/dashboards/qa_metrics/*.dashboard.lookml"

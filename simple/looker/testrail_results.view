@@ -1,5 +1,10 @@
 view: testrail_results {
-  sql_table_name: `qa-panda-metrics.qa_metrics_simple.testrail_results` ;;
+  sql_table_name:
+    {% if _in_development %}
+      `@{QA_METRICS_SIMPLE_DEV_PROJECT}.@{QA_METRICS_SIMPLE_DEV_DATASET}.testrail_results`
+    {% else %}
+      `@{QA_METRICS_SIMPLE_PROD_PROJECT}.@{QA_METRICS_SIMPLE_PROD_DATASET}.testrail_results`
+    {% endif %} ;;
 
   dimension_group: created_on {
     type: time

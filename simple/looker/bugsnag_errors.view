@@ -1,5 +1,10 @@
 view: bugsnag_errors {
-  sql_table_name: `qa-panda-metrics.qa_metrics_simple.bugsnag_errors` ;;
+  sql_table_name:
+    {% if _in_development %}
+      `@{QA_METRICS_SIMPLE_DEV_PROJECT}.@{QA_METRICS_SIMPLE_DEV_DATASET}.bugsnag_errors`
+    {% else %}
+      `@{QA_METRICS_SIMPLE_PROD_PROJECT}.@{QA_METRICS_SIMPLE_PROD_DATASET}.bugsnag_errors`
+    {% endif %} ;;
 
   dimension_group: ingest_timestamp {
     type: time

@@ -6,7 +6,12 @@
 # - Expose metric_date as DATE to avoid DATE >= TIMESTAMP BigQuery errors.
 
 view: qa_executive_kpis {
-  sql_table_name: `qa-panda-metrics.qa_metrics_simple.qa_executive_kpis_latest` ;;
+  sql_table_name:
+    {% if _in_development %}
+      `@{QA_METRICS_SIMPLE_DEV_PROJECT}.@{QA_METRICS_SIMPLE_DEV_DATASET}.qa_executive_kpis_latest`
+    {% else %}
+      `@{QA_METRICS_SIMPLE_PROD_PROJECT}.@{QA_METRICS_SIMPLE_PROD_DATASET}.qa_executive_kpis_latest`
+    {% endif %} ;;
 
   dimension: kpi_key {
     primary_key: yes
