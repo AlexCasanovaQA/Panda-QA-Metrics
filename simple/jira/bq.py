@@ -20,7 +20,9 @@ def get_bq_project() -> str:
 
 
 def get_bq_dataset() -> str:
-    return os.environ.get("BQ_DATASET", "qa_metrics_simple").strip()
+    value = os.environ.get("BQ_DATASET")
+    value = str(value).strip() if value is not None else ""
+    return value or "qa_metrics_simple"
 
 
 def get_bq_dataset_fallback() -> Optional[str]:
@@ -36,7 +38,7 @@ def get_bq_dataset_fallback() -> Optional[str]:
 
 
 def get_bq_location() -> Optional[str]:
-    v = os.environ.get("BQ_LOCATION", "EU")
+    v = os.environ.get("BQ_LOCATION", "")
     v = str(v).strip() if v is not None else ""
     return v or None
 
@@ -59,13 +61,11 @@ def validate_bq_env() -> Dict[str, str]:
         missing.append("BQ_PROJECT (or GOOGLE_CLOUD_PROJECT/GCP_PROJECT/GCLOUD_PROJECT)")
     if not dataset:
         missing.append("BQ_DATASET")
-    if not location:
-        missing.append("BQ_LOCATION")
     if missing:
         raise RuntimeError(
             "Missing required BigQuery configuration: "
             + ", ".join(missing)
-            + ". Set all of BQ_PROJECT, BQ_DATASET and BQ_LOCATION in Cloud Run env vars."
+            + ". Set BQ_PROJECT and BQ_DATASET in Cloud Run env vars (BQ_LOCATION is optional)."
         )
 
     return {"project": project, "dataset": dataset, "location": location}
