@@ -39,6 +39,33 @@ bq show --format=prettyjson <PROJECT_ID>:qa_metrics_simple | jq -r '.location'
 
 Use that exact location value for `BQ_LOCATION` in each service.
 
+### Testrail quick-fix runbook (BQ dataset/location mismatch)
+
+Para incidentes en `testrail-ingest-function` con `BQ_DATASET_NOT_FOUND_ALERT`, usa este script:
+
+```bash
+simple/scripts/fix_testrail_bq_config.sh
+```
+
+El script ejecuta en orden:
+
+1. Inspección de env vars efectivas en Cloud Run: `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION`.
+2. Verificación del dataset real vía `bq show --format=prettyjson <PROJECT>:<DATASET>` y lectura de `.location`.
+3. Alineación automática de valores finales de `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION`.
+4. Re-deploy de `testrail-ingest-function` conservando `--source=testrail/main.py`.
+5. Validación en logs: desaparición de `BQ_DATASET_NOT_FOUND_ALERT` y retorno de invocaciones `POST 200`.
+
+Overrides útiles:
+
+```bash
+PROJECT_ID=qa-panda-metrics \
+REGION=europe-west1 \
+TARGET_BQ_PROJECT=qa-panda-metrics \
+TARGET_BQ_DATASET=qa_metrics_simple \
+TARGET_BQ_LOCATION=EU \
+simple/scripts/fix_testrail_bq_config.sh
+```
+
 ## Dashboard/Explore fallback and incident mapping (`/simple`)
 
 ### 1) Element identification in Looker (`77c0972751e263ff96782c74cc0a25c8`)
