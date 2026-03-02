@@ -153,7 +153,10 @@ view: qa_executive_kpis {
     label: "KPI Value"
     type: max
     sql: ${TABLE}.value ;;
-    value_format: "#,##0.##"
+    # Some Looker runtimes reject custom value_format masks as unsupported
+    # (e.g., reporting "unsupported format |#,##0.##|").
+    # Use a built-in format name for compatibility.
+    value_format_name: "decimal_2"
   }
 
   measure: kpi_value_percent {
