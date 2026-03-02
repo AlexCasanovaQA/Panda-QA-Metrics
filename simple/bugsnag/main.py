@@ -242,7 +242,6 @@ def _compute_bugsnag_kpis() -> None:
     """Compute BugSnag KPIs using the latest ingested snapshot (best effort)."""
     client = get_client()
     bugsnag_table = table_ref("bugsnag_errors")
-    runs_table = table_ref("bugsnag_ingest_runs")
     kpi_table = table_ref("qa_executive_kpis")
 
     sql = f"""
@@ -251,7 +250,7 @@ DECLARE start7 DATE DEFAULT DATE_SUB(today, INTERVAL 6 DAY);
 DECLARE ingest_lookback_days INT64 DEFAULT 90;
 DECLARE ingest_start DATE DEFAULT DATE_SUB(today, INTERVAL ingest_lookback_days DAY);
 DECLARE latest_run_ts TIMESTAMP DEFAULT (
-  SELECT MAX(run_ts) FROM `{runs_table}` WHERE source = "bugsnag"
+  SELECT MAX(TIMESTAMP(ingest_timestamp)) FROM `{bugsnag_table}`
 );
 
 CREATE TEMP TABLE snap AS
@@ -383,7 +382,6 @@ WHERE DATE(first_seen_ts, "UTC") BETWEEN start7 AND today;
 
 def _ensure_bugsnag_run_table() -> None:
     client = get_client()
-    runs_table = table_ref("bugsnag_ingest_runs")
     sql = f"""
 CREATE TABLE IF NOT EXISTS `{runs_table}` (
   run_ts TIMESTAMP,
@@ -518,12 +516,13 @@ def hello_http(request):
 
         kpi_computed = False
         kpi_refresh_without_changes = False
-        # KPI policy: best effort. Compute whenever there is at least a usable
-        # subset of this run (rows inserted from errors and/or empty snapshots).
+        # KPI policy: best effort. Compute with the latest available BugSnag snapshot
+        # when this run is not fully failed/rate-limited/deadline-blocked.
         ingest_completed = not failed_projects and not rate_limited_projects and not deadline_projects
         has_usable_subset = total_inserted > 0
+        has_snapshot_context = len(failed_projects) < len(project_ids)
         kpi_partial_coverage = has_usable_subset and not ingest_completed
-        if has_usable_subset and time.time() < deadline - 10:
+        if has_snapshot_context and time.time() < deadline - 10:
             current_phase = "kpis"
             _compute_bugsnag_kpis()
             kpi_computed = True
