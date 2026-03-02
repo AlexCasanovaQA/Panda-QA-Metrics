@@ -248,7 +248,7 @@ def _compute_bugsnag_kpis() -> None:
     sql = f"""
 DECLARE today DATE DEFAULT CURRENT_DATE("UTC");
 DECLARE start7 DATE DEFAULT DATE_SUB(today, INTERVAL 6 DAY);
-DECLARE ingest_lookback_days INT64 DEFAULT 30;
+DECLARE ingest_lookback_days INT64 DEFAULT 90;
 DECLARE ingest_start DATE DEFAULT DATE_SUB(today, INTERVAL ingest_lookback_days DAY);
 DECLARE latest_run_ts TIMESTAMP DEFAULT (
   SELECT MAX(run_ts) FROM `{runs_table}` WHERE source = "bugsnag"

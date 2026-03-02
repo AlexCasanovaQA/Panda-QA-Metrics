@@ -538,7 +538,7 @@ def hello_http(request):
         api_key = config["api_key"]
         project_ids = _get_project_ids()
 
-        lookback_days = int(os.environ.get("TESTRAIL_LOOKBACK_DAYS", "30").strip() or "30")
+        lookback_days = int(os.environ.get("TESTRAIL_LOOKBACK_DAYS", "90").strip() or "90")
         lookback_days = max(1, min(lookback_days, 365))
         bvt_suite = os.environ.get("TESTRAIL_BVT_SUITE_NAME", "Basic BVT").strip() or "Basic BVT"
 

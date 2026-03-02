@@ -24,7 +24,7 @@ Optional:
 - GAMEBENCH_APP_PACKAGES     CSV defaults to
                               com.scopely.internal.wwedomination,
                               com.scopely.wwedomination
-- GAMEBENCH_LOOKBACK_DAYS    default 7
+- GAMEBENCH_LOOKBACK_DAYS    default 90
 - GAMEBENCH_AUTH_MODE        'basic' (default) or 'bearer'
 
 Package/environment filtering:
@@ -394,7 +394,7 @@ def ingest_gamebench() -> Tuple[int, int]:
 
     company_id = os.environ.get("GAMEBENCH_COMPANY_ID", "AWGaWNjXBxsUazsJuoUp") or None
     collection_id = os.environ.get("GAMEBENCH_COLLECTION_ID") or None
-    lookback_days = int(os.environ.get("GAMEBENCH_LOOKBACK_DAYS", "7"))
+    lookback_days = int(os.environ.get("GAMEBENCH_LOOKBACK_DAYS", "90"))
 
     end_dt = utc_now()
     start_dt = end_dt - datetime.timedelta(days=lookback_days)

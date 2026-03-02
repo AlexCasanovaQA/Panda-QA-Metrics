@@ -15,7 +15,7 @@ Required env vars / secrets:
 Optional env vars:
 - JIRA_SEVERITY_FIELD  default customfield_10074
 - JIRA_POD_FIELD       default customfield_10001
-- JIRA_LOOKBACK_DAYS   default 30
+- JIRA_LOOKBACK_DAYS   default 90
 
 BigQuery dataset defaults:
 - BQ_PROJECT = GOOGLE_CLOUD_PROJECT
@@ -286,7 +286,7 @@ def ingest_jira() -> Tuple[int, int]:
     api_token = config["api_token"]
 
     project_keys = _split_csv(config["project_keys"])
-    lookback_days = int(os.environ.get("JIRA_LOOKBACK_DAYS", "30"))
+    lookback_days = int(os.environ.get("JIRA_LOOKBACK_DAYS", "90"))
 
     severity_field = _first_non_empty("JIRA_SEVERITY_FIELD_ID", "JIRA_SEVERITY_FIELD") or "customfield_10074"
     pod_field = os.environ.get("JIRA_POD_FIELD", "customfield_10001").strip() or "customfield_10001"
