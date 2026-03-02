@@ -3,7 +3,7 @@ connection: "qa-panda-metrics-exp"
 
 # Local simple project assets (all focused on qa_metrics_simple dataset)
 include: "/scopely_panda/views/qa_metrics/simple/*.view.lkml"
-include: "/scopely_panda/dashboards/qa_metrics/*.dashboard.lookml"
+include: "/scopely_panda/dashboards/qa_metrics/simple/*.dashboard.lookml"
 
 
 explore: qa_executive_kpis {
