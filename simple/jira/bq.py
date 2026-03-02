@@ -29,8 +29,12 @@ def get_bq_dataset() -> str:
 
 
 def get_bq_location() -> Optional[str]:
-    """BigQuery location (e.g. EU, US). Defaults to EU for qa_metrics_simple."""
-    v = os.environ.get("BQ_LOCATION", "EU")
+    """BigQuery location (e.g. EU, US).
+
+    If BQ_LOCATION is not set, let the BigQuery client infer the dataset location.
+    This avoids false region-mismatch failures when teams use non-EU datasets.
+    """
+    v = os.environ.get("BQ_LOCATION")
     v = str(v).strip() if v is not None else ""
     return v or None
 
@@ -46,6 +50,31 @@ def table_ref(table: str) -> str:
 def get_client() -> bigquery.Client:
     project = get_bq_project() or None
     return bigquery.Client(project=project)
+
+
+def resolve_query_location(client: bigquery.Client) -> Optional[str]:
+    """Resolve the location to use for query jobs.
+
+    Priority:
+    1) Explicit BQ_LOCATION env var.
+    2) Dataset location from BigQuery metadata.
+    3) None (let BigQuery determine it).
+    """
+    configured = get_bq_location()
+    if configured:
+        return configured
+
+    project = get_bq_project()
+    dataset = get_bq_dataset()
+    if not project or not dataset:
+        return None
+
+    try:
+        dataset_obj = client.get_dataset(f"{project}.{dataset}")
+        return dataset_obj.location
+    except Exception as exc:  # best-effort lookup; downstream calls handle typed errors
+        LOGGER.warning("Unable to resolve dataset location from metadata: %s", exc)
+        return None
 
 
 def _is_dataset_not_found_error(exc: Exception) -> bool:
@@ -113,7 +142,7 @@ def run_query(
     if job_labels:
         job_config.labels = job_labels
     try:
-        job = client.query(sql, job_config=job_config, location=get_bq_location())
+        job = client.query(sql, job_config=job_config, location=resolve_query_location(client))
         job.result()  # wait
     except (NotFound, BadRequest) as exc:
         _raise_with_dataset_alert(exc)
@@ -121,7 +150,7 @@ def run_query(
 
 def fetch_scalar(client: bigquery.Client, sql: str) -> Any:
     try:
-        rows = list(client.query(sql, location=get_bq_location()).result())
+        rows = list(client.query(sql, location=resolve_query_location(client)).result())
     except (NotFound, BadRequest) as exc:
         _raise_with_dataset_alert(exc)
     if not rows:
