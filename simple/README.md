@@ -39,6 +39,21 @@ bq show --format=prettyjson <PROJECT_ID>:qa_metrics_simple | jq -r '.location'
 
 Use that exact location value for `BQ_LOCATION` in each service.
 
+### Quick fix for `gamebench-ingest-function`
+
+If you need to align env vars exactly with the real dataset location and validate end-to-end (`POST 200` + logs), run:
+
+```bash
+bash simple/scripts/align_gamebench_bq_env.sh
+```
+
+This script performs the same operational flow requested for incident response:
+1. Reads dataset location with `bq show ... | jq -r .location`.
+2. Prints current Cloud Run env vars.
+3. Updates `BQ_PROJECT`, `BQ_DATASET`, `BQ_LOCATION`.
+4. Executes authenticated manual `POST` (`dry_run`).
+5. Prints recent logs to confirm dataset-location errors are gone and request status returns `200`.
+
 ## Dashboard/Explore fallback and incident mapping (`/simple`)
 
 ### 1) Element identification in Looker (`77c0972751e263ff96782c74cc0a25c8`)
