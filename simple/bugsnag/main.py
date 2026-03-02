@@ -8,7 +8,12 @@ from typing import Any, Dict, List, Optional
 import requests
 from flask import jsonify
 
-from bq import get_client, insert_rows, run_query, table_ref, validate_bq_env
+from bq import get_client, insert_rows, run_query, table_ref
+
+try:
+    from bq import validate_bq_env as _validate_bq_env
+except ImportError:
+    _validate_bq_env = None
 from time_utils import to_rfc3339, utc_now
 
 
@@ -17,6 +22,35 @@ logger = logging.getLogger(__name__)
 
 class ConfigError(ValueError):
     """Raised when required service configuration is missing/invalid."""
+
+
+def validate_bq_env() -> Dict[str, str]:
+    """Backward-compatible BQ config validation when older bq.py is deployed."""
+    if _validate_bq_env is not None:
+        return _validate_bq_env()
+
+    project = os.environ.get("BQ_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT") or os.environ.get("GCLOUD_PROJECT")
+    project = str(project).strip() if project is not None else ""
+    dataset = str(os.environ.get("BQ_DATASET", "qa_metrics_simple")).strip()
+    location = str(os.environ.get("BQ_LOCATION", "EU")).strip()
+
+    logger.warning("validate_bq_env missing in bq.py; using legacy fallback validation")
+    missing = []
+    if not project:
+        missing.append("BQ_PROJECT (or GOOGLE_CLOUD_PROJECT/GCP_PROJECT/GCLOUD_PROJECT)")
+    if not dataset:
+        missing.append("BQ_DATASET")
+    if not location:
+        missing.append("BQ_LOCATION")
+
+    if missing:
+        raise RuntimeError(
+            "Missing required BigQuery configuration: "
+            + ", ".join(missing)
+            + ". Set all of BQ_PROJECT, BQ_DATASET and BQ_LOCATION in Cloud Run env vars."
+        )
+
+    return {"project": project, "dataset": dataset, "location": location}
 
 
 def _env(name: str, default: Optional[str] = None) -> str:
