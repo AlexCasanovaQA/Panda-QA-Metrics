@@ -20,7 +20,7 @@ Required env vars / secrets:
 
 Optional:
 - GAMEBENCH_COMPANY_ID       defaults to AWGaWNjXBxsUazsJuoUp
-- GAMEBENCH_COLLECTION_ID    defaults to 7cf80f11-6915-4e6c-b70c-4ad7ed44aaf9
+- GAMEBENCH_COLLECTION_ID    optional (no default); use only when validated for the current tenant
 - GAMEBENCH_APP_PACKAGES     CSV defaults to
                               com.scopely.internal.wwedomination,
                               com.scopely.wwedomination
@@ -393,7 +393,7 @@ def ingest_gamebench() -> Tuple[int, int]:
         raise ValueError("GAMEBENCH_APP_PACKAGES must contain at least one package")
 
     company_id = os.environ.get("GAMEBENCH_COMPANY_ID", "AWGaWNjXBxsUazsJuoUp") or None
-    collection_id = os.environ.get("GAMEBENCH_COLLECTION_ID", "7cf80f11-6915-4e6c-b70c-4ad7ed44aaf9") or None
+    collection_id = os.environ.get("GAMEBENCH_COLLECTION_ID") or None
     lookback_days = int(os.environ.get("GAMEBENCH_LOOKBACK_DAYS", "7"))
 
     end_dt = utc_now()
