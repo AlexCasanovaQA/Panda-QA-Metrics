@@ -691,7 +691,6 @@ SELECT
 FROM daily_latest dl
 LEFT JOIN `{snap_table}` s
   ON s.snapshot_timestamp = dl.ts
-WHERE dl.ts IS NOT NULL
 GROUP BY metric_date;
 
 -- EXEC-12 Reopened over time (90d, UTC)
