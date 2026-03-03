@@ -672,7 +672,7 @@
       height: 1
 
     - name: exec18_20_errors_by_severity_pivot
-      title: "EXEC-18/20 — Active production errors / Active errors by severity"
+      title: "EXEC-18/19/20 — Active production errors / High-Critical / Active errors by severity"
       note_text: "Active production errors (BugSnag)."
       note_display: hover
       type: looker_grid
@@ -681,7 +681,7 @@
       fields: [qa_executive_kpis.severity, qa_executive_kpis.metric_id, qa_executive_kpis.kpi_value]
       pivots: [qa_executive_kpis.metric_id]
       filters:
-        qa_executive_kpis.metric_id: "EXEC-18,EXEC-20"
+        qa_executive_kpis.metric_id: "EXEC-18,EXEC-19,EXEC-20"
         qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
         qa_executive_kpis.severity: "-NULL"
       sorts: [qa_executive_kpis.severity]
