@@ -136,5 +136,52 @@ class CollectionOptionalTest(unittest.TestCase):
         self.assertEqual(calls, [None])
 
 
+class CollectionDisableAcrossEnvironmentsTest(unittest.TestCase):
+    def test_disables_collection_filter_after_first_environment_miss(self):
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "GAMEBENCH_USER": "user@example.com",
+                "GAMEBENCH_TOKEN": "secret",
+                "GAMEBENCH_COLLECTION_ID": "collection-123",
+                "GAMEBENCH_APP_PACKAGES": "com.scopely.internal.wwedomination,com.scopely.wwedomination",
+                "GAMEBENCH_LOOKBACK_DAYS": "1",
+            },
+            clear=False,
+        ):
+            with mock.patch.object(main, "get_client", return_value=object()):
+                with mock.patch.object(main, "_existing_session_ids", return_value=set()):
+                    with mock.patch.object(main, "insert_rows", return_value=2):
+                        with mock.patch.object(main.GameBenchClient, "get_fps", return_value=[60.0]):
+                            with mock.patch.object(main.GameBenchClient, "get_fps_stability", return_value=[95.0]):
+                                calls = []
+
+                                def _search(self, **kwargs):  # noqa: ANN001
+                                    calls.append((kwargs.get("environment"), kwargs.get("collection_id")))
+                                    if kwargs.get("environment") == "dev" and kwargs.get("collection_id"):
+                                        return []
+                                    session_id = f"s-{kwargs.get('environment')}"
+                                    package = (
+                                        "com.scopely.internal.wwedomination"
+                                        if kwargs.get("environment") == "dev"
+                                        else "com.scopely.wwedomination"
+                                    )
+                                    return [{"sessionId": session_id, "appInfo": {"package": package}}]
+
+                                with mock.patch.object(main.GameBenchClient, "advanced_search_sessions", new=_search):
+                                    inserted, skipped = main.ingest_gamebench()
+
+        self.assertEqual(inserted, 2)
+        self.assertEqual(skipped, 0)
+        self.assertEqual(
+            calls,
+            [
+                ("dev", "collection-123"),
+                ("dev", None),
+                ("prod", None),
+            ],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
