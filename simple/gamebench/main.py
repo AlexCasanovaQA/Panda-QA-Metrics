@@ -595,20 +595,11 @@ DECLARE today DATE DEFAULT CURRENT_DATE("UTC");
 DECLARE start90 DATE DEFAULT DATE_SUB(today, INTERVAL 89 DAY);
 
 -- EXEC-22 Median FPS over time (last 90d, UTC) by platform
-INSERT INTO `{kpi_table}`
-  (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
+CREATE TEMP TABLE exec22_rows AS
 SELECT
-  CURRENT_TIMESTAMP(),
-  'EXEC-22',
-  'Median FPS over time (last 90d, UTC) by platform',
   d AS metric_date,
-  start90,
-  today,
-  TO_JSON_STRING(STRUCT(platform AS platform)),
-  APPROX_QUANTILES(median_fps, 2)[OFFSET(1)] * 1.0,
-  NULL,
-  NULL,
-  'GameBench'
+  platform,
+  APPROX_QUANTILES(median_fps, 2)[OFFSET(1)] * 1.0 AS value
 FROM (
   SELECT DATE(time_pushed, "UTC") AS d, platform, median_fps
   FROM `{gb_table}`
@@ -617,20 +608,44 @@ FROM (
 )
 GROUP BY d, platform;
 
--- EXEC-23 FPS stability % over time (last 90d, UTC) by platform
 INSERT INTO `{kpi_table}`
+  (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 SELECT
   CURRENT_TIMESTAMP(),
-  'EXEC-23',
-  'FPS stability % over time (last 90d, UTC) by platform',
-  d AS metric_date,
+  'EXEC-22',
+  'Median FPS over time (last 90d, UTC) by platform',
+  metric_date,
   start90,
   today,
   TO_JSON_STRING(STRUCT(platform AS platform)),
-  APPROX_QUANTILES(fps_stability_pct, 2)[OFFSET(1)] * 1.0,
+  value,
   NULL,
   NULL,
   'GameBench'
+FROM exec22_rows;
+
+INSERT INTO `{kpi_table}`
+  (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
+SELECT
+  CURRENT_TIMESTAMP(),
+  'EXEC-22',
+  'Median FPS over time (last 90d, UTC) by platform',
+  today,
+  start90,
+  today,
+  TO_JSON_STRING(STRUCT('unknown' AS platform)),
+  0.0,
+  NULL,
+  NULL,
+  'GameBench'
+WHERE NOT EXISTS (SELECT 1 FROM exec22_rows);
+
+-- EXEC-23 FPS stability % over time (last 90d, UTC) by platform
+CREATE TEMP TABLE exec23_rows AS
+SELECT
+  d AS metric_date,
+  platform,
+  APPROX_QUANTILES(fps_stability_pct, 2)[OFFSET(1)] * 1.0 AS value
 FROM (
   SELECT DATE(time_pushed, "UTC") AS d, platform, fps_stability_pct
   FROM `{gb_table}`
@@ -638,6 +653,36 @@ FROM (
     AND fps_stability_pct IS NOT NULL
 )
 GROUP BY d, platform;
+
+INSERT INTO `{kpi_table}`
+SELECT
+  CURRENT_TIMESTAMP(),
+  'EXEC-23',
+  'FPS stability % over time (last 90d, UTC) by platform',
+  metric_date,
+  start90,
+  today,
+  TO_JSON_STRING(STRUCT(platform AS platform)),
+  value,
+  NULL,
+  NULL,
+  'GameBench'
+FROM exec23_rows;
+
+INSERT INTO `{kpi_table}`
+SELECT
+  CURRENT_TIMESTAMP(),
+  'EXEC-23',
+  'FPS stability % over time (last 90d, UTC) by platform',
+  today,
+  start90,
+  today,
+  TO_JSON_STRING(STRUCT('unknown' AS platform)),
+  0.0,
+  NULL,
+  NULL,
+  'GameBench'
+WHERE NOT EXISTS (SELECT 1 FROM exec23_rows);
 
 -- EXEC-24 Current build size by platform (manual)
 CREATE TEMP TABLE latest_build AS
@@ -659,6 +704,21 @@ SELECT
   NULL,
   'Manual'
 FROM latest_build;
+
+INSERT INTO `{kpi_table}`
+SELECT
+  CURRENT_TIMESTAMP(),
+  'EXEC-24',
+  'Current build size by platform (manual)',
+  today,
+  today,
+  today,
+  TO_JSON_STRING(STRUCT('unknown' AS platform)),
+  0.0,
+  NULL,
+  NULL,
+  'Manual'
+WHERE NOT EXISTS (SELECT 1 FROM latest_build);
 """
 
     run_query(client, sql, job_labels={"pipeline": "qa-metrics", "source": "gamebench"})

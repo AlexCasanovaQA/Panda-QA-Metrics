@@ -325,6 +325,14 @@ WHERE LOWER(status) = "open"
   AND LOWER(COALESCE(severity, "")) IN ("critical","error");
 
 -- EXEC-20: Active errors by severity (open)
+CREATE TEMP TABLE exec20_by_severity AS
+SELECT
+  COALESCE(severity, "unknown") AS severity,
+  COUNT(*) * 1.0 AS value
+FROM snap
+WHERE LOWER(status) = "open"
+GROUP BY severity;
+
 INSERT INTO `{kpi_table}` (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 SELECT
   CURRENT_TIMESTAMP(),
@@ -333,14 +341,28 @@ SELECT
   today,
   today,
   today,
-  TO_JSON_STRING(STRUCT(COALESCE(severity, "unknown") AS severity)),
-  COUNT(*) * 1.0,
+  TO_JSON_STRING(STRUCT(severity AS severity)),
+  value,
   NULL,
   NULL,
   "BugSnag"
-FROM snap
-WHERE LOWER(status) = "open"
-GROUP BY severity;
+FROM exec20_by_severity;
+
+-- Ensure Looker always has one row to render when there are no active errors.
+INSERT INTO `{kpi_table}` (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
+SELECT
+  CURRENT_TIMESTAMP(),
+  "EXEC-20",
+  "Active errors by severity",
+  today,
+  today,
+  today,
+  TO_JSON_STRING(STRUCT("unknown" AS severity)),
+  0.0,
+  NULL,
+  NULL,
+  "BugSnag"
+WHERE NOT EXISTS (SELECT 1 FROM exec20_by_severity);
 
 -- EXEC-21: New errors detected in 90d (UTC), deduplicated across recent ingests.
 -- Uses a lookback ingest window to avoid depending only on the latest snapshot.
