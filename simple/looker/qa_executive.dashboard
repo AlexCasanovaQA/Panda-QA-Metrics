@@ -399,7 +399,7 @@
       title: "EXEC-09 — Active bugs by POD"
       note_text: "Distribution of active bugs by POD."
       note_state: collapsed
-      type: looker_bar
+      type: looker_pie
       model: panda_qa_metrics
       explore: qa_executive_kpis
       fields: [qa_executive_kpis.pod, qa_executive_kpis.kpi_value]
@@ -409,6 +409,8 @@
         qa_executive_kpis.pod: "-NULL"
       sorts: [qa_executive_kpis.kpi_value desc]
       limit: 100
+      show_value_labels: true
+      label_type: labPer
       listen:
         Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
@@ -426,7 +428,7 @@
       title: "EXEC-10 — Active bugs by status"
       note_text: "Distribution of active bugs by status."
       note_state: collapsed
-      type: looker_bar
+      type: looker_pie
       model: panda_qa_metrics
       explore: qa_executive_kpis
       fields: [qa_executive_kpis.status, qa_executive_kpis.kpi_value]
@@ -436,6 +438,8 @@
         qa_executive_kpis.status: "-NULL"
       sorts: [qa_executive_kpis.kpi_value desc]
       limit: 100
+      show_value_labels: true
+      label_type: labPer
       listen:
         Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
@@ -453,7 +457,7 @@
       title: "EXEC-14 — Active bugs by milestone (fixVersion)"
       note_text: "Active bugs by fixVersion/milestone."
       note_state: collapsed
-      type: looker_bar
+      type: looker_pie
       model: panda_qa_metrics
       explore: qa_executive_kpis
       fields: [qa_executive_kpis.fix_version, qa_executive_kpis.kpi_value]
@@ -463,6 +467,8 @@
         qa_executive_kpis.fix_version: "-NULL"
       sorts: [qa_executive_kpis.kpi_value desc]
       limit: 100
+      show_value_labels: true
+      label_type: labPer
       listen:
         Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
@@ -517,7 +523,7 @@
       title: "EXEC-07 — Bugs fixed by priority"
       note_text: "Bugs fixed grouped by priority for the selected date range."
       note_state: collapsed
-      type: looker_bar
+      type: looker_pie
       model: panda_qa_metrics
       explore: qa_executive_kpis
       fields: [qa_executive_kpis.priority, qa_executive_kpis.kpi_value]
@@ -526,6 +532,8 @@
         qa_executive_kpis.priority: "-NULL"
       sorts: [qa_executive_kpis.kpi_value desc]
       limit: 50
+      show_value_labels: true
+      label_type: labPer
       listen:
         Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
