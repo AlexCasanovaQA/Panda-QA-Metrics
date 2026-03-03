@@ -638,6 +638,7 @@ SELECT
   NULL,
   NULL,
   'GameBench'
+FROM (SELECT 1) AS guard
 WHERE NOT EXISTS (SELECT 1 FROM exec22_rows);
 
 -- EXEC-23 FPS stability % over time (last 90d, UTC) by platform
@@ -682,6 +683,7 @@ SELECT
   NULL,
   NULL,
   'GameBench'
+FROM (SELECT 1) AS guard
 WHERE NOT EXISTS (SELECT 1 FROM exec23_rows);
 
 -- EXEC-24 Current build size by platform (manual)
@@ -718,6 +720,7 @@ SELECT
   NULL,
   NULL,
   'Manual'
+FROM (SELECT 1) AS guard
 WHERE NOT EXISTS (SELECT 1 FROM latest_build);
 """
 
