@@ -382,6 +382,7 @@ WHERE DATE(first_seen_ts, "UTC") BETWEEN start7 AND today;
 
 def _ensure_bugsnag_run_table() -> None:
     client = get_client()
+    runs_table = table_ref("bugsnag_ingest_runs")
     sql = f"""
 CREATE TABLE IF NOT EXISTS `{runs_table}` (
   run_ts TIMESTAMP,
