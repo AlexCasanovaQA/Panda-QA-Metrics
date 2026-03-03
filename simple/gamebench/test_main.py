@@ -49,6 +49,9 @@ class ValidateBqEnvCompatTest(unittest.TestCase):
 
 
 class CollectionFallbackTest(unittest.TestCase):
+    def setUp(self):
+        main._COLLECTION_FILTER_DISABLED = False
+
     def test_retries_without_collection_when_first_search_returns_empty(self):
         with mock.patch.dict(
             "os.environ",
@@ -97,6 +100,9 @@ class CollectionFallbackTest(unittest.TestCase):
 
 
 class CollectionOptionalTest(unittest.TestCase):
+    def setUp(self):
+        main._COLLECTION_FILTER_DISABLED = False
+
     def test_does_not_retry_when_collection_is_not_configured(self):
         with mock.patch.dict(
             "os.environ",
@@ -137,6 +143,9 @@ class CollectionOptionalTest(unittest.TestCase):
 
 
 class CollectionDisableAcrossEnvironmentsTest(unittest.TestCase):
+    def setUp(self):
+        main._COLLECTION_FILTER_DISABLED = False
+
     def test_disables_collection_filter_after_first_environment_miss(self):
         with mock.patch.dict(
             "os.environ",
@@ -181,6 +190,49 @@ class CollectionDisableAcrossEnvironmentsTest(unittest.TestCase):
                 ("prod", None),
             ],
         )
+
+
+class CollectionDisableAcrossInvocationsTest(unittest.TestCase):
+    def setUp(self):
+        main._COLLECTION_FILTER_DISABLED = False
+
+    def test_disables_collection_filter_for_next_request_on_warm_instance(self):
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "GAMEBENCH_USER": "user@example.com",
+                "GAMEBENCH_TOKEN": "secret",
+                "GAMEBENCH_COLLECTION_ID": "collection-123",
+                "GAMEBENCH_APP_PACKAGES": "com.scopely.internal.wwedomination",
+                "GAMEBENCH_LOOKBACK_DAYS": "1",
+            },
+            clear=False,
+        ):
+            with mock.patch.object(main, "get_client", return_value=object()):
+                with mock.patch.object(main, "_existing_session_ids", return_value=set()):
+                    with mock.patch.object(main, "insert_rows", return_value=1):
+                        with mock.patch.object(main.GameBenchClient, "get_fps", return_value=[60.0]):
+                            with mock.patch.object(main.GameBenchClient, "get_fps_stability", return_value=[95.0]):
+                                calls = []
+
+                                def _search(self, **kwargs):  # noqa: ANN001
+                                    calls.append(kwargs.get("collection_id"))
+                                    if kwargs.get("collection_id"):
+                                        return []
+                                    return [
+                                        {
+                                            "sessionId": f"s-{len(calls)}",
+                                            "appInfo": {"package": "com.scopely.internal.wwedomination"},
+                                        }
+                                    ]
+
+                                with mock.patch.object(main.GameBenchClient, "advanced_search_sessions", new=_search):
+                                    inserted_1, skipped_1 = main.ingest_gamebench()
+                                    inserted_2, skipped_2 = main.ingest_gamebench()
+
+        self.assertEqual((inserted_1, skipped_1), (1, 0))
+        self.assertEqual((inserted_2, skipped_2), (1, 0))
+        self.assertEqual(calls, ["collection-123", None, None])
 
 
 if __name__ == "__main__":
