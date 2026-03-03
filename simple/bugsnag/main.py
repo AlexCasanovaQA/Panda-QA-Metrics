@@ -306,6 +306,31 @@ WHERE LOWER(status) = "open"
   )
 GROUP BY severity;
 
+-- Ensure Looker always has an EXEC-18 row even when there are no active production errors.
+INSERT INTO `{kpi_table}` (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
+SELECT
+  CURRENT_TIMESTAMP(),
+  "EXEC-18",
+  "Active production errors",
+  today,
+  today,
+  today,
+  "{{}}",
+  0.0,
+  NULL,
+  NULL,
+  "BugSnag"
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM snap
+  WHERE LOWER(status) = "open"
+    AND EXISTS (
+      SELECT 1
+      FROM UNNEST(IFNULL(release_stages, [])) AS stage
+      WHERE LOWER(stage) IN ("production", "prod")
+    )
+);
+
 -- EXEC-19: High/Critical active errors (overall, open)
 INSERT INTO `{kpi_table}` (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 SELECT
@@ -323,6 +348,27 @@ SELECT
 FROM snap
 WHERE LOWER(status) = "open"
   AND LOWER(COALESCE(severity, "")) IN ("critical","error");
+
+-- Ensure Looker always has an EXEC-19 row even when there are no high/critical active errors.
+INSERT INTO `{kpi_table}` (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
+SELECT
+  CURRENT_TIMESTAMP(),
+  "EXEC-19",
+  "High/Critical active errors",
+  today,
+  today,
+  today,
+  "{{}}",
+  0.0,
+  NULL,
+  NULL,
+  "BugSnag"
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM snap
+  WHERE LOWER(status) = "open"
+    AND LOWER(COALESCE(severity, "")) IN ("critical","error")
+);
 
 -- EXEC-20: Active errors by severity (open)
 CREATE TEMP TABLE exec20_by_severity AS
