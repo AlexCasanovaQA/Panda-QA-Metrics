@@ -78,6 +78,11 @@ def _validate_bq_env_compat() -> Dict[str, str]:
 logger = logging.getLogger(__name__)
 
 
+# Warm-instance flag: if collection filtering is confirmed empty once,
+# skip it in subsequent requests handled by the same container.
+_COLLECTION_FILTER_DISABLED = False
+
+
 # -----------------------------
 # Helpers
 # -----------------------------
@@ -383,6 +388,8 @@ def _existing_session_ids(client, lookback_days: int) -> set:
 
 
 def ingest_gamebench() -> Tuple[int, int]:
+    global _COLLECTION_FILTER_DISABLED
+
     user = _env("GAMEBENCH_USER")
     token = _env("GAMEBENCH_TOKEN")
 
@@ -425,7 +432,12 @@ def ingest_gamebench() -> Tuple[int, int]:
         package_groups.setdefault(_infer_platform_from_package(pkg), []).append(pkg)
 
     sessions_by_id: Dict[str, Dict[str, Any]] = {}
-    active_collection_id = collection_id
+    active_collection_id = None if _COLLECTION_FILTER_DISABLED else collection_id
+    if collection_id and _COLLECTION_FILTER_DISABLED:
+        logger.info(
+            "GAMEBENCH_COLLECTION_FILTER_PRE_DISABLED reason=previous_miss_same_instance collection_id=%s",
+            collection_id,
+        )
     for environment, grouped_packages in package_groups.items():
         if not grouped_packages:
             continue
@@ -467,6 +479,7 @@ def ingest_gamebench() -> Tuple[int, int]:
                 max_pages=10,
             )
             active_collection_id = None
+            _COLLECTION_FILTER_DISABLED = True
             logger.info(
                 "GAMEBENCH_COLLECTION_FILTER_DISABLED reason=empty_result_with_collection next_environments_use_collection_filter=%s",
                 False,
