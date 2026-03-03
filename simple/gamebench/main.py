@@ -424,6 +424,7 @@ def ingest_gamebench() -> Tuple[int, int]:
         package_groups.setdefault(_infer_platform_from_package(pkg), []).append(pkg)
 
     sessions_by_id: Dict[str, Dict[str, Any]] = {}
+    active_collection_id = collection_id
     for environment, grouped_packages in package_groups.items():
         if not grouped_packages:
             continue
@@ -438,20 +439,20 @@ def ingest_gamebench() -> Tuple[int, int]:
             environment=environment,
             start_ms=start_ms,
             end_ms=end_ms,
-            collection_id=collection_id,
+            collection_id=active_collection_id,
             page_size=50,
             max_pages=10,
         )
-        if not grouped_sessions and collection_id:
+        if not grouped_sessions and active_collection_id:
             logger.warning(
                 "GAMEBENCH_SEARCH_EMPTY_WITH_COLLECTION environment=%s collection_id=%s; retrying without collection filter",
                 environment,
-                collection_id,
+                active_collection_id,
             )
             logger.warning(
                 "GAMEBENCH_COLLECTION_FILTER_MISS environment=%s collection_id=%s packages=%s fallback_without_collection=%s",
                 environment,
-                collection_id,
+                active_collection_id,
                 grouped_packages,
                 True,
             )
@@ -463,6 +464,11 @@ def ingest_gamebench() -> Tuple[int, int]:
                 collection_id=None,
                 page_size=50,
                 max_pages=10,
+            )
+            active_collection_id = None
+            logger.info(
+                "GAMEBENCH_COLLECTION_FILTER_DISABLED reason=empty_result_with_collection next_environments_use_collection_filter=%s",
+                False,
             )
         logger.info(
             "GAMEBENCH_SEARCH_RESULT environment=%s returned_sessions=%s",
