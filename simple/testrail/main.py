@@ -347,17 +347,17 @@ def _compute_testrail_kpis(bvt_suite_name: str, lookback_days: int) -> None:
 
     sql = f"""
 DECLARE today DATE DEFAULT CURRENT_DATE("UTC");
-DECLARE start7 DATE DEFAULT DATE_SUB(today, INTERVAL 6 DAY);
+DECLARE start90 DATE DEFAULT DATE_SUB(today, INTERVAL 89 DAY);
 
--- EXEC-15: test cases executed by day (last 7d, UTC)
+-- EXEC-15: test cases executed by day (last 90d, UTC)
 INSERT INTO `{kpi_table}`
   (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 SELECT
   CURRENT_TIMESTAMP(),
   "EXEC-15",
-  "Test cases executed by day (last 7d, UTC)",
+  "Test cases executed by day (last 90d, UTC)",
   d AS metric_date,
-  start7,
+  start90,
   today,
   "{{}}",
   executed_cnt * 1.0,
@@ -370,16 +370,16 @@ FROM (
     COUNT(DISTINCT IF(status_id IN ({",".join(map(str, EXECUTED_STATUS_IDS))}), COALESCE(result_id, test_id), NULL)) AS executed_cnt
   FROM `{tr_table}`
   WHERE COALESCE(created_on, ingest_timestamp) IS NOT NULL
-    AND DATE(COALESCE(created_on, ingest_timestamp), "UTC") BETWEEN start7 AND today
+    AND DATE(COALESCE(created_on, ingest_timestamp), "UTC") BETWEEN start90 AND today
   GROUP BY d
 );
 
--- EXEC-16: pass rate (last 7d, UTC)
+-- EXEC-16: pass rate (last 90d, UTC)
 INSERT INTO `{kpi_table}`
   (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
 WITH calendar AS (
   SELECT day AS metric_date
-  FROM UNNEST(GENERATE_DATE_ARRAY(start7, today)) AS day
+  FROM UNNEST(GENERATE_DATE_ARRAY(start90, today)) AS day
 ),
 daily AS (
   SELECT
@@ -388,7 +388,7 @@ daily AS (
     COUNT(DISTINCT IF(status_id IN ({",".join(map(str, EXECUTED_STATUS_IDS))}), COALESCE(result_id, test_id), NULL)) AS executed
   FROM `{tr_table}`
   WHERE COALESCE(created_on, ingest_timestamp) IS NOT NULL
-    AND DATE(COALESCE(created_on, ingest_timestamp), "UTC") BETWEEN start7 AND today
+    AND DATE(COALESCE(created_on, ingest_timestamp), "UTC") BETWEEN start90 AND today
   GROUP BY metric_date
 ),
 agg AS (
@@ -402,9 +402,9 @@ agg AS (
 SELECT
   CURRENT_TIMESTAMP(),
   "EXEC-16",
-  "Pass rate (last 7d, UTC)",
+  "Pass rate (last 90d, UTC)",
   metric_date,
-  start7,
+  start90,
   today,
   "{{}}",
   SAFE_DIVIDE(passed, executed),
@@ -539,7 +539,7 @@ def hello_http(request):
         project_ids = _get_project_ids()
 
         lookback_days = int(os.environ.get("TESTRAIL_LOOKBACK_DAYS", "90").strip() or "90")
-        lookback_days = max(1, min(lookback_days, 365))
+        lookback_days = max(1, min(lookback_days, 90))
         bvt_suite = os.environ.get("TESTRAIL_BVT_SUITE_NAME", "Basic BVT").strip() or "Basic BVT"
 
         client = get_client()

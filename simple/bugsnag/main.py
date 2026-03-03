@@ -246,9 +246,9 @@ def _compute_bugsnag_kpis() -> None:
 
     sql = f"""
 DECLARE today DATE DEFAULT CURRENT_DATE("UTC");
-DECLARE start7 DATE DEFAULT DATE_SUB(today, INTERVAL 6 DAY);
 DECLARE ingest_lookback_days INT64 DEFAULT 90;
-DECLARE ingest_start DATE DEFAULT DATE_SUB(today, INTERVAL ingest_lookback_days DAY);
+DECLARE start90 DATE DEFAULT DATE_SUB(today, INTERVAL 89 DAY);
+DECLARE ingest_start DATE DEFAULT start90;
 DECLARE latest_run_ts TIMESTAMP DEFAULT (
   SELECT MAX(TIMESTAMP(ingest_timestamp)) FROM `{bugsnag_table}`
 );
@@ -342,7 +342,7 @@ FROM snap
 WHERE LOWER(status) = "open"
 GROUP BY severity;
 
--- EXEC-21: New errors detected in 7d (UTC), deduplicated across recent ingests.
+-- EXEC-21: New errors detected in 90d (UTC), deduplicated across recent ingests.
 -- Uses a lookback ingest window to avoid depending only on the latest snapshot.
 CREATE TEMP TABLE exec21_recent_errors AS
 SELECT
@@ -364,9 +364,9 @@ INSERT INTO `{kpi_table}` (computed_at, metric_id, metric_name, metric_date, win
 SELECT
   CURRENT_TIMESTAMP(),
   "EXEC-21",
-  "New errors detected (last 7d, UTC)",
+  "New errors detected (last 90d, UTC)",
   today,
-  start7,
+  start90,
   today,
   "{{}}",
   COUNT(*) * 1.0,
@@ -374,7 +374,7 @@ SELECT
   NULL,
   "BugSnag"
 FROM exec21_dedup
-WHERE DATE(first_seen_ts, "UTC") BETWEEN start7 AND today;
+WHERE DATE(first_seen_ts, "UTC") BETWEEN start90 AND today;
 """
 
     run_query(client, sql, job_labels={"pipeline": "qa-metrics", "source": "bugsnag"})
