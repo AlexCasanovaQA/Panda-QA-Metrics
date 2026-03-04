@@ -48,11 +48,8 @@ class ValidateBqEnvCompatTest(unittest.TestCase):
         self.assertTrue(any("validation helper not found" in m for m in logs.output))
 
 
-class CollectionFallbackTest(unittest.TestCase):
-    def setUp(self):
-        main._COLLECTION_FILTER_DISABLED = False
-
-    def test_retries_without_collection_when_first_search_returns_empty(self):
+class CollectionFilteringModeTest(unittest.TestCase):
+    def test_uses_local_mode_when_collection_filter_is_empty_in_search_api(self):
         with mock.patch.dict(
             "os.environ",
             {
@@ -69,10 +66,10 @@ class CollectionFallbackTest(unittest.TestCase):
                     with mock.patch.object(main, "insert_rows", return_value=1):
                         with mock.patch.object(main.GameBenchClient, "get_fps", return_value=[60.0]):
                             with mock.patch.object(main.GameBenchClient, "get_fps_stability", return_value=[95.0]):
-                                calls = []
+                                search_calls = []
 
                                 def _search(self, **kwargs):  # noqa: ANN001
-                                    calls.append(kwargs.get("collection_id"))
+                                    search_calls.append(kwargs.get("collection_id"))
                                     if kwargs.get("collection_id"):
                                         return []
                                     return [
@@ -82,33 +79,32 @@ class CollectionFallbackTest(unittest.TestCase):
                                         }
                                     ]
 
-                                with mock.patch.object(
-                                    main.GameBenchClient,
-                                    "advanced_search_sessions",
-                                    new=_search,
-                                ):
-                                    with self.assertLogs(main.logger, level="WARNING") as logs:
-                                        inserted, skipped = main.ingest_gamebench()
+                                def _details(self, session_id):  # noqa: ANN001
+                                    return {
+                                        "sessionId": session_id,
+                                        "appInfo": {
+                                            "package": "com.scopely.internal.wwedomination",
+                                            "collectionId": "collection-123",
+                                        },
+                                    }
 
-        self.assertEqual(inserted, 1)
-        self.assertEqual(skipped, 0)
-        self.assertEqual(calls, ["collection-123", None])
-        self.assertTrue(any("GAMEBENCH_COLLECTION_FILTER_MISS" in msg for msg in logs.output))
-        self.assertTrue(any("environment=dev" in msg for msg in logs.output))
-        self.assertTrue(any("collection_id=collection-123" in msg for msg in logs.output))
-        self.assertTrue(any("fallback_without_collection=True" in msg for msg in logs.output))
+                                with mock.patch.object(main.GameBenchClient, "advanced_search_sessions", new=_search):
+                                    with mock.patch.object(main.GameBenchClient, "get_session_details", new=_details):
+                                        with self.assertLogs(main.logger, level="INFO") as logs:
+                                            inserted, skipped = main.ingest_gamebench()
 
+        self.assertEqual((inserted, skipped), (1, 0))
+        self.assertEqual(search_calls, ["collection-123", None])
+        self.assertTrue(any("collection_filter_mode=local" in msg for msg in logs.output))
+        self.assertFalse(hasattr(main, "_COLLECTION_FILTER_DISABLED"))
 
-class CollectionOptionalTest(unittest.TestCase):
-    def setUp(self):
-        main._COLLECTION_FILTER_DISABLED = False
-
-    def test_does_not_retry_when_collection_is_not_configured(self):
+    def test_raises_clear_error_when_collection_has_no_matches_after_local_filter(self):
         with mock.patch.dict(
             "os.environ",
             {
                 "GAMEBENCH_USER": "user@example.com",
                 "GAMEBENCH_TOKEN": "secret",
+                "GAMEBENCH_COLLECTION_ID": "collection-999",
                 "GAMEBENCH_APP_PACKAGES": "com.scopely.internal.wwedomination",
                 "GAMEBENCH_LOOKBACK_DAYS": "1",
             },
@@ -116,123 +112,69 @@ class CollectionOptionalTest(unittest.TestCase):
         ):
             with mock.patch.object(main, "get_client", return_value=object()):
                 with mock.patch.object(main, "_existing_session_ids", return_value=set()):
-                    with mock.patch.object(main, "insert_rows", return_value=1):
-                        with mock.patch.object(main.GameBenchClient, "get_fps", return_value=[60.0]):
-                            with mock.patch.object(main.GameBenchClient, "get_fps_stability", return_value=[95.0]):
-                                calls = []
+                    with mock.patch.object(main.GameBenchClient, "advanced_search_sessions") as search_mock:
+                        with mock.patch.object(main.GameBenchClient, "get_session_details") as details_mock:
+                            search_mock.side_effect = [
+                                [],
+                                [
+                                    {
+                                        "sessionId": "s-1",
+                                        "appInfo": {"package": "com.scopely.internal.wwedomination"},
+                                    }
+                                ],
+                            ]
+                            details_mock.return_value = {
+                                "sessionId": "s-1",
+                                "appInfo": {
+                                    "package": "com.scopely.internal.wwedomination",
+                                    "collectionId": "collection-other",
+                                },
+                            }
 
-                                def _search(self, **kwargs):  # noqa: ANN001
-                                    calls.append(kwargs.get("collection_id"))
-                                    return [
-                                        {
-                                            "sessionId": "s-1",
-                                            "appInfo": {"package": "com.scopely.internal.wwedomination"},
-                                        }
-                                    ]
+                            with self.assertRaises(ValueError) as ctx:
+                                main.ingest_gamebench()
 
-                                with mock.patch.object(
-                                    main.GameBenchClient,
-                                    "advanced_search_sessions",
-                                    new=_search,
-                                ):
-                                    inserted, skipped = main.ingest_gamebench()
-
-        self.assertEqual(inserted, 1)
-        self.assertEqual(skipped, 0)
-        self.assertEqual(calls, [None])
+        msg = str(ctx.exception)
+        self.assertIn("No hay sesiones para collectionId=collection-999", msg)
+        self.assertIn("mapping packages↔collection", msg)
 
 
-class CollectionDisableAcrossEnvironmentsTest(unittest.TestCase):
-    def setUp(self):
-        main._COLLECTION_FILTER_DISABLED = False
+class EnvironmentEmptyFallbackTest(unittest.TestCase):
+    def test_falls_back_without_environment_on_ok_empty_response(self):
+        client = main.GameBenchClient("user@example.com", "secret", auth_mode="basic", company_id=None)
 
-    def test_disables_collection_filter_after_first_environment_miss(self):
-        with mock.patch.dict(
-            "os.environ",
-            {
-                "GAMEBENCH_USER": "user@example.com",
-                "GAMEBENCH_TOKEN": "secret",
-                "GAMEBENCH_COLLECTION_ID": "collection-123",
-                "GAMEBENCH_APP_PACKAGES": "com.scopely.internal.wwedomination,com.scopely.wwedomination",
-                "GAMEBENCH_LOOKBACK_DAYS": "1",
-            },
-            clear=False,
-        ):
-            with mock.patch.object(main, "get_client", return_value=object()):
-                with mock.patch.object(main, "_existing_session_ids", return_value=set()):
-                    with mock.patch.object(main, "insert_rows", return_value=2):
-                        with mock.patch.object(main.GameBenchClient, "get_fps", return_value=[60.0]):
-                            with mock.patch.object(main.GameBenchClient, "get_fps_stability", return_value=[95.0]):
-                                calls = []
+        def _resp(ok, status_code, payload):
+            m = mock.Mock()
+            m.ok = ok
+            m.status_code = status_code
+            m.text = str(payload)
+            m.json.return_value = payload
+            m.headers = {}
+            return m
 
-                                def _search(self, **kwargs):  # noqa: ANN001
-                                    calls.append((kwargs.get("environment"), kwargs.get("collection_id")))
-                                    if kwargs.get("environment") == "dev" and kwargs.get("collection_id"):
-                                        return []
-                                    session_id = f"s-{kwargs.get('environment')}"
-                                    package = (
-                                        "com.scopely.internal.wwedomination"
-                                        if kwargs.get("environment") == "dev"
-                                        else "com.scopely.wwedomination"
-                                    )
-                                    return [{"sessionId": session_id, "appInfo": {"package": package}}]
-
-                                with mock.patch.object(main.GameBenchClient, "advanced_search_sessions", new=_search):
-                                    inserted, skipped = main.ingest_gamebench()
-
-        self.assertEqual(inserted, 2)
-        self.assertEqual(skipped, 0)
-        self.assertEqual(
-            calls,
-            [
-                ("dev", "collection-123"),
-                ("dev", None),
-                ("prod", None),
+        with mock.patch.object(
+            main,
+            "_request_with_backoff",
+            side_effect=[
+                _resp(True, 200, {"results": []}),
+                _resp(True, 200, {"results": [{"sessionId": "s-1"}]}),
             ],
-        )
+        ) as req_mock:
+            sessions = client.advanced_search_sessions(
+                packages=["com.scopely.internal.wwedomination"],
+                environment="dev",
+                start_ms=1,
+                end_ms=2,
+                collection_id=None,
+                page_size=50,
+                max_pages=1,
+            )
 
-
-class CollectionDisableAcrossInvocationsTest(unittest.TestCase):
-    def setUp(self):
-        main._COLLECTION_FILTER_DISABLED = False
-
-    def test_disables_collection_filter_for_next_request_on_warm_instance(self):
-        with mock.patch.dict(
-            "os.environ",
-            {
-                "GAMEBENCH_USER": "user@example.com",
-                "GAMEBENCH_TOKEN": "secret",
-                "GAMEBENCH_COLLECTION_ID": "collection-123",
-                "GAMEBENCH_APP_PACKAGES": "com.scopely.internal.wwedomination",
-                "GAMEBENCH_LOOKBACK_DAYS": "1",
-            },
-            clear=False,
-        ):
-            with mock.patch.object(main, "get_client", return_value=object()):
-                with mock.patch.object(main, "_existing_session_ids", return_value=set()):
-                    with mock.patch.object(main, "insert_rows", return_value=1):
-                        with mock.patch.object(main.GameBenchClient, "get_fps", return_value=[60.0]):
-                            with mock.patch.object(main.GameBenchClient, "get_fps_stability", return_value=[95.0]):
-                                calls = []
-
-                                def _search(self, **kwargs):  # noqa: ANN001
-                                    calls.append(kwargs.get("collection_id"))
-                                    if kwargs.get("collection_id"):
-                                        return []
-                                    return [
-                                        {
-                                            "sessionId": f"s-{len(calls)}",
-                                            "appInfo": {"package": "com.scopely.internal.wwedomination"},
-                                        }
-                                    ]
-
-                                with mock.patch.object(main.GameBenchClient, "advanced_search_sessions", new=_search):
-                                    inserted_1, skipped_1 = main.ingest_gamebench()
-                                    inserted_2, skipped_2 = main.ingest_gamebench()
-
-        self.assertEqual((inserted_1, skipped_1), (1, 0))
-        self.assertEqual((inserted_2, skipped_2), (1, 0))
-        self.assertEqual(calls, ["collection-123", None, None])
+        self.assertEqual(sessions, [{"sessionId": "s-1"}])
+        first_body = req_mock.call_args_list[0].kwargs["json_body"]
+        second_body = req_mock.call_args_list[1].kwargs["json_body"]
+        self.assertEqual(first_body["appInfo"]["environment"], "dev")
+        self.assertNotIn("environment", second_body["appInfo"])
 
 
 if __name__ == "__main__":

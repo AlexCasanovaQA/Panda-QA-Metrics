@@ -78,11 +78,6 @@ def _validate_bq_env_compat() -> Dict[str, str]:
 logger = logging.getLogger(__name__)
 
 
-# Warm-instance flag: if collection filtering is confirmed empty once,
-# skip it in subsequent requests handled by the same container.
-_COLLECTION_FILTER_DISABLED = False
-
-
 # -----------------------------
 # Helpers
 # -----------------------------
@@ -145,6 +140,55 @@ def _numbers_from_payload(payload: Any) -> List[float]:
                             pass
                         break
     return out
+
+def _extract_collection_id_from_session(session: Dict[str, Any]) -> Optional[str]:
+    app = session.get("app") or session.get("appInfo") or {}
+    candidates = [
+        app.get("collectionId"),
+        app.get("collection_id"),
+        session.get("collectionId"),
+        session.get("collection_id"),
+    ]
+    app_collection = app.get("collection")
+    if isinstance(app_collection, dict):
+        candidates.extend([app_collection.get("id"), app_collection.get("collectionId")])
+    for value in candidates:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _sample_app_info_keys(sessions: List[Dict[str, Any]], limit: int = 3) -> List[str]:
+    keys = set()
+    for session in sessions[:limit]:
+        app = session.get("app") or session.get("appInfo") or {}
+        if isinstance(app, dict):
+            keys.update(str(k) for k in app.keys())
+    return sorted(keys)
+
+
+def _filter_sessions_by_collection_locally(
+    gb: "GameBenchClient",
+    sessions: List[Dict[str, Any]],
+    collection_id: str,
+) -> List[Dict[str, Any]]:
+    filtered: List[Dict[str, Any]] = []
+    for session in sessions:
+        local_collection_id = _extract_collection_id_from_session(session)
+        if local_collection_id is None:
+            session_id = session.get("sessionId") or session.get("id")
+            if not session_id:
+                continue
+            try:
+                details = gb.get_session_details(session_id)
+            except Exception as exc:
+                logger.warning("GAMEBENCH_SESSION_DETAILS_FETCH_FAILED session_id=%s error=%s", session_id, exc)
+                continue
+            local_collection_id = _extract_collection_id_from_session(details)
+        if local_collection_id == collection_id:
+            filtered.append(session)
+    return filtered
+
 
 
 def _request_with_backoff(
@@ -248,13 +292,12 @@ class GameBenchClient:
         max_pages: int = 10,
     ) -> List[Dict[str, Any]]:
         url = f"{self.BASE_URL}/advanced-search/sessions"
-        all_results: List[Dict[str, Any]] = []
 
-        # We'll try with company scope if provided, but fall back to user-scope on 401/403.
-        for attempt_company in (True, False):
-            scoped_company = self.company_id if attempt_company else None
-
-            all_results = []
+        def _run_search_for_environment(
+            scoped_company: Optional[str],
+            env_filter: Optional[str],
+        ) -> Tuple[List[Dict[str, Any]], bool]:
+            all_results: List[Dict[str, Any]] = []
             for page in range(max_pages):
                 params: Dict[str, Any] = {
                     "page": page,
@@ -264,49 +307,33 @@ class GameBenchClient:
                 if scoped_company:
                     params["company"] = scoped_company
 
-                env_filters = [environment]
-                if environment:
-                    # Some GameBench tenants fail on strict `environment` filtering.
-                    # Fallback without environment to avoid full-ingestion failures.
-                    env_filters.append(None)
+                body: Dict[str, Any] = {
+                    "sessionInfo": {
+                        "dateStart": start_ms,
+                        "dateEnd": end_ms,
+                    },
+                    "appInfo": {
+                        "package": packages,
+                    },
+                }
+                if env_filter:
+                    body["appInfo"]["environment"] = env_filter
+                if collection_id:
+                    body["appInfo"]["collectionId"] = collection_id
 
-                resp: Optional[requests.Response] = None
-                for env_filter in env_filters:
-                    body: Dict[str, Any] = {
-                        "sessionInfo": {
-                            "dateStart": start_ms,
-                            "dateEnd": end_ms,
-                        },
-                        "appInfo": {
-                            "package": packages,
-                        },
-                    }
-                    if env_filter:
-                        body["appInfo"]["environment"] = env_filter
-                    if collection_id:
-                        body["appInfo"]["collectionId"] = collection_id
+                resp = _request_with_backoff(
+                    "POST",
+                    url,
+                    auth_mode=self.auth_mode,
+                    user=self.user,
+                    token=self.token,
+                    params=params,
+                    json_body=body,
+                    timeout=30,
+                )
 
-                    resp = _request_with_backoff(
-                        "POST",
-                        url,
-                        auth_mode=self.auth_mode,
-                        user=self.user,
-                        token=self.token,
-                        params=params,
-                        json_body=body,
-                        timeout=30,
-                    )
-
-                    # Fallback for invalid/unsupported environment filter.
-                    if resp.ok or env_filter is None or resp.status_code not in (400, 422, 500):
-                        break
-
-                if resp is None:
-                    raise RuntimeError("GameBench session search did not return a response")
-
-                if resp.status_code in (401, 403) and scoped_company and attempt_company:
-                    # Retry whole search without company scope.
-                    break
+                if resp.status_code in (401, 403) and scoped_company:
+                    return [], True
 
                 if not resp.ok:
                     raise RuntimeError(
@@ -335,13 +362,43 @@ class GameBenchClient:
                 if len(results) < page_size:
                     break
 
-            # If we broke due to 401/403 with company scope, retry without company.
-            if scoped_company and attempt_company and all_results == []:
+            return all_results, False
+
+        for attempt_company in (True, False):
+            scoped_company = self.company_id if attempt_company else None
+            results, retry_without_company = _run_search_for_environment(scoped_company, environment)
+            if retry_without_company and attempt_company:
                 continue
 
-            return all_results
+            if environment and not results:
+                logger.warning(
+                    "GAMEBENCH_ENV_FILTER_EMPTY_RESULT environment=%s packages=%s collection_id_set=%s fallback_without_environment=%s",
+                    environment,
+                    packages,
+                    bool(collection_id),
+                    True,
+                )
+                results_no_env, retry_without_company_no_env = _run_search_for_environment(scoped_company, None)
+                if retry_without_company_no_env and attempt_company:
+                    continue
+                return results_no_env
 
-        return all_results
+            return results
+
+        return []
+
+
+    def get_session_details(self, session_id: str) -> Dict[str, Any]:
+        url = f"{self.BASE_URL}/sessions/{session_id}"
+        resp = _request_with_backoff("GET", url, auth_mode=self.auth_mode, user=self.user, token=self.token, timeout=30)
+        if not resp.ok:
+            raise RuntimeError(
+                f"GameBench session details retrieval failed for session {session_id}: {resp.status_code} {resp.text}"
+            )
+        data = resp.json()
+        if not isinstance(data, dict):
+            raise RuntimeError(f"GameBench session details payload is not an object for session {session_id}")
+        return data
 
     def get_fps(self, session_id: str) -> List[float]:
         url = f"{self.BASE_URL}/sessions/{session_id}/fps"
@@ -388,7 +445,6 @@ def _existing_session_ids(client, lookback_days: int) -> set:
 
 
 def ingest_gamebench() -> Tuple[int, int]:
-    global _COLLECTION_FILTER_DISABLED
 
     user = _env("GAMEBENCH_USER")
     token = _env("GAMEBENCH_TOKEN")
@@ -432,12 +488,7 @@ def ingest_gamebench() -> Tuple[int, int]:
         package_groups.setdefault(_infer_platform_from_package(pkg), []).append(pkg)
 
     sessions_by_id: Dict[str, Dict[str, Any]] = {}
-    active_collection_id = None if _COLLECTION_FILTER_DISABLED else collection_id
-    if collection_id and _COLLECTION_FILTER_DISABLED:
-        logger.info(
-            "GAMEBENCH_COLLECTION_FILTER_PRE_DISABLED reason=previous_miss_same_instance collection_id=%s",
-            collection_id,
-        )
+    any_collection_match = False
     for environment, grouped_packages in package_groups.items():
         if not grouped_packages:
             continue
@@ -447,29 +498,23 @@ def ingest_gamebench() -> Tuple[int, int]:
             len(grouped_packages),
             grouped_packages,
         )
+
         grouped_sessions = gb.advanced_search_sessions(
             packages=grouped_packages,
             environment=environment,
             start_ms=start_ms,
             end_ms=end_ms,
-            collection_id=active_collection_id,
+            collection_id=collection_id,
             page_size=50,
             max_pages=10,
         )
-        if not grouped_sessions and active_collection_id:
-            logger.warning(
-                "GAMEBENCH_SEARCH_EMPTY_WITH_COLLECTION environment=%s collection_id=%s; retrying without collection filter",
-                environment,
-                active_collection_id,
-            )
-            logger.warning(
-                "GAMEBENCH_COLLECTION_FILTER_MISS environment=%s collection_id=%s packages=%s fallback_without_collection=%s",
-                environment,
-                active_collection_id,
-                grouped_packages,
-                True,
-            )
-            grouped_sessions = gb.advanced_search_sessions(
+
+        collection_filter_mode = "api" if collection_id else "off"
+        pre_filter_count = len(grouped_sessions)
+        post_filter_count = pre_filter_count
+
+        if collection_id and not grouped_sessions:
+            fallback_sessions = gb.advanced_search_sessions(
                 packages=grouped_packages,
                 environment=environment,
                 start_ms=start_ms,
@@ -478,21 +523,33 @@ def ingest_gamebench() -> Tuple[int, int]:
                 page_size=50,
                 max_pages=10,
             )
-            active_collection_id = None
-            _COLLECTION_FILTER_DISABLED = True
-            logger.info(
-                "GAMEBENCH_COLLECTION_FILTER_DISABLED reason=empty_result_with_collection next_environments_use_collection_filter=%s",
-                False,
-            )
+            pre_filter_count = len(fallback_sessions)
+            grouped_sessions = _filter_sessions_by_collection_locally(gb, fallback_sessions, collection_id)
+            post_filter_count = len(grouped_sessions)
+            collection_filter_mode = "local"
+
+        if collection_id and grouped_sessions:
+            any_collection_match = True
+
         logger.info(
-            "GAMEBENCH_SEARCH_RESULT environment=%s returned_sessions=%s",
+            "GAMEBENCH_SEARCH_RESULT environment=%s collection_filter_mode=%s returned_sessions_pre_filter=%s returned_sessions_post_filter=%s app_info_keys_sample=%s",
             environment,
-            len(grouped_sessions),
+            collection_filter_mode,
+            pre_filter_count,
+            post_filter_count,
+            _sample_app_info_keys(grouped_sessions),
         )
+
         for session in grouped_sessions:
             session_id = session.get("sessionId") or session.get("id")
             if session_id:
                 sessions_by_id[session_id] = session
+
+    if collection_id and not any_collection_match:
+        raise ValueError(
+            f"No hay sesiones para collectionId={collection_id} con packages={packages} en rango {start_dt.isoformat()}..{end_dt.isoformat()}. "
+            "Revisa el mapping packages↔collection y la configuración de filtros."
+        )
 
     sessions = list(sessions_by_id.values())
     logger.info("GAMEBENCH_SESSION_POOL unique_sessions=%s", len(sessions))
