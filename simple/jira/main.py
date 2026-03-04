@@ -237,6 +237,7 @@ def _parse_issue_snapshot(
         "summary": fields.get("summary"),
         "status": status,
         "status_category": status_category,
+        "status_category_changed_date": jira_to_rfc3339(fields.get("statuscategorychangedate")),
         "priority": _pick_field_value((fields.get("priority") or {}).get("name")),
         "severity": _pick_field_value(fields.get(severity_field)),
         "pod_team": _pick_field_value(fields.get(pod_field)),
@@ -309,6 +310,7 @@ def ingest_jira(*, deadline_epoch: Optional[float] = None) -> Tuple[int, int, bo
         "summary",
         "issuetype",
         "status",
+        "statuscategorychangedate",
         "priority",
         "created",
         "updated",
@@ -683,33 +685,47 @@ FROM active_now
 GROUP BY status;
 
 -- Build a continuous day-by-day trend using the latest snapshot available
--- at or before each day (avoids sparse/one-point trends when snapshots are irregular).
-CREATE TEMP TABLE daily_latest AS
+-- EXEC-11 Active bug count over time (90d, UTC)
+-- Active on day d iff:
+--   created_date <= d
+--   AND (
+--     current statusCategory != Done
+--     OR d < statusCategoryChangedDate (fallback when currently Done)
+--   )
+-- This avoids sparse snapshot artefacts and uses the status-category transition date
+-- as the historical boundary when available.
+CREATE TEMP TABLE bug_lifecycle AS
 SELECT
-  d,
-  (
-    SELECT MAX(s2.snapshot_timestamp)
-    FROM `{snap_table}` s2
-    WHERE DATE(s2.snapshot_timestamp, "UTC") <= d
-  ) AS ts
-FROM UNNEST(GENERATE_DATE_ARRAY(start90, today)) AS d;
+  issue_key,
+  DATE(created, "UTC") AS created_date,
+  LOWER(COALESCE(status_category, '')) AS status_category_lc,
+  DATE(status_category_changed_date, "UTC") AS status_category_changed_date
+FROM snap
+WHERE issue_type = 'Bug'
+  AND created IS NOT NULL;
 
 INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-11',
   'Active bug count over time',
-  dl.d AS metric_date,
+  d AS metric_date,
   start90,
   today,
   '{{}}',
-  COALESCE(COUNTIF(s.issue_type = 'Bug' AND LOWER(COALESCE(s.status_category, '')) != 'done') * 1.0, 0.0),
+  COUNTIF(
+    bl.created_date <= d
+    AND (
+      bl.status_category_lc != 'done'
+      OR bl.status_category_changed_date IS NULL
+      OR d < bl.status_category_changed_date
+    )
+  ) * 1.0,
   NULL,
   NULL,
   'Jira'
-FROM daily_latest dl
-LEFT JOIN `{snap_table}` s
-  ON s.snapshot_timestamp = dl.ts
+FROM UNNEST(GENERATE_DATE_ARRAY(start90, today)) AS d
+LEFT JOIN bug_lifecycle bl ON TRUE
 GROUP BY metric_date;
 
 -- EXEC-12 Reopened over time (90d, UTC)
