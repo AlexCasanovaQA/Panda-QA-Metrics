@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.jira_issues_snaps
   summary STRING,
   status STRING,
   status_category STRING,
+  status_category_changed_date TIMESTAMP,
   priority STRING,
   severity STRING,
   pod_team STRING,
@@ -93,6 +94,11 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name='jira_issues_snapshot' AND column_name='issue_type') THEN
     EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ADD COLUMN issue_type STRING';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+    WHERE table_name='jira_issues_snapshot' AND column_name='status_category_changed_date') THEN
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ADD COLUMN status_category_changed_date TIMESTAMP';
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
