@@ -169,6 +169,18 @@ CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.bugsnag_errors` (
 PARTITION BY DATE(ingest_timestamp)
 CLUSTER BY project_id, severity, status;
 
+
+CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.bugsnag_ingest_runs` (
+  run_ts TIMESTAMP,
+  source STRING,
+  status STRING,
+  inserted_rows INT64,
+  rate_limited_projects ARRAY<STRING>,
+  deadline_projects ARRAY<STRING>
+)
+PARTITION BY DATE(run_ts)
+CLUSTER BY source, status;
+
 -- -----------------------------------------------------------------------------
 -- GameBench
 -- -----------------------------------------------------------------------------
