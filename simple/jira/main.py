@@ -31,6 +31,7 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import requests
@@ -151,6 +152,7 @@ def _search_issues(
     fields: List[str],
     max_results: int = 100,
     timeout: int = 60,
+    deadline_epoch: Optional[float] = None,
 ) -> Iterable[Dict[str, Any]]:
     """Generator over Jira issues (handles both nextPageToken and startAt pagination)."""
 
@@ -160,6 +162,9 @@ def _search_issues(
     start_at: int = 0
 
     while True:
+        if deadline_epoch is not None and time.time() >= deadline_epoch:
+            break
+
         params: Dict[str, Any] = {
             "jql": jql,
             "maxResults": max_results,
@@ -274,10 +279,10 @@ def _parse_changelog(issue: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
-def ingest_jira() -> Tuple[int, int]:
+def ingest_jira(*, deadline_epoch: Optional[float] = None) -> Tuple[int, int, bool]:
     """Fetch issues + status changelog and insert into BigQuery.
 
-    Returns: (snapshot_rows_inserted, changelog_rows_inserted)
+    Returns: (snapshot_rows_inserted, changelog_rows_inserted, deadline_reached)
     """
 
     config = _validate_jira_config()
@@ -324,16 +329,27 @@ def ingest_jira() -> Tuple[int, int]:
 
     inserted_snap = 0
     inserted_chg = 0
+    deadline_reached = False
 
-    for issue in _search_issues(site, headers, jql, fields=fields, max_results=100):
+    for issue in _search_issues(site, headers, jql, fields=fields, max_results=100, deadline_epoch=deadline_epoch):
+        if deadline_epoch is not None and time.time() >= deadline_epoch:
+            deadline_reached = True
+            break
+
         snap_rows.append(_parse_issue_snapshot(issue, snapshot_ts, severity_field=severity_field, pod_field=pod_field))
         chg_rows.extend(_parse_changelog(issue))
 
         # Flush periodically to reduce memory.
         if len(snap_rows) >= 500:
+            if deadline_epoch is not None and time.time() >= deadline_epoch:
+                deadline_reached = True
+                break
             inserted_snap += insert_rows(client, "jira_issues_snapshot", snap_rows)
             snap_rows = []
         if len(chg_rows) >= 1000:
+            if deadline_epoch is not None and time.time() >= deadline_epoch:
+                deadline_reached = True
+                break
             inserted_chg += insert_rows(client, "jira_changelog", chg_rows)
             chg_rows = []
 
@@ -342,7 +358,10 @@ def ingest_jira() -> Tuple[int, int]:
     if chg_rows:
         inserted_chg += insert_rows(client, "jira_changelog", chg_rows)
 
-    return inserted_snap, inserted_chg
+    if deadline_epoch is not None and time.time() >= deadline_epoch:
+        deadline_reached = True
+
+    return inserted_snap, inserted_chg, deadline_reached
 
 
 # -----------------------------
@@ -798,25 +817,42 @@ def hello_http(request):
     )
 
     try:
+        # Cloud Scheduler HTTP jobs often default to a 3-minute attempt deadline.
+        # Keep a safety buffer so the function can return before Scheduler marks
+        # the attempt as DEADLINE_EXCEEDED.
+        max_runtime_s = int(os.environ.get("JIRA_MAX_RUNTIME_S", "150"))
+        deadline_epoch = time.time() + max(30, min(max_runtime_s, 160))
+
         validate_bq_env()
-        inserted_snap, inserted_chg = ingest_jira()
-        _compute_jira_kpis()
+        inserted_snap, inserted_chg, deadline_reached = ingest_jira(deadline_epoch=deadline_epoch)
+
+        kpis_computed = False
+        if not deadline_reached and time.time() < deadline_epoch - 10:
+            _compute_jira_kpis()
+            kpis_computed = True
+
+        status = "partial" if deadline_reached else "ok"
         LOGGER.info(
             "hello_http_success",
             extra={
                 "json_fields": {
                     "source": source,
                     "service": service,
+                    "status": status,
                     "inserted_snapshot_rows": inserted_snap,
                     "inserted_changelog_rows": inserted_chg,
+                    "kpis_computed": kpis_computed,
+                    "deadline_reached": deadline_reached,
                 }
             },
         )
         return jsonify(
             {
-                "status": "ok",
+                "status": status,
                 "inserted_snapshot_rows": inserted_snap,
                 "inserted_changelog_rows": inserted_chg,
+                "kpis_computed": kpis_computed,
+                "deadline_reached": deadline_reached,
             }
         )
     except ConfigError as e:
