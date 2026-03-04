@@ -5,47 +5,16 @@
 El pipeline `simple/gamebench/main.py` soporta defaults para Panda y permite override vía variables de entorno:
 
 - `GAMEBENCH_COMPANY_ID` (default: `AWGaWNjXBxsUazsJuoUp`)
-- `GAMEBENCH_COLLECTION_ID` (opcional, sin default)
 - `GAMEBENCH_APP_PACKAGES` (default CSV):
   - `com.scopely.internal.wwedomination`
   - `com.scopely.wwedomination`
 
 Si defines estas variables de entorno en despliegue, prevalecen sobre los defaults.
 
-Sobre `GAMEBENCH_COLLECTION_ID`: el filtro de colección solo se aplica cuando la variable
-viene explícitamente seteada en el entorno. Se recomienda configurarlo únicamente cuando
-el `collectionId` esté validado para el tenant actual; de lo contrario, dejarlo vacío.
-
 Además, la búsqueda en GameBench separa filtros por `package` y `environment` para mantener la lógica `dev/prod`:
 
 - Paquetes con `.internal.` (o sufijo `.internal`) => `environment=dev`
 - Resto => `environment=prod`
-
-### Evento adicional para alerting de collection filter miss
-
-Cuando una búsqueda inicial retorna vacía usando `GAMEBENCH_COLLECTION_ID`, el ingest emite dos eventos:
-
-- `GAMEBENCH_SEARCH_EMPTY_WITH_COLLECTION` (evento existente para contexto humano).
-- `GAMEBENCH_COLLECTION_FILTER_MISS` (evento estable sugerido para métricas/alertas).
-
-`GAMEBENCH_COLLECTION_FILTER_MISS` incluye campos estables en el payload de texto:
-
-- `environment=<dev|prod|...>`
-- `collection_id=<collection-id>`
-- `packages=[...]`
-- `fallback_without_collection=True`
-
-Filtro sugerido para métrica basada en logs (counter):
-
-```text
-resource.type="cloud_run_revision"
-textPayload:"GAMEBENCH_COLLECTION_FILTER_MISS"
-```
-
-Alerta sugerida por frecuencia:
-
-- Condición: `count >= N` en ventana de `1h` (por servicio).
-- Ejemplo inicial: `N=5` en `1h` para detectar regresiones del filtro de colección sin ruido excesivo.
 
 ## BigQuery runbook único (source of truth para región)
 
@@ -189,7 +158,7 @@ textPayload:"BQ_DATASET_NOT_FOUND_ALERT"
 | `simple/bugsnag/main.py` | `BUGSNAG_BASE_URL`; `BUGSNAG_TOKEN`; `BUGSNAG_PROJECT_IDS` | `BUGSNAG_MAX_RUNTIME_S`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_DATASET_FALLBACK`, `BQ_LOCATION` |
 | `simple/jira/main.py` | `JIRA_SITE` \| `JIRA_BASE_URL`; `JIRA_USER` \| `JIRA_EMAIL`; `JIRA_API_TOKEN`; `JIRA_PROJECT_KEYS` \| `JIRA_PROJECT_KEYS_CSV` \| `JIRA_PROJECT_KEY` | `JIRA_SEVERITY_FIELD_ID` \| `JIRA_SEVERITY_FIELD`, `JIRA_POD_FIELD`, `JIRA_LOOKBACK_DAYS`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_DATASET_FALLBACK`, `BQ_LOCATION` |
 | `simple/testrail/main.py` | `TESTRAIL_BASE_URL` \| `TESTRAIL_URL`; `TESTRAIL_EMAIL` \| `TESTRAIL_USER` \| `TESTRAIL_USERNAME`; `TESTRAIL_API_KEY` \| `TESTRAIL_TOKEN` \| `TESTRAIL_API_TOKEN`; `TESTRAIL_PROJECT_IDS` \| `TESTRAIL_PROJECTS` \| `TESTRAIL_PROJECT_ID` \| `TESTRAIL_PROJECT` | `TESTRAIL_LOOKBACK_DAYS`, `TESTRAIL_BVT_SUITE_NAME`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_DATASET_FALLBACK`, `BQ_LOCATION` |
-| `simple/gamebench/main.py` | `GAMEBENCH_USER`; `GAMEBENCH_TOKEN` | `GAMEBENCH_COMPANY_ID`, `GAMEBENCH_COLLECTION_ID`, `GAMEBENCH_APP_PACKAGES`, `GAMEBENCH_LOOKBACK_DAYS`, `GAMEBENCH_AUTH_MODE`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_DATASET_FALLBACK`, `BQ_LOCATION` |
+| `simple/gamebench/main.py` | `GAMEBENCH_USER`; `GAMEBENCH_TOKEN` | `GAMEBENCH_COMPANY_ID`, `GAMEBENCH_APP_PACKAGES`, `GAMEBENCH_LOOKBACK_DAYS`, `GAMEBENCH_AUTH_MODE`, `BQ_PROJECT`, `BQ_DATASET`, `BQ_DATASET_FALLBACK`, `BQ_LOCATION` |
 
 ## Build pipeline único (raíz del repo)
 

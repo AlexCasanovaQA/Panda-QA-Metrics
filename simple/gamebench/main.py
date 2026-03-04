@@ -20,7 +20,6 @@ Required env vars / secrets:
 
 Optional:
 - GAMEBENCH_COMPANY_ID       defaults to AWGaWNjXBxsUazsJuoUp
-- GAMEBENCH_COLLECTION_ID    optional (no default); use only when validated for the current tenant
 - GAMEBENCH_APP_PACKAGES     CSV defaults to
                               com.scopely.internal.wwedomination,
                               com.scopely.wwedomination
@@ -141,23 +140,6 @@ def _numbers_from_payload(payload: Any) -> List[float]:
                         break
     return out
 
-def _extract_collection_id_from_session(session: Dict[str, Any]) -> Optional[str]:
-    app = session.get("app") or session.get("appInfo") or {}
-    candidates = [
-        app.get("collectionId"),
-        app.get("collection_id"),
-        session.get("collectionId"),
-        session.get("collection_id"),
-    ]
-    app_collection = app.get("collection")
-    if isinstance(app_collection, dict):
-        candidates.extend([app_collection.get("id"), app_collection.get("collectionId")])
-    for value in candidates:
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
 def _sample_app_info_keys(sessions: List[Dict[str, Any]], limit: int = 3) -> List[str]:
     keys = set()
     for session in sessions[:limit]:
@@ -165,31 +147,6 @@ def _sample_app_info_keys(sessions: List[Dict[str, Any]], limit: int = 3) -> Lis
         if isinstance(app, dict):
             keys.update(str(k) for k in app.keys())
     return sorted(keys)
-
-
-def _filter_sessions_by_collection_locally(
-    gb: "GameBenchClient",
-    sessions: List[Dict[str, Any]],
-    collection_id: str,
-) -> List[Dict[str, Any]]:
-    filtered: List[Dict[str, Any]] = []
-    for session in sessions:
-        local_collection_id = _extract_collection_id_from_session(session)
-        if local_collection_id is None:
-            session_id = session.get("sessionId") or session.get("id")
-            if not session_id:
-                continue
-            try:
-                details = gb.get_session_details(session_id)
-            except Exception as exc:
-                logger.warning("GAMEBENCH_SESSION_DETAILS_FETCH_FAILED session_id=%s error=%s", session_id, exc)
-                continue
-            local_collection_id = _extract_collection_id_from_session(details)
-        if local_collection_id == collection_id:
-            filtered.append(session)
-    return filtered
-
-
 
 def _request_with_backoff(
     method: str,
@@ -266,7 +223,6 @@ class GameBenchClient:
         environment: Optional[str],
         start_ms: int,
         end_ms: int,
-        collection_id: Optional[str] = None,
         page_size: int = 50,
         max_pages: int = 10,
     ) -> List[Dict[str, Any]]:
@@ -275,7 +231,6 @@ class GameBenchClient:
             environment=environment,
             start_ms=start_ms,
             end_ms=end_ms,
-            collection_id=collection_id,
             page_size=page_size,
             max_pages=max_pages,
         )
@@ -287,7 +242,6 @@ class GameBenchClient:
         environment: Optional[str],
         start_ms: int,
         end_ms: int,
-        collection_id: Optional[str] = None,
         page_size: int = 50,
         max_pages: int = 10,
     ) -> List[Dict[str, Any]]:
@@ -318,8 +272,6 @@ class GameBenchClient:
                 }
                 if env_filter:
                     body["appInfo"]["environment"] = env_filter
-                if collection_id:
-                    body["appInfo"]["collectionId"] = collection_id
 
                 resp = _request_with_backoff(
                     "POST",
@@ -372,10 +324,9 @@ class GameBenchClient:
 
             if environment and not results:
                 logger.warning(
-                    "GAMEBENCH_ENV_FILTER_EMPTY_RESULT environment=%s packages=%s collection_id_set=%s fallback_without_environment=%s",
+                    "GAMEBENCH_ENV_FILTER_EMPTY_RESULT environment=%s packages=%s fallback_without_environment=%s",
                     environment,
                     packages,
-                    bool(collection_id),
                     True,
                 )
                 results_no_env, retry_without_company_no_env = _run_search_for_environment(scoped_company, None)
@@ -456,7 +407,6 @@ def ingest_gamebench() -> Tuple[int, int]:
         raise ValueError("GAMEBENCH_APP_PACKAGES must contain at least one package")
 
     company_id = os.environ.get("GAMEBENCH_COMPANY_ID", "AWGaWNjXBxsUazsJuoUp") or None
-    collection_id = os.environ.get("GAMEBENCH_COLLECTION_ID") or None
     lookback_days = int(os.environ.get("GAMEBENCH_LOOKBACK_DAYS", "90"))
     lookback_days = max(1, min(lookback_days, 90))
 
@@ -468,11 +418,10 @@ def ingest_gamebench() -> Tuple[int, int]:
     end_ms = int(end_dt.timestamp() * 1000)
 
     logger.info(
-        "GAMEBENCH_INGEST_START lookback_days=%s auth_mode=%s company_id_set=%s collection_id_set=%s packages=%s start_utc=%s end_utc=%s",
+        "GAMEBENCH_INGEST_START lookback_days=%s auth_mode=%s company_id_set=%s packages=%s start_utc=%s end_utc=%s",
         lookback_days,
         auth_mode,
         bool(company_id),
-        bool(collection_id),
         packages,
         start_dt.isoformat(),
         end_dt.isoformat(),
@@ -488,7 +437,6 @@ def ingest_gamebench() -> Tuple[int, int]:
         package_groups.setdefault(_infer_platform_from_package(pkg), []).append(pkg)
 
     sessions_by_id: Dict[str, Dict[str, Any]] = {}
-    any_collection_match = False
     for environment, grouped_packages in package_groups.items():
         if not grouped_packages:
             continue
@@ -504,39 +452,14 @@ def ingest_gamebench() -> Tuple[int, int]:
             environment=environment,
             start_ms=start_ms,
             end_ms=end_ms,
-            collection_id=collection_id,
             page_size=50,
             max_pages=10,
         )
 
-        collection_filter_mode = "api" if collection_id else "off"
-        pre_filter_count = len(grouped_sessions)
-        post_filter_count = pre_filter_count
-
-        if collection_id and not grouped_sessions:
-            fallback_sessions = gb.advanced_search_sessions(
-                packages=grouped_packages,
-                environment=environment,
-                start_ms=start_ms,
-                end_ms=end_ms,
-                collection_id=None,
-                page_size=50,
-                max_pages=10,
-            )
-            pre_filter_count = len(fallback_sessions)
-            grouped_sessions = _filter_sessions_by_collection_locally(gb, fallback_sessions, collection_id)
-            post_filter_count = len(grouped_sessions)
-            collection_filter_mode = "local"
-
-        if collection_id and grouped_sessions:
-            any_collection_match = True
-
         logger.info(
-            "GAMEBENCH_SEARCH_RESULT environment=%s collection_filter_mode=%s returned_sessions_pre_filter=%s returned_sessions_post_filter=%s app_info_keys_sample=%s",
+            "GAMEBENCH_SEARCH_RESULT environment=%s returned_sessions=%s app_info_keys_sample=%s",
             environment,
-            collection_filter_mode,
-            pre_filter_count,
-            post_filter_count,
+            len(grouped_sessions),
             _sample_app_info_keys(grouped_sessions),
         )
 
@@ -544,12 +467,6 @@ def ingest_gamebench() -> Tuple[int, int]:
             session_id = session.get("sessionId") or session.get("id")
             if session_id:
                 sessions_by_id[session_id] = session
-
-    if collection_id and not any_collection_match:
-        raise ValueError(
-            f"No hay sesiones para collectionId={collection_id} con packages={packages} en rango {start_dt.isoformat()}..{end_dt.isoformat()}. "
-            "Revisa el mapping packages↔collection y la configuración de filtros."
-        )
 
     sessions = list(sessions_by_id.values())
     logger.info("GAMEBENCH_SESSION_POOL unique_sessions=%s", len(sessions))
