@@ -48,97 +48,6 @@ class ValidateBqEnvCompatTest(unittest.TestCase):
         self.assertTrue(any("validation helper not found" in m for m in logs.output))
 
 
-class CollectionFilteringModeTest(unittest.TestCase):
-    def test_uses_local_mode_when_collection_filter_is_empty_in_search_api(self):
-        with mock.patch.dict(
-            "os.environ",
-            {
-                "GAMEBENCH_USER": "user@example.com",
-                "GAMEBENCH_TOKEN": "secret",
-                "GAMEBENCH_COLLECTION_ID": "collection-123",
-                "GAMEBENCH_APP_PACKAGES": "com.scopely.internal.wwedomination",
-                "GAMEBENCH_LOOKBACK_DAYS": "1",
-            },
-            clear=False,
-        ):
-            with mock.patch.object(main, "get_client", return_value=object()):
-                with mock.patch.object(main, "_existing_session_ids", return_value=set()):
-                    with mock.patch.object(main, "insert_rows", return_value=1):
-                        with mock.patch.object(main.GameBenchClient, "get_fps", return_value=[60.0]):
-                            with mock.patch.object(main.GameBenchClient, "get_fps_stability", return_value=[95.0]):
-                                search_calls = []
-
-                                def _search(self, **kwargs):  # noqa: ANN001
-                                    search_calls.append(kwargs.get("collection_id"))
-                                    if kwargs.get("collection_id"):
-                                        return []
-                                    return [
-                                        {
-                                            "sessionId": "s-1",
-                                            "appInfo": {"package": "com.scopely.internal.wwedomination"},
-                                        }
-                                    ]
-
-                                def _details(self, session_id):  # noqa: ANN001
-                                    return {
-                                        "sessionId": session_id,
-                                        "appInfo": {
-                                            "package": "com.scopely.internal.wwedomination",
-                                            "collectionId": "collection-123",
-                                        },
-                                    }
-
-                                with mock.patch.object(main.GameBenchClient, "advanced_search_sessions", new=_search):
-                                    with mock.patch.object(main.GameBenchClient, "get_session_details", new=_details):
-                                        with self.assertLogs(main.logger, level="INFO") as logs:
-                                            inserted, skipped = main.ingest_gamebench()
-
-        self.assertEqual((inserted, skipped), (1, 0))
-        self.assertEqual(search_calls, ["collection-123", None])
-        self.assertTrue(any("collection_filter_mode=local" in msg for msg in logs.output))
-        self.assertFalse(hasattr(main, "_COLLECTION_FILTER_DISABLED"))
-
-    def test_raises_clear_error_when_collection_has_no_matches_after_local_filter(self):
-        with mock.patch.dict(
-            "os.environ",
-            {
-                "GAMEBENCH_USER": "user@example.com",
-                "GAMEBENCH_TOKEN": "secret",
-                "GAMEBENCH_COLLECTION_ID": "collection-999",
-                "GAMEBENCH_APP_PACKAGES": "com.scopely.internal.wwedomination",
-                "GAMEBENCH_LOOKBACK_DAYS": "1",
-            },
-            clear=False,
-        ):
-            with mock.patch.object(main, "get_client", return_value=object()):
-                with mock.patch.object(main, "_existing_session_ids", return_value=set()):
-                    with mock.patch.object(main.GameBenchClient, "advanced_search_sessions") as search_mock:
-                        with mock.patch.object(main.GameBenchClient, "get_session_details") as details_mock:
-                            search_mock.side_effect = [
-                                [],
-                                [
-                                    {
-                                        "sessionId": "s-1",
-                                        "appInfo": {"package": "com.scopely.internal.wwedomination"},
-                                    }
-                                ],
-                            ]
-                            details_mock.return_value = {
-                                "sessionId": "s-1",
-                                "appInfo": {
-                                    "package": "com.scopely.internal.wwedomination",
-                                    "collectionId": "collection-other",
-                                },
-                            }
-
-                            with self.assertRaises(ValueError) as ctx:
-                                main.ingest_gamebench()
-
-        msg = str(ctx.exception)
-        self.assertIn("No hay sesiones para collectionId=collection-999", msg)
-        self.assertIn("mapping packages↔collection", msg)
-
-
 class EnvironmentEmptyFallbackTest(unittest.TestCase):
     def test_falls_back_without_environment_on_ok_empty_response(self):
         client = main.GameBenchClient("user@example.com", "secret", auth_mode="basic", company_id=None)
@@ -165,7 +74,6 @@ class EnvironmentEmptyFallbackTest(unittest.TestCase):
                 environment="dev",
                 start_ms=1,
                 end_ms=2,
-                collection_id=None,
                 page_size=50,
                 max_pages=1,
             )
