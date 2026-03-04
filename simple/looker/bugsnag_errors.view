@@ -1,5 +1,7 @@
 view: bugsnag_errors {
-  sql_table_name: `qa-panda-metrics.qa_metrics_simple.bugsnag_errors` ;;
+  # Use connection project + qa_metrics_simple dataset to avoid hardcoding
+  # a single GCP project (prod) and returning empty results in other envs.
+  sql_table_name: `qa_metrics_simple.bugsnag_errors` ;;
 
   dimension_group: ingest_timestamp {
     type: time

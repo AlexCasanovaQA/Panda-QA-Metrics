@@ -1,0 +1,28 @@
+view: bugsnag_ingest_runs {
+  # Use connection project + qa_metrics_simple dataset to avoid hardcoding
+  # a single GCP project (prod) and returning empty results in other envs.
+  sql_table_name: `qa_metrics_simple.bugsnag_ingest_runs` ;;
+
+  dimension_group: run_ts {
+    type: time
+    timeframes: [raw, time, date, week, month]
+    sql: ${TABLE}.run_ts ;;
+  }
+
+  dimension: source { type: string sql: ${TABLE}.source ;; }
+  dimension: status { type: string sql: ${TABLE}.status ;; }
+  dimension: inserted_rows { type: number sql: ${TABLE}.inserted_rows ;; }
+
+  dimension: rate_limited_projects {
+    type: string
+    sql: ARRAY_TO_STRING(${TABLE}.rate_limited_projects, ', ') ;;
+  }
+
+  dimension: deadline_projects {
+    type: string
+    sql: ARRAY_TO_STRING(${TABLE}.deadline_projects, ', ') ;;
+  }
+
+  measure: runs { type: count }
+  measure: inserted_rows_total { type: sum sql: ${TABLE}.inserted_rows ;; }
+}

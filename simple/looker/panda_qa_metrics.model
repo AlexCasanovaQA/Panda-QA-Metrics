@@ -2,8 +2,8 @@ connection: "qa-panda-metrics-exp"
 # Default runtime target for this Looker project: Cloud Run europe-west1 + BigQuery location EU.
 
 # Local simple project assets (all focused on qa_metrics_simple dataset)
-include: "/scopely_panda/views/qa_metrics/simple/*.view.lkml"
-include: "/scopely_panda/dashboards/qa_metrics/simple/*.dashboard.lookml"
+include: "/scopely_panda/views/qa_metrics/simple/*.view*"
+include: "/scopely_panda/dashboards/qa_metrics/simple/*.dashboard*"
 
 
 explore: qa_executive_kpis {
@@ -26,6 +26,10 @@ explore: testrail_results {
 
 explore: bugsnag_errors {
   label: "BugSnag Errors (raw)"
+}
+
+explore: bugsnag_ingest_runs {
+  label: "BugSnag Ingest Runs (raw)"
 }
 
 explore: gamebench_sessions {
