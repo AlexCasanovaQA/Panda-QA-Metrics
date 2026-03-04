@@ -117,7 +117,6 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
         Feature: qa_executive_kpis.feature
         Release: qa_executive_kpis.release
@@ -142,7 +141,6 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
         Feature: qa_executive_kpis.feature
         Release: qa_executive_kpis.release
@@ -167,7 +165,6 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
         Feature: qa_executive_kpis.feature
         Release: qa_executive_kpis.release
@@ -192,7 +189,6 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
         Feature: qa_executive_kpis.feature
         Release: qa_executive_kpis.release
@@ -229,7 +225,6 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
         Feature: qa_executive_kpis.feature
         Release: qa_executive_kpis.release
@@ -254,7 +249,6 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
         Feature: qa_executive_kpis.feature
         Release: qa_executive_kpis.release
@@ -280,7 +274,6 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
         Feature: qa_executive_kpis.feature
         Release: qa_executive_kpis.release
@@ -306,7 +299,6 @@
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
-        Trend Range: qa_executive_kpis.metric_date
         POD: qa_executive_kpis.pod
         Feature: qa_executive_kpis.feature
         Release: qa_executive_kpis.release
