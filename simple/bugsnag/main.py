@@ -585,13 +585,19 @@ def hello_http(request):
 
         kpi_computed = False
         kpi_refresh_without_changes = False
-        # KPI policy: best effort. Compute with the latest available BugSnag snapshot
-        # when this run is not fully failed/rate-limited/deadline-blocked.
+        # KPI policy: best effort. Always attempt KPI refresh (time permitting),
+        # even when the current API ingest run is partial/failed.
+        #
+        # Why: dashboard filter suggestions for qa_executive_kpis.metric_id depend on
+        # rows present in qa_executive_kpis_latest. If a run fails before KPI refresh,
+        # EXEC-18/19/20 can disappear from suggestions for current windows.
+        #
+        # _compute_bugsnag_kpis() is resilient: it reads latest available snapshot from
+        # bugsnag_errors and inserts fallback 0-rows for EXEC-18/19/20 when needed.
         ingest_completed = not failed_projects and not rate_limited_projects and not deadline_projects
         has_usable_subset = total_inserted > 0
-        has_snapshot_context = len(failed_projects) < len(project_ids)
         kpi_partial_coverage = has_usable_subset and not ingest_completed
-        if has_snapshot_context and time.time() < deadline - 10:
+        if time.time() < deadline - 10:
             current_phase = "kpis"
             _compute_bugsnag_kpis()
             kpi_computed = True
