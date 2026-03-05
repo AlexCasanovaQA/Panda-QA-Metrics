@@ -114,6 +114,7 @@
       fields: [qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-01"
+        qa_executive_kpis.metric_date: "today"
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
@@ -138,6 +139,7 @@
       fields: [qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-02"
+        qa_executive_kpis.metric_date: "today"
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
@@ -162,6 +164,7 @@
       fields: [qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-03"
+        qa_executive_kpis.metric_date: "today"
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
@@ -186,6 +189,7 @@
       fields: [qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-04"
+        qa_executive_kpis.metric_date: "today"
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
@@ -222,6 +226,7 @@
       fields: [qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-18"
+        qa_executive_kpis.metric_date: "today"
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
@@ -246,6 +251,7 @@
       fields: [qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-19"
+        qa_executive_kpis.metric_date: "today"
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
