@@ -456,10 +456,19 @@ CREATE TABLE IF NOT EXISTS `{runs_table}` (
   run_ts TIMESTAMP,
   source STRING,
   status STRING,
+  api_ingest_status STRING,
+  kpi_refresh_status STRING,
+  kpi_skipped_due_to_deadline BOOL,
+  kpi_missing_metric_ids ARRAY<STRING>,
   inserted_rows INT64,
   rate_limited_projects ARRAY<STRING>,
   deadline_projects ARRAY<STRING>
 );
+
+ALTER TABLE `{runs_table}` ADD COLUMN IF NOT EXISTS api_ingest_status STRING;
+ALTER TABLE `{runs_table}` ADD COLUMN IF NOT EXISTS kpi_refresh_status STRING;
+ALTER TABLE `{runs_table}` ADD COLUMN IF NOT EXISTS kpi_skipped_due_to_deadline BOOL;
+ALTER TABLE `{runs_table}` ADD COLUMN IF NOT EXISTS kpi_missing_metric_ids ARRAY<STRING>;
 """
     run_query(client, sql, job_labels={"pipeline": "qa-metrics", "source": "bugsnag"})
 
@@ -469,6 +478,10 @@ def _insert_bugsnag_run_marker(
     *,
     run_ts: str,
     status: str,
+    api_ingest_status: str,
+    kpi_refresh_status: str,
+    kpi_skipped_due_to_deadline: bool,
+    kpi_missing_metric_ids: List[str],
     inserted_rows: int,
     rate_limited_projects: List[str],
     deadline_projects: List[str],
@@ -481,12 +494,40 @@ def _insert_bugsnag_run_marker(
                 "run_ts": run_ts,
                 "source": "bugsnag",
                 "status": status,
+                "api_ingest_status": api_ingest_status,
+                "kpi_refresh_status": kpi_refresh_status,
+                "kpi_skipped_due_to_deadline": kpi_skipped_due_to_deadline,
+                "kpi_missing_metric_ids": sorted(set(kpi_missing_metric_ids)),
                 "inserted_rows": inserted_rows,
                 "rate_limited_projects": sorted(set(rate_limited_projects)),
                 "deadline_projects": sorted(set(deadline_projects)),
             }
         ],
     )
+
+
+def _verify_bugsnag_daily_kpis(client) -> List[str]:
+    """Return missing EXEC metric IDs that should exist for BugSnag today."""
+    kpi_table = table_ref("qa_executive_kpis")
+    sql = f"""
+WITH expected AS (
+  SELECT metric_id
+  FROM UNNEST(["EXEC-18", "EXEC-19", "EXEC-20", "EXEC-21"]) AS metric_id
+),
+present AS (
+  SELECT DISTINCT metric_id
+  FROM `{kpi_table}`
+  WHERE source = "BugSnag"
+    AND metric_date = CURRENT_DATE("UTC")
+)
+SELECT e.metric_id
+FROM expected e
+LEFT JOIN present p USING(metric_id)
+WHERE p.metric_id IS NULL
+ORDER BY e.metric_id
+"""
+    rows = list(run_query(client, sql, job_labels={"pipeline": "qa-metrics", "source": "bugsnag"}).result())
+    return [str(r["metric_id"]) for r in rows]
 
 
 def hello_http(request):
@@ -524,6 +565,10 @@ def hello_http(request):
         # Scheduler marks the attempt as DEADLINE_EXCEEDED.
         max_runtime_s = int(os.environ.get("BUGSNAG_MAX_RUNTIME_S", "150"))
         deadline = time.time() + max(30, min(max_runtime_s, 160))
+        # Reserve time for KPI refresh so EXEC-18/19/20/21 stay fresh even if API ingest is partial.
+        kpi_reserve_s = int(os.environ.get("BUGSNAG_KPI_RESERVE_S", "25"))
+        kpi_reserve_s = max(10, min(kpi_reserve_s, 60))
+        ingest_deadline = deadline - kpi_reserve_s
 
         ingest_ts = to_rfc3339(utc_now())
         current_phase = "bq_setup"
@@ -539,12 +584,12 @@ def hello_http(request):
         current_phase = "api_bugsnag"
         for project_id in project_ids:
             current_project_id = str(project_id)
-            if time.time() >= deadline:
+            if time.time() >= ingest_deadline:
                 deadline_projects.append(str(project_id))
                 continue
 
             try:
-                errors, was_rl, hit_deadline = _list_errors(base_url, project_id, token, deadline_epoch=deadline)
+                errors, was_rl, hit_deadline = _list_errors(base_url, project_id, token, deadline_epoch=ingest_deadline)
                 if was_rl:
                     rate_limited_projects.append(project_id)
                 if hit_deadline:
@@ -557,7 +602,7 @@ def hello_http(request):
 
                 current_phase = "bq_write"
                 for i in range(0, len(rows), 500):
-                    if time.time() >= deadline:
+                    if time.time() >= ingest_deadline:
                         deadline_projects.append(project_id)
                         break
                     total_inserted += insert_rows(client, "bugsnag_errors", rows[i : i + 500])
@@ -566,22 +611,12 @@ def hello_http(request):
             except Exception as e:
                 failed_projects.append({"project_id": str(project_id), "error": str(e)})
 
-        if not failed_projects:
-            run_status = "ok"
+        if not failed_projects and not rate_limited_projects and not deadline_projects:
+            api_ingest_status = "ok"
         elif len(failed_projects) == len(project_ids):
-            run_status = "error"
+            api_ingest_status = "error"
         else:
-            run_status = "partial"
-
-        current_phase = "bq_run_marker"
-        _insert_bugsnag_run_marker(
-            client,
-            run_ts=ingest_ts,
-            status=run_status,
-            inserted_rows=total_inserted,
-            rate_limited_projects=rate_limited_projects,
-            deadline_projects=deadline_projects,
-        )
+            api_ingest_status = "partial"
 
         kpi_computed = False
         kpi_refresh_without_changes = False
@@ -597,11 +632,58 @@ def hello_http(request):
         ingest_completed = not failed_projects and not rate_limited_projects and not deadline_projects
         has_usable_subset = total_inserted > 0
         kpi_partial_coverage = has_usable_subset and not ingest_completed
-        if time.time() < deadline - 10:
+        kpi_skipped_due_to_deadline = False
+        if time.time() < deadline - 5:
             current_phase = "kpis"
             _compute_bugsnag_kpis()
             kpi_computed = True
             kpi_refresh_without_changes = total_source_errors == 0
+        else:
+            kpi_skipped_due_to_deadline = True
+            logger.warning(
+                "bugsnag_kpi_refresh_skipped",
+                extra={
+                    "source": source,
+                    "service": service,
+                    "phase": current_phase,
+                    "kpi_skipped_due_to_deadline": True,
+                    "seconds_until_deadline": max(0, int(deadline - time.time())),
+                },
+            )
+
+        kpi_missing_metric_ids: List[str] = []
+        if kpi_computed:
+            kpi_missing_metric_ids = _verify_bugsnag_daily_kpis(client)
+
+        if kpi_computed and not kpi_missing_metric_ids:
+            kpi_refresh_status = "ok"
+        elif kpi_computed:
+            kpi_refresh_status = "partial"
+        elif kpi_skipped_due_to_deadline:
+            kpi_refresh_status = "skipped_deadline"
+        else:
+            kpi_refresh_status = "error"
+
+        if api_ingest_status == "ok" and kpi_refresh_status == "ok":
+            run_status = "ok"
+        elif api_ingest_status == "error" and kpi_refresh_status in ("error", "skipped_deadline"):
+            run_status = "error"
+        else:
+            run_status = "partial"
+
+        current_phase = "bq_run_marker"
+        _insert_bugsnag_run_marker(
+            client,
+            run_ts=ingest_ts,
+            status=run_status,
+            api_ingest_status=api_ingest_status,
+            kpi_refresh_status=kpi_refresh_status,
+            kpi_skipped_due_to_deadline=kpi_skipped_due_to_deadline,
+            kpi_missing_metric_ids=kpi_missing_metric_ids,
+            inserted_rows=total_inserted,
+            rate_limited_projects=rate_limited_projects,
+            deadline_projects=deadline_projects,
+        )
 
         logger.info(
             "bugsnag_ingest_success",
@@ -610,19 +692,26 @@ def hello_http(request):
                 "service": service,
                 "phase": current_phase,
                 "status": run_status,
+                "api_ingest_status": api_ingest_status,
+                "kpi_refresh_status": kpi_refresh_status,
                 "inserted_rows": total_inserted,
                 "source_errors_seen": total_source_errors,
                 "failed_projects_count": len(failed_projects),
+                "kpi_missing_metric_ids": kpi_missing_metric_ids,
             },
         )
 
         return jsonify(
             {
                 "status": run_status,
+                "api_ingest_status": api_ingest_status,
+                "kpi_refresh_status": kpi_refresh_status,
                 "inserted_rows": total_inserted,
                 "kpi_computed": kpi_computed,
                 "kpi_partial_coverage": kpi_partial_coverage,
                 "kpi_refresh_without_changes": kpi_refresh_without_changes,
+                "kpi_skipped_due_to_deadline": kpi_skipped_due_to_deadline,
+                "kpi_missing_metric_ids": kpi_missing_metric_ids,
                 "source_errors_seen": total_source_errors,
                 "rate_limited_projects": rate_limited_projects,
                 "deadline_projects": deadline_projects,

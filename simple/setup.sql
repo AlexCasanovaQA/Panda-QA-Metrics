@@ -180,6 +180,10 @@ CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.bugsnag_ingest_ru
   run_ts TIMESTAMP,
   source STRING,
   status STRING,
+  api_ingest_status STRING,
+  kpi_refresh_status STRING,
+  kpi_skipped_due_to_deadline BOOL,
+  kpi_missing_metric_ids ARRAY<STRING>,
   inserted_rows INT64,
   rate_limited_projects ARRAY<STRING>,
   deadline_projects ARRAY<STRING>
