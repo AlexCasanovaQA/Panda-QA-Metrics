@@ -4,30 +4,14 @@
 # Legacy LookML runtime friendly:
 # - No view-level description property.
 # - Expose metric_date as DATE to avoid DATE >= TIMESTAMP BigQuery errors.
-# - Operational fallback mirror table: qa-panda-metrics.qa_metrics_simple_mirror.qa_executive_kpis_latest
-#   (used here as a live union source so Looker keeps reading BugSnag KPIs even if
-#   ingestion falls back to mirror due to project/region mismatch).
+# - Reads from the canonical `qa_metrics_simple` dataset configured in the Looker
+#   BigQuery connection to avoid cross-region/project "dataset not found" failures.
 
 view: qa_executive_kpis {
   derived_table: {
     sql:
-      SELECT * EXCEPT(rn)
-      FROM (
-        SELECT
-          s.*,
-          ROW_NUMBER() OVER (
-            PARTITION BY metric_id, metric_date, IFNULL(dimensions, '{}')
-            ORDER BY computed_at DESC
-          ) AS rn
-        FROM (
-          SELECT *
-          FROM `qa-panda-metrics.qa_metrics_simple.qa_executive_kpis_latest`
-          UNION ALL
-          SELECT *
-          FROM `qa-panda-metrics.qa_metrics_simple_mirror.qa_executive_kpis_latest`
-        ) AS s
-      )
-      WHERE rn = 1 ;;
+      SELECT *
+      FROM `qa_metrics_simple.qa_executive_kpis_latest` ;;
   }
 
   dimension: kpi_key {
