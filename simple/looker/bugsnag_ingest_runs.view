@@ -13,6 +13,14 @@ view: bugsnag_ingest_runs {
   dimension: status { type: string sql: ${TABLE}.status ;; }
   dimension: inserted_rows { type: number sql: ${TABLE}.inserted_rows ;; }
 
+  dimension: api_ingest_status { type: string sql: ${TABLE}.api_ingest_status ;; }
+  dimension: kpi_refresh_status { type: string sql: ${TABLE}.kpi_refresh_status ;; }
+  dimension: kpi_skipped_due_to_deadline { type: yesno sql: ${TABLE}.kpi_skipped_due_to_deadline ;; }
+  dimension: kpi_missing_metric_ids {
+    type: string
+    sql: ARRAY_TO_STRING(${TABLE}.kpi_missing_metric_ids, ', ') ;;
+  }
+
   dimension: rate_limited_projects {
     type: string
     sql: ARRAY_TO_STRING(${TABLE}.rate_limited_projects, ', ') ;;
