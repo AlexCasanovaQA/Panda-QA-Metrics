@@ -1,4 +1,4 @@
-"""Jira → BigQuery ingestion + KPI computation (QA Executive).
+"""Jira -> BigQuery ingestion + KPI computation (QA Executive).
 
 This Cloud Run/Cloud Function (2nd gen) service:
 1) Pulls Bug issues from Jira Cloud using the new JQL Search API: GET /rest/api/3/search/jql
@@ -89,16 +89,18 @@ def _first_non_empty(*names: str) -> Optional[str]:
     return None
 
 
-def _validate_jira_config() -> Dict[str, str]:
+def _validate_jira_config(project_keys_override: Optional[str] = None) -> Dict[str, str]:
     """Fail fast with a precise configuration error before hitting integrations."""
     required_groups = {
         "JIRA site/base URL": ("JIRA_SITE", "JIRA_BASE_URL"),
         "JIRA user/email": ("JIRA_USER", "JIRA_EMAIL"),
         "JIRA API token": ("JIRA_API_TOKEN",),
-        "JIRA project keys": ("JIRA_PROJECT_KEYS", "JIRA_PROJECT_KEYS_CSV", "JIRA_PROJECT_KEY"),
     }
 
     missing = [f"{label}: {' | '.join(names)}" for label, names in required_groups.items() if _first_non_empty(*names) is None]
+    if not project_keys_override and _first_non_empty("JIRA_PROJECT_KEYS", "JIRA_PROJECT_KEYS_CSV", "JIRA_PROJECT_KEY") is None:
+        missing.append("JIRA project keys: JIRA_PROJECT_KEYS | JIRA_PROJECT_KEYS_CSV | JIRA_PROJECT_KEY")
+
     if missing:
         raise ConfigError("Missing Jira configuration: " + "; ".join(missing))
 
@@ -106,9 +108,8 @@ def _validate_jira_config() -> Dict[str, str]:
         "site": _first_non_empty("JIRA_SITE", "JIRA_BASE_URL") or "",
         "user": _first_non_empty("JIRA_USER", "JIRA_EMAIL") or "",
         "api_token": _first_non_empty("JIRA_API_TOKEN") or "",
-        "project_keys": _first_non_empty("JIRA_PROJECT_KEYS", "JIRA_PROJECT_KEYS_CSV", "JIRA_PROJECT_KEY") or "",
+        "project_keys": project_keys_override or (_first_non_empty("JIRA_PROJECT_KEYS", "JIRA_PROJECT_KEYS_CSV", "JIRA_PROJECT_KEY") or ""),
     }
-
 
 def _jira_base_url(site: str) -> str:
     site = site.strip().rstrip("/")
@@ -280,28 +281,50 @@ def _parse_changelog(issue: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
-def ingest_jira(*, deadline_epoch: Optional[float] = None) -> Tuple[int, int, bool]:
+def ingest_jira(
+    *,
+    deadline_epoch: Optional[float] = None,
+    request_overrides: Optional[Dict[str, Any]] = None,
+) -> Tuple[int, int, bool]:
     """Fetch issues + status changelog and insert into BigQuery.
 
     Returns: (snapshot_rows_inserted, changelog_rows_inserted, deadline_reached)
     """
 
-    config = _validate_jira_config()
+    request_overrides = request_overrides or {}
+
+    project_keys_override = request_overrides.get("project_keys")
+    project_keys_csv_override = request_overrides.get("project_keys_csv")
+    if isinstance(project_keys_override, list):
+        project_keys_raw = ",".join(str(x).strip() for x in project_keys_override if str(x).strip())
+    elif isinstance(project_keys_override, str) and project_keys_override.strip():
+        project_keys_raw = project_keys_override.strip()
+    elif isinstance(project_keys_csv_override, str) and project_keys_csv_override.strip():
+        project_keys_raw = project_keys_csv_override.strip()
+    else:
+        project_keys_raw = ""
+
+    config = _validate_jira_config(project_keys_override=project_keys_raw or None)
     site = _jira_base_url(config["site"])
     user = config["user"]
     api_token = config["api_token"]
 
     project_keys = _split_csv(config["project_keys"])
-    lookback_days = int(os.environ.get("JIRA_LOOKBACK_DAYS", "90"))
+
+    lookback_raw = request_overrides.get("lookback_days", os.environ.get("JIRA_LOOKBACK_DAYS", "90"))
+    try:
+        lookback_days = int(lookback_raw)
+    except (TypeError, ValueError):
+        lookback_days = int(os.environ.get("JIRA_LOOKBACK_DAYS", "90"))
     lookback_days = max(1, min(lookback_days, 90))
 
     severity_field = _first_non_empty("JIRA_SEVERITY_FIELD_ID", "JIRA_SEVERITY_FIELD") or "customfield_10074"
     pod_field = os.environ.get("JIRA_POD_FIELD", "customfield_10001").strip() or "customfield_10001"
 
-    # Only Bugs; include all active + anything updated recently to catch fixes.
+    # Include Bug and Defect issue types; keep active + recently updated items.
     projects_jql = ",".join(project_keys)
     jql = (
-        f"project in ({projects_jql}) AND issuetype = Bug AND "
+        f"project in ({projects_jql}) AND issuetype in (Bug, Defect) AND "
         f"(statusCategory != Done OR updated >= -{lookback_days}d) "
         f"ORDER BY updated DESC"
     )
@@ -408,13 +431,13 @@ SELECT
   today,
   today,
   today,
-  '{{}}',
+  '{}',
   COUNT(1) * 1.0,
   NULL,
   NULL,
   'Jira'
 FROM snap
-WHERE issue_type = 'Bug'
+WHERE LOWER(COALESCE(issue_type, '')) IN ('bug','defect')
   AND DATE(created, "UTC") = today;
 
 -- EXEC-01 Breakdown by priority
@@ -432,7 +455,7 @@ SELECT
   NULL,
   'Jira'
 FROM snap
-WHERE issue_type = 'Bug'
+WHERE LOWER(COALESCE(issue_type, '')) IN ('bug','defect')
   AND DATE(created, "UTC") = today
 GROUP BY priority;
 
@@ -451,7 +474,7 @@ SELECT
   NULL,
   'Jira'
 FROM snap
-WHERE issue_type = 'Bug'
+WHERE LOWER(COALESCE(issue_type, '')) IN ('bug','defect')
   AND DATE(created, "UTC") = today
 GROUP BY severity;
 
@@ -459,7 +482,7 @@ GROUP BY severity;
 CREATE TEMP TABLE fixes_today AS
 SELECT DISTINCT issue_key
 FROM chlog
-WHERE to_value = 'Closed'
+WHERE LOWER(COALESCE(to_value, '')) = 'closed'
   AND DATE(change_timestamp, "UTC") = today;
 
 INSERT INTO `{kpi_table}`
@@ -470,7 +493,7 @@ SELECT
   today,
   today,
   today,
-  '{{}}',
+  '{}',
   COUNT(1) * 1.0,
   NULL,
   NULL,
@@ -499,7 +522,7 @@ GROUP BY s.priority;
 CREATE TEMP TABLE active_now AS
 SELECT *
 FROM snap
-WHERE issue_type = 'Bug'
+WHERE LOWER(COALESCE(issue_type, '')) IN ('bug','defect')
   AND LOWER(COALESCE(status_category, '')) != 'done';
 
 INSERT INTO `{kpi_table}`
@@ -510,7 +533,7 @@ SELECT
   today,
   today,
   today,
-  '{{}}',
+  '{}',
   COUNT(1) * 1.0,
   NULL,
   NULL,
@@ -555,8 +578,8 @@ GROUP BY priority;
 CREATE TEMP TABLE awaiting_qa AS
 SELECT *
 FROM snap
-WHERE issue_type = 'Bug'
-  AND status = 'Resolved';
+WHERE LOWER(COALESCE(issue_type, '')) IN ('bug','defect')
+  AND LOWER(COALESCE(status, '')) = 'resolved';
 
 INSERT INTO `{kpi_table}`
 SELECT
@@ -566,7 +589,7 @@ SELECT
   today,
   today,
   today,
-  '{{}}',
+  '{}',
   COUNT(1) * 1.0,
   NULL,
   NULL,
@@ -588,7 +611,7 @@ SELECT
   NULL,
   'Jira'
 FROM snap
-WHERE issue_type = 'Bug'
+WHERE LOWER(COALESCE(issue_type, '')) IN ('bug','defect')
   AND DATE(created, "UTC") BETWEEN start90 AND today
 GROUP BY severity;
 
@@ -607,7 +630,7 @@ SELECT
   NULL,
   'Jira'
 FROM snap
-WHERE issue_type = 'Bug'
+WHERE LOWER(COALESCE(issue_type, '')) IN ('bug','defect')
   AND DATE(created, "UTC") BETWEEN start90 AND today
 GROUP BY severity;
 
@@ -627,16 +650,16 @@ SELECT
   'Jira'
 FROM chlog c
 LEFT JOIN snap s USING(issue_key)
-WHERE c.to_value = 'Closed'
+WHERE LOWER(COALESCE(c.to_value, '')) = 'closed'
   AND DATE(c.change_timestamp, "UTC") BETWEEN start90 AND today
 GROUP BY s.priority;
 
--- EXEC-08 Bugs entered by day (last 90d, UTC) — Priority
+-- EXEC-08 Bugs entered by day (last 90d, UTC) - Priority
 INSERT INTO `{kpi_table}`
 SELECT
   CURRENT_TIMESTAMP(),
   'EXEC-08',
-  'Bugs entered by day (last 90d, UTC) — Priority',
+  'Bugs entered by day (last 90d, UTC) - Priority',
   DATE(created, "UTC") AS metric_date,
   start90,
   today,
@@ -646,7 +669,7 @@ SELECT
   NULL,
   'Jira'
 FROM snap
-WHERE issue_type = 'Bug'
+WHERE LOWER(COALESCE(issue_type, '')) IN ('bug','defect')
   AND DATE(created, "UTC") BETWEEN start90 AND today
 GROUP BY metric_date, priority;
 
@@ -701,7 +724,7 @@ SELECT
   LOWER(COALESCE(status_category, '')) AS status_category_lc,
   DATE(status_category_changed_date, "UTC") AS status_category_changed_date
 FROM snap
-WHERE issue_type = 'Bug'
+WHERE LOWER(COALESCE(issue_type, '')) IN ('bug','defect')
   AND created IS NOT NULL;
 
 INSERT INTO `{kpi_table}`
@@ -712,7 +735,7 @@ SELECT
   d AS metric_date,
   start90,
   today,
-  '{{}}',
+  '{}',
   COUNTIF(
     bl.created_date <= d
     AND (
@@ -737,13 +760,13 @@ SELECT
   DATE(change_timestamp, "UTC") AS metric_date,
   start90,
   today,
-  '{{}}',
+  '{}',
   COUNT(DISTINCT issue_key) * 1.0,
   NULL,
   NULL,
   'Jira'
 FROM chlog
-WHERE to_value = 'Reopened'
+WHERE LOWER(COALESCE(to_value, '')) = 'reopened'
 GROUP BY metric_date;
 
 -- EXEC-13 Fix fail rate over time (90d, UTC)
@@ -752,7 +775,7 @@ SELECT
   DATE(change_timestamp, "UTC") AS d,
   COUNT(DISTINCT issue_key) AS closed_count
 FROM chlog
-WHERE to_value IN ('Closed', 'Resolved', 'Verified')
+WHERE LOWER(COALESCE(to_value, '')) IN ('closed', 'resolved', 'verified')
 GROUP BY d;
 
 CREATE TEMP TABLE reopened_by_day AS
@@ -760,8 +783,8 @@ SELECT
   DATE(change_timestamp, "UTC") AS d,
   COUNT(DISTINCT issue_key) AS reopened_count
 FROM chlog
-WHERE from_value IN ('Closed', 'Resolved', 'Verified')
-  AND to_value = 'Reopened'
+WHERE LOWER(COALESCE(from_value, '')) IN ('closed', 'resolved', 'verified')
+  AND LOWER(COALESCE(to_value, '')) = 'reopened'
 GROUP BY d;
 
 INSERT INTO `{kpi_table}`
@@ -772,7 +795,7 @@ SELECT
   d,
   start90,
   today,
-  '{{}}',
+  '{}',
   SAFE_DIVIDE(COALESCE(r.reopened_count, 0), NULLIF(COALESCE(c.closed_count, 0), 0)) * 1.0,
   COALESCE(r.reopened_count, 0),
   COALESCE(c.closed_count, 0),
@@ -840,7 +863,13 @@ def hello_http(request):
         deadline_epoch = time.time() + max(30, min(max_runtime_s, 160))
 
         validate_bq_env()
-        inserted_snap, inserted_chg, deadline_reached = ingest_jira(deadline_epoch=deadline_epoch)
+        req_json = request.get_json(silent=True) or {}
+        if not isinstance(req_json, dict):
+            req_json = {}
+        inserted_snap, inserted_chg, deadline_reached = ingest_jira(
+            deadline_epoch=deadline_epoch,
+            request_overrides=req_json,
+        )
 
         kpis_computed = False
         if not deadline_reached and time.time() < deadline_epoch - 10:

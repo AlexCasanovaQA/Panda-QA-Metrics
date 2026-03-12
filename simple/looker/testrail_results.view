@@ -1,5 +1,5 @@
 view: testrail_results {
-  sql_table_name: `qa-panda-metrics.qa_metrics_simple.testrail_results` ;;
+  sql_table_name: `qa_metrics_simple.testrail_results` ;;
 
   dimension_group: created_on {
     type: time

@@ -1,4 +1,4 @@
-"""GameBench → BigQuery ingestion + KPI computation (QA Executive).
+"""GameBench -> BigQuery ingestion + KPI computation (QA Executive).
 
 This Cloud Run/Cloud Function (2nd gen) service:
 1) Uses the GameBench Web Dashboard API to search sessions for the authenticated user:
@@ -15,7 +15,7 @@ This Cloud Run/Cloud Function (2nd gen) service:
    - EXEC-24 Current build size by platform (manual table)
 
 Required env vars / secrets:
-- GAMEBENCH_USER         (email)
+- GAMEBENCH_USER         (email, required only when GAMEBENCH_AUTH_MODE=basic)
 - GAMEBENCH_TOKEN        (API token)
 
 Optional:
@@ -374,13 +374,35 @@ class GameBenchClient:
 # Ingestion
 # -----------------------------
 
-def _infer_platform_from_package(pkg: Optional[str]) -> str:
+def _infer_environment_from_package(pkg: Optional[str]) -> str:
     if not pkg:
         return "unknown"
     if ".internal." in pkg or pkg.endswith(".internal"):
         return "dev"
     return "prod"
 
+
+def _normalize_platform(value: Any) -> str:
+    if value is None:
+        return "unknown"
+    raw = str(value).strip().lower()
+    if not raw:
+        return "unknown"
+
+    if any(token in raw for token in ("android",)):
+        return "android"
+    if any(token in raw for token in ("ios", "iphone", "ipad")):
+        return "ios"
+
+    return "unknown"
+
+
+def _infer_platform_from_sources(*values: Any) -> str:
+    for value in values:
+        platform = _normalize_platform(value)
+        if platform != "unknown":
+            return platform
+    return "unknown"
 
 def _existing_session_ids(client, lookback_days: int) -> set:
     table = table_ref("gamebench_sessions")
@@ -395,21 +417,41 @@ def _existing_session_ids(client, lookback_days: int) -> set:
     return existing
 
 
-def ingest_gamebench() -> Tuple[int, int]:
+def ingest_gamebench(*, request_overrides: Optional[Dict[str, Any]] = None) -> Tuple[int, int]:
 
-    user = _env("GAMEBENCH_USER")
+    request_overrides = request_overrides or {}
+
+    auth_mode = str(request_overrides.get("auth_mode") or os.environ.get("GAMEBENCH_AUTH_MODE", "basic")).strip().lower() or "basic"
+
+    if auth_mode == "bearer":
+        user = str(os.environ.get("GAMEBENCH_USER", "")).strip()
+    else:
+        user = _env("GAMEBENCH_USER")
+
     token = _env("GAMEBENCH_TOKEN")
 
-    auth_mode = os.environ.get("GAMEBENCH_AUTH_MODE", "basic").strip().lower() or "basic"
     packages_default = "com.scopely.internal.wwedomination,com.scopely.wwedomination"
-    packages = _split_csv(_env("GAMEBENCH_APP_PACKAGES", packages_default))
+    packages_raw = request_overrides.get("app_packages")
+    if isinstance(packages_raw, list):
+        packages = [str(x).strip() for x in packages_raw if str(x).strip()]
+    elif isinstance(packages_raw, str) and packages_raw.strip():
+        packages = _split_csv(packages_raw)
+    else:
+        packages = _split_csv(_env("GAMEBENCH_APP_PACKAGES", packages_default))
+
     if not packages:
         raise ValueError("GAMEBENCH_APP_PACKAGES must contain at least one package")
 
-    company_id = os.environ.get("GAMEBENCH_COMPANY_ID", "AWGaWNjXBxsUazsJuoUp") or None
-    lookback_days = int(os.environ.get("GAMEBENCH_LOOKBACK_DAYS", "90"))
+    company_id = str(request_overrides.get("company_id") or os.environ.get("GAMEBENCH_COMPANY_ID", "AWGaWNjXBxsUazsJuoUp") or "").strip() or None
+
+    lookback_raw = request_overrides.get("days", request_overrides.get("lookback_days", os.environ.get("GAMEBENCH_LOOKBACK_DAYS", "90")))
+    try:
+        lookback_days = int(lookback_raw)
+    except (TypeError, ValueError):
+        lookback_days = int(os.environ.get("GAMEBENCH_LOOKBACK_DAYS", "90"))
     lookback_days = max(1, min(lookback_days, 90))
 
+    platform_filter = _normalize_platform(request_overrides.get("platform"))
     end_dt = utc_now()
     start_dt = end_dt - datetime.timedelta(days=lookback_days)
 
@@ -434,7 +476,7 @@ def ingest_gamebench() -> Tuple[int, int]:
     logger.info("GAMEBENCH_EXISTING_SESSIONS existing_count=%s", len(existing))
     package_groups: Dict[str, List[str]] = {"dev": [], "prod": []}
     for pkg in packages:
-        package_groups.setdefault(_infer_platform_from_package(pkg), []).append(pkg)
+        package_groups.setdefault(_infer_environment_from_package(pkg), []).append(pkg)
 
     sessions_by_id: Dict[str, Dict[str, Any]] = {}
     for environment, grouped_packages in package_groups.items():
@@ -464,7 +506,7 @@ def ingest_gamebench() -> Tuple[int, int]:
         )
 
         for session in grouped_sessions:
-            session_id = session.get("sessionId") or session.get("id")
+            session_id = session.get("sessionId") or session.get("id") or session.get("_id")
             if session_id:
                 sessions_by_id[session_id] = session
 
@@ -478,9 +520,9 @@ def ingest_gamebench() -> Tuple[int, int]:
     skipped_sessions = 0
     skipped_existing = 0
     skipped_missing_id = 0
-
+    skipped_platform = 0
     for s in sessions:
-        session_id = s.get("sessionId") or s.get("id")
+        session_id = s.get("sessionId") or s.get("id") or s.get("_id")
         if not session_id:
             skipped_missing_id += 1
             continue
@@ -498,13 +540,46 @@ def ingest_gamebench() -> Tuple[int, int]:
         app_package = app.get("package") or app.get("packageName") or s.get("appPackage")
         device_model = device.get("model")
 
-        platform = _infer_platform_from_package(app_package)
+        platform = _infer_platform_from_sources(
+            s.get("platform"),
+            s.get("os"),
+            app.get("platform"),
+            app.get("os"),
+            device.get("platform"),
+            device.get("os"),
+        )
 
         time_pushed_dt = _parse_ts(s.get("timePushed") or s.get("time_pushed") or s.get("timePushedMs"))
         if not time_pushed_dt:
             time_pushed_dt = end_dt
 
         try:
+            detail = gb.get_session_details(session_id)
+            detail_app = detail.get("app") or detail.get("appInfo") or {}
+            detail_device = detail.get("device") or detail.get("deviceInfo") or {}
+
+            app_name = app_name or detail_app.get("name")
+            app_package = app_package or detail_app.get("package") or detail_app.get("packageName") or detail.get("appPackage")
+            device_model = device_model or detail_device.get("model")
+
+            platform = _infer_platform_from_sources(
+                platform,
+                detail.get("platform"),
+                detail.get("os"),
+                detail_app.get("platform"),
+                detail_app.get("os"),
+                detail_device.get("platform"),
+                detail_device.get("os"),
+                detail_device.get("osName"),
+            )
+            if platform_filter != "unknown" and platform != platform_filter:
+                skipped_platform += 1
+                continue
+
+            detail_time_pushed = _parse_ts(detail.get("timePushed") or detail.get("time_pushed") or detail.get("timePushedMs"))
+            if detail_time_pushed:
+                time_pushed_dt = detail_time_pushed
+
             fps_values = gb.get_fps(session_id)
             median_fps = statistics.median(fps_values) if fps_values else None
 
@@ -542,12 +617,14 @@ def ingest_gamebench() -> Tuple[int, int]:
         logger.info("GAMEBENCH_BQ_INSERT chunk_size=%s cumulative_inserted=%s", chunk_size, inserted)
 
     logger.info(
-        "GAMEBENCH_INGEST_SUMMARY unique_sessions=%s inserted=%s skipped_existing=%s skipped_missing_id=%s skipped_metric_fetch=%s",
+        "GAMEBENCH_INGEST_SUMMARY unique_sessions=%s inserted=%s skipped_existing=%s skipped_missing_id=%s skipped_platform=%s skipped_metric_fetch=%s platform_filter=%s",
         len(sessions),
         inserted,
         skipped_existing,
         skipped_missing_id,
+        skipped_platform,
         skipped_sessions,
+        platform_filter,
     )
 
     return inserted, skipped_sessions
@@ -715,7 +792,10 @@ def hello_http(request):
 
     try:
         _validate_bq_env_compat()
-        inserted, skipped_sessions = ingest_gamebench()
+        req_json = request.get_json(silent=True) or {}
+        if not isinstance(req_json, dict):
+            req_json = {}
+        inserted, skipped_sessions = ingest_gamebench(request_overrides=req_json)
         logger.info(
             "GAMEBENCH_HTTP_RESULT inserted_session_rows=%s skipped_sessions=%s",
             inserted,

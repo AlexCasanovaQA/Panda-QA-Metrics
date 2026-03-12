@@ -1,5 +1,5 @@
 view: jira_changelog {
-  sql_table_name: `qa-panda-metrics.qa_metrics_simple.jira_changelog` ;;
+  sql_table_name: `qa_metrics_simple.jira_changelog` ;;
 
   dimension_group: change_timestamp {
     type: time

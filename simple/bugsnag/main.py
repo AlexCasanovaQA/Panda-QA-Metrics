@@ -135,6 +135,7 @@ def _list_errors(
     token: str,
     *,
     deadline_epoch: float,
+    lookback_days: int,
 ) -> tuple[list[dict[str, Any]], bool, bool]:
     """Return (errors, was_rate_limited, hit_deadline)."""
     base = base_url.rstrip("/")
@@ -151,7 +152,7 @@ def _list_errors(
             hit_deadline = True
             break
 
-        params = {"sort": "unsorted", "per_page": 100, "page": page}
+        params = {"sort": "unsorted", "per_page": 100, "page": page, "filters[event.since]": f"{lookback_days}d"}
         try:
             resp = _request_with_backoff(
                 "GET",
@@ -268,18 +269,21 @@ SELECT
   today,
   today,
   today,
-  "{{}}",
+  "{}",
   COUNT(*) * 1.0,
   NULL,
   NULL,
   "BugSnag"
 FROM snap
-WHERE LOWER(status) = "open"
+WHERE LOWER(COALESCE(status, "")) NOT IN ("fixed", "resolved", "closed")
   -- Avoid exact match because release stage casing can vary across projects/sources.
-  AND EXISTS (
-    SELECT 1
-    FROM UNNEST(IFNULL(release_stages, [])) AS stage
-    WHERE LOWER(stage) IN ("production", "prod")
+  AND (
+    ARRAY_LENGTH(IFNULL(release_stages, [])) = 0
+    OR EXISTS (
+      SELECT 1
+      FROM UNNEST(IFNULL(release_stages, [])) AS stage
+      WHERE LOWER(stage) IN ("production", "prod")
+    )
   );
 
 -- EXEC-18: Breakdown by severity
@@ -297,12 +301,15 @@ SELECT
   NULL,
   "BugSnag"
 FROM snap
-WHERE LOWER(status) = "open"
+WHERE LOWER(COALESCE(status, "")) NOT IN ("fixed", "resolved", "closed")
   -- Avoid exact match because release stage casing can vary across projects/sources.
-  AND EXISTS (
-    SELECT 1
-    FROM UNNEST(IFNULL(release_stages, [])) AS stage
-    WHERE LOWER(stage) IN ("production", "prod")
+  AND (
+    ARRAY_LENGTH(IFNULL(release_stages, [])) = 0
+    OR EXISTS (
+      SELECT 1
+      FROM UNNEST(IFNULL(release_stages, [])) AS stage
+      WHERE LOWER(stage) IN ("production", "prod")
+    )
   )
 GROUP BY severity;
 
@@ -315,7 +322,7 @@ SELECT
   today,
   today,
   today,
-  "{{}}",
+  "{}",
   0.0,
   NULL,
   NULL,
@@ -323,12 +330,15 @@ SELECT
 WHERE NOT EXISTS (
   SELECT 1
   FROM snap
-  WHERE LOWER(status) = "open"
-    AND EXISTS (
+  WHERE LOWER(COALESCE(status, "")) NOT IN ("fixed", "resolved", "closed")
+    AND (
+    ARRAY_LENGTH(IFNULL(release_stages, [])) = 0
+    OR EXISTS (
       SELECT 1
       FROM UNNEST(IFNULL(release_stages, [])) AS stage
       WHERE LOWER(stage) IN ("production", "prod")
     )
+  )
 );
 
 -- EXEC-19: High/Critical active errors (overall, open)
@@ -340,13 +350,13 @@ SELECT
   today,
   today,
   today,
-  "{{}}",
+  "{}",
   COUNT(*) * 1.0,
   NULL,
   NULL,
   "BugSnag"
 FROM snap
-WHERE LOWER(status) = "open"
+WHERE LOWER(COALESCE(status, "")) NOT IN ("fixed", "resolved", "closed")
   AND LOWER(COALESCE(severity, "")) IN ("critical","error");
 
 -- Ensure Looker always has an EXEC-19 row even when there are no high/critical active errors.
@@ -358,7 +368,7 @@ SELECT
   today,
   today,
   today,
-  "{{}}",
+  "{}",
   0.0,
   NULL,
   NULL,
@@ -366,7 +376,7 @@ SELECT
 WHERE NOT EXISTS (
   SELECT 1
   FROM snap
-  WHERE LOWER(status) = "open"
+  WHERE LOWER(COALESCE(status, "")) NOT IN ("fixed", "resolved", "closed")
     AND LOWER(COALESCE(severity, "")) IN ("critical","error")
 );
 
@@ -376,7 +386,7 @@ SELECT
   COALESCE(severity, "unknown") AS severity,
   COUNT(*) * 1.0 AS value
 FROM snap
-WHERE LOWER(status) = "open"
+WHERE LOWER(COALESCE(status, "")) NOT IN ("fixed", "resolved", "closed")
 GROUP BY severity;
 
 INSERT INTO `{kpi_table}` (computed_at, metric_id, metric_name, metric_date, window_start, window_end, dimensions, value, numerator, denominator, source)
@@ -415,7 +425,7 @@ WHERE NOT EXISTS (SELECT 1 FROM exec20_by_severity);
 CREATE TEMP TABLE exec21_recent_errors AS
 SELECT
   error_id,
-  SAFE.TIMESTAMP(first_seen) AS first_seen_ts
+  SAFE_CAST(first_seen AS TIMESTAMP) AS first_seen_ts
 FROM `{bugsnag_table}`
 WHERE DATE(TIMESTAMP(ingest_timestamp), "UTC") BETWEEN ingest_start AND today
   AND error_id IS NOT NULL;
@@ -436,7 +446,7 @@ SELECT
   today,
   start90,
   today,
-  "{{}}",
+  "{}",
   COUNT(*) * 1.0,
   NULL,
   NULL,
@@ -560,6 +570,26 @@ def hello_http(request):
         token = config["token"]
         project_ids = config["project_ids"]
 
+        req_json = request.get_json(silent=True) or {}
+        if not isinstance(req_json, dict):
+            req_json = {}
+
+        max_projects_override = req_json.get("max_projects")
+        if max_projects_override is not None:
+            try:
+                max_projects = int(max_projects_override)
+                if max_projects > 0:
+                    project_ids = project_ids[:max_projects]
+            except (TypeError, ValueError):
+                logger.warning("Ignoring invalid max_projects override: %r", max_projects_override)
+
+        lookback_raw = req_json.get("days", os.environ.get("BUGSNAG_LOOKBACK_DAYS", "30"))
+        try:
+            lookback_days = int(lookback_raw)
+        except (TypeError, ValueError):
+            lookback_days = int(os.environ.get("BUGSNAG_LOOKBACK_DAYS", "30"))
+        lookback_days = max(1, min(lookback_days, 365))
+
         # Cloud Scheduler HTTP jobs often default to a 3-minute attempt deadline.
         # Keep a safety buffer so the function can serialize and return before
         # Scheduler marks the attempt as DEADLINE_EXCEEDED.
@@ -589,7 +619,13 @@ def hello_http(request):
                 continue
 
             try:
-                errors, was_rl, hit_deadline = _list_errors(base_url, project_id, token, deadline_epoch=ingest_deadline)
+                errors, was_rl, hit_deadline = _list_errors(
+                    base_url,
+                    project_id,
+                    token,
+                    deadline_epoch=ingest_deadline,
+                    lookback_days=lookback_days,
+                )
                 if was_rl:
                     rate_limited_projects.append(project_id)
                 if hit_deadline:
@@ -716,6 +752,7 @@ def hello_http(request):
                 "rate_limited_projects": rate_limited_projects,
                 "deadline_projects": deadline_projects,
                 "failed_projects": failed_projects,
+                "lookback_days": lookback_days,
             }
         )
     except ConfigError as e:

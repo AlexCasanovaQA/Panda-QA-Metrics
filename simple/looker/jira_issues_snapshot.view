@@ -1,5 +1,5 @@
 view: jira_issues_snapshot {
-  sql_table_name: `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ;;
+  sql_table_name: `qa_metrics_simple.jira_issues_snapshot` ;;
 
   dimension_group: snapshot_timestamp {
     type: time
@@ -46,11 +46,11 @@ view: jira_issues_snapshot {
 
   measure: bugs { 
     type: count
-    filters: [issue_type: "Bug"]
+    filters: [issue_type: "Bug,Defect"]
   }
 
   measure: active_bugs {
     type: count
-    filters: [issue_type: "Bug", is_done: "no"]
+    filters: [issue_type: "Bug,Defect", is_done: "no"]
   }
 }

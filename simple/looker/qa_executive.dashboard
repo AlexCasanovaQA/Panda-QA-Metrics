@@ -226,7 +226,7 @@
       fields: [qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-18"
-        qa_executive_kpis.metric_date: "today"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:
@@ -251,7 +251,7 @@
       fields: [qa_executive_kpis.kpi_value]
       filters:
         qa_executive_kpis.metric_id: "EXEC-19"
-        qa_executive_kpis.metric_date: "today"
+        qa_executive_kpis.is_latest_metric_ts_for_metric: "Yes"
       sorts: [qa_executive_kpis.metric_ts_time desc]
       limit: 1
       listen:

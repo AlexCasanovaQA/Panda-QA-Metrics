@@ -16,6 +16,11 @@ view: bugsnag_errors {
   dimension: severity { type: string sql: ${TABLE}.severity ;; }
   dimension: status { type: string sql: ${TABLE}.status ;; }
 
+  dimension: is_active {
+    type: yesno
+    sql: LOWER(COALESCE(${status}, '')) NOT IN ('fixed','resolved','closed') ;;
+  }
+
   dimension_group: first_seen {
     type: time
     timeframes: [raw, date, week, month, year]
@@ -40,6 +45,6 @@ view: bugsnag_errors {
 
   measure: active_error_groups {
     type: count
-    filters: [status: "open"]
+    filters: [is_active: "yes"]
   }
 }

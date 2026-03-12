@@ -1,5 +1,5 @@
 view: gamebench_sessions {
-  sql_table_name: `qa-panda-metrics.qa_metrics_simple.gamebench_sessions` ;;
+  sql_table_name: `qa_metrics_simple.gamebench_sessions` ;;
 
   dimension_group: time_pushed {
     type: time

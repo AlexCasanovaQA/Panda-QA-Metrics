@@ -1,5 +1,5 @@
 -- QA Metrics Pipeline setup (idempotent)
--- Project: qa-panda-metrics
+-- Project: current active BigQuery project
 -- Dataset: qa_metrics_simple
 --
 -- Run with:
@@ -12,7 +12,7 @@
 -- -----------------------------------------------------------------------------
 -- ingestion_state (incremental cursors)
 -- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.ingestion_state` (
+CREATE TABLE IF NOT EXISTS `qa_metrics_simple.ingestion_state` (
   source STRING NOT NULL,
   last_run TIMESTAMP NOT NULL,
   state_key STRING
@@ -24,33 +24,33 @@ CLUSTER BY source, state_key;
 BEGIN
   IF NOT EXISTS (
     SELECT 1
-    FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+    FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name = 'ingestion_state' AND column_name = 'source'
   ) THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.ingestion_state` ADD COLUMN source STRING';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.ingestion_state` ADD COLUMN source STRING';
   END IF;
 
   IF NOT EXISTS (
     SELECT 1
-    FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+    FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name = 'ingestion_state' AND column_name = 'last_run'
   ) THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.ingestion_state` ADD COLUMN last_run TIMESTAMP';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.ingestion_state` ADD COLUMN last_run TIMESTAMP';
   END IF;
 
   IF NOT EXISTS (
     SELECT 1
-    FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+    FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name = 'ingestion_state' AND column_name = 'state_key'
   ) THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.ingestion_state` ADD COLUMN state_key STRING';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.ingestion_state` ADD COLUMN state_key STRING';
   END IF;
 END;
 
 -- -----------------------------------------------------------------------------
 -- Jira
 -- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` (
+CREATE TABLE IF NOT EXISTS `qa_metrics_simple.jira_issues_snapshot` (
   snapshot_timestamp TIMESTAMP NOT NULL,
   issue_id STRING,
   issue_key STRING,
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.jira_issues_snaps
 PARTITION BY DATE(snapshot_timestamp)
 CLUSTER BY issue_key, status_category, priority;
 
-CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.jira_changelog` (
+CREATE TABLE IF NOT EXISTS `qa_metrics_simple.jira_changelog` (
   change_timestamp TIMESTAMP NOT NULL,
   issue_id STRING,
   issue_key STRING,
@@ -86,57 +86,57 @@ CLUSTER BY issue_key, field, to_value;
 -- Add missing columns (for older deployments)
 BEGIN
   -- jira_issues_snapshot
-  IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+  IF NOT EXISTS (SELECT 1 FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name='jira_issues_snapshot' AND column_name='status_category') THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ADD COLUMN status_category STRING';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.jira_issues_snapshot` ADD COLUMN status_category STRING';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+  IF NOT EXISTS (SELECT 1 FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name='jira_issues_snapshot' AND column_name='issue_type') THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ADD COLUMN issue_type STRING';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.jira_issues_snapshot` ADD COLUMN issue_type STRING';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+  IF NOT EXISTS (SELECT 1 FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name='jira_issues_snapshot' AND column_name='status_category_changed_date') THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ADD COLUMN status_category_changed_date TIMESTAMP';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.jira_issues_snapshot` ADD COLUMN status_category_changed_date TIMESTAMP';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+  IF NOT EXISTS (SELECT 1 FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name='jira_issues_snapshot' AND column_name='pod_team') THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ADD COLUMN pod_team STRING';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.jira_issues_snapshot` ADD COLUMN pod_team STRING';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+  IF NOT EXISTS (SELECT 1 FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name='jira_issues_snapshot' AND column_name='fix_versions') THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ADD COLUMN fix_versions ARRAY<STRING>';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.jira_issues_snapshot` ADD COLUMN fix_versions ARRAY<STRING>';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+  IF NOT EXISTS (SELECT 1 FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name='jira_issues_snapshot' AND column_name='severity') THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ADD COLUMN severity STRING';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.jira_issues_snapshot` ADD COLUMN severity STRING';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+  IF NOT EXISTS (SELECT 1 FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name='jira_issues_snapshot' AND column_name='assignee_email') THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ADD COLUMN assignee_email STRING';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.jira_issues_snapshot` ADD COLUMN assignee_email STRING';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+  IF NOT EXISTS (SELECT 1 FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name='jira_issues_snapshot' AND column_name='reporter_email') THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.jira_issues_snapshot` ADD COLUMN reporter_email STRING';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.jira_issues_snapshot` ADD COLUMN reporter_email STRING';
   END IF;
 
   -- jira_changelog
-  IF NOT EXISTS (SELECT 1 FROM `qa-panda-metrics.qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
+  IF NOT EXISTS (SELECT 1 FROM `qa_metrics_simple.INFORMATION_SCHEMA.COLUMNS`
     WHERE table_name='jira_changelog' AND column_name='issue_id') THEN
-    EXECUTE IMMEDIATE 'ALTER TABLE `qa-panda-metrics.qa_metrics_simple.jira_changelog` ADD COLUMN issue_id STRING';
+    EXECUTE IMMEDIATE 'ALTER TABLE `qa_metrics_simple.jira_changelog` ADD COLUMN issue_id STRING';
   END IF;
 END;
 
 -- -----------------------------------------------------------------------------
 -- TestRail
 -- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.testrail_results` (
+CREATE TABLE IF NOT EXISTS `qa_metrics_simple.testrail_results` (
   ingest_timestamp TIMESTAMP NOT NULL,
   result_id INT64,
   project_id INT64,
@@ -158,7 +158,7 @@ CLUSTER BY project_id, run_id, status_id;
 -- -----------------------------------------------------------------------------
 -- BugSnag
 -- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.bugsnag_errors` (
+CREATE TABLE IF NOT EXISTS `qa_metrics_simple.bugsnag_errors` (
   ingest_timestamp TIMESTAMP NOT NULL,
   project_id STRING,
   error_id STRING,
@@ -176,7 +176,7 @@ PARTITION BY DATE(ingest_timestamp)
 CLUSTER BY project_id, severity, status;
 
 
-CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.bugsnag_ingest_runs` (
+CREATE TABLE IF NOT EXISTS `qa_metrics_simple.bugsnag_ingest_runs` (
   run_ts TIMESTAMP,
   source STRING,
   status STRING,
@@ -194,7 +194,7 @@ CLUSTER BY source, status;
 -- -----------------------------------------------------------------------------
 -- GameBench
 -- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.gamebench_sessions` (
+CREATE TABLE IF NOT EXISTS `qa_metrics_simple.gamebench_sessions` (
   ingest_timestamp TIMESTAMP NOT NULL,
   session_id STRING,
   user_email STRING,
@@ -209,7 +209,7 @@ CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.gamebench_session
 PARTITION BY DATE(time_pushed)
 CLUSTER BY app_package, platform;
 
-CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.manual_build_size` (
+CREATE TABLE IF NOT EXISTS `qa_metrics_simple.manual_build_size` (
   metric_date DATE NOT NULL,
   platform STRING NOT NULL,
   build_size_mb FLOAT64 NOT NULL,
@@ -221,7 +221,7 @@ CLUSTER BY platform;
 -- -----------------------------------------------------------------------------
 -- Executive KPI output (normalized)
 -- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.qa_executive_kpis` (
+CREATE TABLE IF NOT EXISTS `qa_metrics_simple.qa_executive_kpis` (
   computed_at TIMESTAMP NOT NULL,
   metric_id STRING NOT NULL,
   metric_name STRING,
@@ -237,7 +237,7 @@ CREATE TABLE IF NOT EXISTS `qa-panda-metrics.qa_metrics_simple.qa_executive_kpis
 PARTITION BY metric_date
 CLUSTER BY metric_id;
 
-CREATE OR REPLACE VIEW `qa-panda-metrics.qa_metrics_simple.qa_executive_kpis_latest` AS
+CREATE OR REPLACE VIEW `qa_metrics_simple.qa_executive_kpis_latest` AS
 SELECT * EXCEPT(rn)
 FROM (
   SELECT
@@ -246,6 +246,6 @@ FROM (
       PARTITION BY metric_id, metric_date, IFNULL(dimensions, "{}")
       ORDER BY computed_at DESC
     ) AS rn
-  FROM `qa-panda-metrics.qa_metrics_simple.qa_executive_kpis` k
+  FROM `qa_metrics_simple.qa_executive_kpis` k
 )
 WHERE rn = 1;

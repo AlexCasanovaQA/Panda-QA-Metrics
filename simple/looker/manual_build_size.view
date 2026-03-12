@@ -1,5 +1,5 @@
 view: manual_build_size {
-  sql_table_name: `qa-panda-metrics.qa_metrics_simple.manual_build_size` ;;
+  sql_table_name: `qa_metrics_simple.manual_build_size` ;;
 
   dimension_group: metric_date {
     type: time
